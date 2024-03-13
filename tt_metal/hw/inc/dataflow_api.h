@@ -36,8 +36,14 @@ extern CBInterface cb_interface[NUM_CIRCULAR_BUFFERS];
 
 // Use VC 1 for unicast writes, and VC 4 for mcast writes
 #define NOC_UNICAST_WRITE_VC 1
+// valid write VC range is 0-3
+#define NOC_UNICAST_WRITE_VC_RANGE_MASK 0x3
 #define NOC_MULTICAST_WRITE_VC 4
 #define NOC_DISPATCH_MULTICAST_WRITE_VC 5 // Only to be used by the dispatch cores
+// TODO: change the read req default to 0 (ie different from write req)
+#define NOC_UNICAST_READ_REQ_VC 1
+// valid read req VC range is 0-3
+#define NOC_UNICAST_READ_REQ_VC_RANGE_MASK 0x3
 
 inline uint32_t align(uint32_t addr, uint32_t alignment) { return ((addr - 1) | (alignment - 1)) + 1; }
 
