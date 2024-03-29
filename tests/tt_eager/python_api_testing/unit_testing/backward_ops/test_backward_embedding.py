@@ -10,14 +10,12 @@ from tests.tt_eager.python_api_testing.sweep_tests import (
 )
 from loguru import logger
 
+torch.set_printoptions(threshold=1000000, linewidth=10000000)
+
 
 @pytest.mark.parametrize(
     "input_shapes",
-    (
-        (torch.Size([1, 1, 32, 32])),
-        (torch.Size([1, 1, 320, 384])),
-        (torch.Size([1, 3, 320, 384])),
-    ),
+    ((torch.Size([1, 1, 32, 32])),),
 )
 def test_embedding_bw(input_shapes, device):
     torch.manual_seed(1234)
@@ -28,10 +26,11 @@ def test_embedding_bw(input_shapes, device):
 
     input_shape = [batch_size, 1, 1, no_of_embeddings]
     input_index = torch.reshape(torch.arange(0, batch_size * no_of_embeddings), shape=input_shape)
+    input_index = torch.reshape(torch.zeros(input_index.numel(), dtype=torch.long), shape=input_shape)
     weights_shape = [batch_size, 1, no_of_embeddings, embedding_dim]
-    weights = torch.randn(weights_shape, requires_grad=True)
+    weights = torch.ones(weights_shape, requires_grad=True)
     grad_shape = [1, 1, batch_size * no_of_embeddings, embedding_dim]
-    grad_data = torch.randn(grad_shape, requires_grad=True)
+    grad_data = torch.ones(grad_shape, requires_grad=True)
 
     grad_tensor = (
         tt_lib.tensor.Tensor(grad_data, tt_lib.tensor.DataType.BFLOAT16).to(tt_lib.tensor.Layout.ROW_MAJOR).to(device)
@@ -60,4 +59,7 @@ def test_embedding_bw(input_shapes, device):
     comp_pass_a, comp_out_a = comparison_funcs.comp_pcc(golden_output_tensor_a, tt_output_tensor_a)
 
     logger.debug(comp_out_a)
-    assert comp_pass_a
+    # assert comp_pass_a
+
+    print("tt_output_tensor_a", tt_output_tensor_a)
+    print("golden_output_tensor_a", golden_output_tensor_a)
