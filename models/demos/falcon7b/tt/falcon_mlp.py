@@ -32,7 +32,9 @@ class TtFalconMLP(nn.Module):
             dense_h_to_4h_str,
             weight_config_str="DENSE_H_TO_4H_MM_WEIGHTS",
             weights_to_cache=(torch.transpose(state_dict[dense_h_to_4h_str], -2, -1) if state_dict else None),
-            custom_output_shape=(1, 1, self.padding_size, 4 * self.padding_size) if self.seq_len == 2048 else None,
+            custom_output_shape=(1, 1, self.padding_size, 4 * self.padding_size)
+            if self.seq_len in [1024, 2048]
+            else None,
         )
         self.dense_4h_to_h_weights = get_weights_cached(
             devices,
@@ -41,13 +43,15 @@ class TtFalconMLP(nn.Module):
             dense_4h_to_h_str,
             weight_config_str="DENSE_4H_TO_H_MM_WEIGHTS",
             weights_to_cache=(torch.transpose(state_dict[dense_4h_to_h_str], -2, -1) if state_dict else None),
-            custom_output_shape=(1, 1, 4 * self.padding_size, self.padding_size) if self.seq_len == 2048 else None,
+            custom_output_shape=(1, 1, 4 * self.padding_size, self.padding_size)
+            if self.seq_len in [1024, 2048]
+            else None,
         )
 
     def forward(self, x: tt_lib.tensor.Tensor) -> tt_lib.tensor.Tensor:
         hidden_states = []
 
-        if self.seq_len == 2048:
+        if self.seq_len == 2048 or self.seq_len == 1024:
             # pad x last dim with zeros to match self.padding_size
             # concat with zeros tensor since it's faster
             for device_id in range(len(x)):
@@ -87,7 +91,7 @@ class TtFalconMLP(nn.Module):
                 buffer_type=tt_lib.tensor.BufferType.DRAM,
             )
             padded_hidden_size = 4608
-            num_slices = 2
+            num_slices = 2 if self.seq_len == 2048 else 1  # seq_len = 1024 num_slices = 1
             for slice_idx in range(num_slices):
                 slices = [
                     tt_lib.tensor.interleaved_to_sharded_partial(

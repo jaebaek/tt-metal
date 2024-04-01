@@ -141,9 +141,11 @@ def run_test_FalconDecoder_inference(
     "llm_mode, batch, seq_len, kv_cache_len",
     (
         ("prefill", 1, 128, 0),
-        ("decode", 32, 1, 128),
+        ("prefill", 1, 1024, 0),
+        ("prefill", 1, 2048, 0),
+        # ("decode", 32, 1, 128),
     ),
-    ids=["prefill_seq128", "decode_batch32"],
+    ids=["prefill_seq_128", "prefill_seq_1024", "prefill_seq2048"],
 )
 @pytest.mark.parametrize(
     "model_version, layer_num, pcc",

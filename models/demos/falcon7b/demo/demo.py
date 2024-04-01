@@ -3,29 +3,29 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import json
-import pytest
-from functools import partial
-import tt_lib
-import torch
-from loguru import logger
-import time
-from pathlib import Path
-from transformers import AutoTokenizer
 import os
-from tqdm import tqdm
+import time
+from functools import partial
+from pathlib import Path
 
-from models.demos.falcon7b.tt.falcon_causallm import TtFalconCausalLM
+import pytest
+import torch
+import tt_lib
+from loguru import logger
 from models.demos.falcon7b.reference.hf_modeling_falcon import FalconConfig, FalconForCausalLM
+from models.demos.falcon7b.tt.falcon_causallm import TtFalconCausalLM
 from models.demos.falcon7b.tt.model_config import get_model_config, get_tt_cache_path, model_config_entries
 from models.utility_functions import (
     disable_compilation_reports,
     disable_persistent_kernel_cache,
     enable_persistent_kernel_cache,
+    nearest_32,
     profiler,
     torch2tt_tensor,
     tt2torch_tensor,
-    nearest_32,
 )
+from tqdm import tqdm
+from transformers import AutoTokenizer
 
 END_OF_TEXT = 11
 SPACE = 204
@@ -68,7 +68,12 @@ def preprocess_and_validate_inputs(input_prompts, tokenizer, max_seq_len):
     logger.info(f"# of users: {num_users}")
     logger.info(f"# of input tokens per user: {num_input_tokens}")
 
-    prefill_ids = prefill_ids[:, : nearest_32(num_input_tokens)]  # only pad up to nearest 32, not max seq len
+    # pad to 128, 1024 or 2048 num_input_tokens
+    # if token is <= 128 then pad to 128 and the same for 1K or 2K
+    # padded_num_input_tokens = 128 if num_input_tokens <= 128 else 1024 if num_input_tokens <= 1024 else 2048
+
+    prefill_ids = prefill_ids[:, : max(max_seq_len, nearest_32(num_input_tokens))]
+    # prefill_ids = prefill_ids[:, : nearest_32(num_input_tokens)]  # only pad up to nearest 32, not max seq len
 
     return prefill_ids, num_users, num_input_tokens
 
@@ -135,14 +140,7 @@ def run_falcon_demo_kv(
 
     base_url = ""
     tt_FalconCausalLM_singlelayer = TtFalconCausalLM(
-        [device],
-        state_dict,
-        base_url,
-        1,
-        configuration,
-        max_seq_len,
-        model_config,
-        tt_cache_path,
+        [device], state_dict, base_url, 1, configuration, max_seq_len, model_config, tt_cache_path, max_seq_len
     )  # single layer only used for compile
 
     logger.info("Moved weights to device!")
@@ -270,14 +268,7 @@ def run_falcon_demo_kv(
     del kv_cache_singlelayer
 
     tt_FalconCausalLM = TtFalconCausalLM(
-        [device],
-        state_dict,
-        base_url,
-        num_layers,
-        configuration,
-        max_seq_len,
-        model_config,
-        tt_cache_path,
+        [device], state_dict, base_url, num_layers, configuration, max_seq_len, model_config, tt_cache_path, max_seq_len
     )
 
     ### Second prefill run without compile ###

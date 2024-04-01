@@ -31,6 +31,7 @@ class TtFalconDecoderLayer(nn.Module):
         self.base_url = base_url
         self.devices = devices
         self.num_devices = len(devices)
+        self.seq_len = seq_len
         self.layer_num = layer_num
         self.max_position_embeddings = max_position_embeddings
         self.model_config = model_config
