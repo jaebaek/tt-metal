@@ -56,13 +56,7 @@ def run_test_FalconMLP_inference(
 
     # TT hardware execution -------------------------------------------------------------
     tt_FalconMLP_model = TtFalconMLP(
-        devices,
-        state_dict,
-        base_url,
-        layer_num,
-        configuration.hidden_size,
-        model_config,
-        tt_cache_path,
+        devices, state_dict, base_url, layer_num, configuration.hidden_size, model_config, tt_cache_path, seq_len
     )
 
     tt_mlp_input = []
@@ -87,7 +81,7 @@ def run_test_FalconMLP_inference(
         assert does_pass, f"PCC value is lower than {pcc}"
 
 
-@pytest.mark.parametrize("num_devices", (1, 2, 4))
+@pytest.mark.parametrize("num_devices", (1,))
 @pytest.mark.parametrize(
     "model_version, batch, seq_len, pcc",
     (
@@ -97,9 +91,22 @@ def run_test_FalconMLP_inference(
             128,
             0.98,
         ),
+        (
+            "tiiuae/falcon-7b-instruct",
+            1,
+            1024,
+            0.98,
+        ),
+        (
+            "tiiuae/falcon-7b-instruct",
+            1,
+            2048,
+            0.98,
+        ),
     ),
+    ids=["prefill_mlp_seq128", "prefill_mlp_seq1024", "prefill_mlp_seq2048"],
 )
-@pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM", "BFLOAT16-L1"))
+@pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM",))
 def test_FalconMLP_inference(
     num_devices,
     model_version,

@@ -2,26 +2,16 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-import torch
 import pytest
-from loguru import logger
-
+import torch
 import tt_lib
-from models.demos.falcon7b.reference.hf_modeling_falcon import (
-    FalconForCausalLM,
-)
+from loguru import logger
+from models.demos.falcon7b.reference.hf_modeling_falcon import FalconForCausalLM
+from models.demos.falcon7b.tests.test_utils import concat_device_out_layer_present, get_rand_falcon_inputs
 from models.demos.falcon7b.tt.falcon_causallm import TtFalconCausalLM
-
-from models.demos.falcon7b.tt.model_config import (
-    get_model_config,
-    get_tt_cache_path,
-)
-from models.demos.falcon7b.tests.test_utils import get_rand_falcon_inputs, concat_device_out_layer_present
-from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
-    comp_allclose,
-    comp_pcc,
-)
-from models.utility_functions import torch2tt_tensor, tt2torch_tensor, get_devices_for_t3000
+from models.demos.falcon7b.tt.model_config import get_model_config, get_tt_cache_path
+from models.utility_functions import get_devices_for_t3000, tt2torch_tensor
+from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import comp_pcc
 
 
 class PytorchFalconCausalLM(torch.nn.Module):
@@ -117,6 +107,7 @@ def run_test_FalconCausalLM_inference(
         max_position_embeddings,
         model_config,
         tt_cache_path,
+        seq_len=seq_len,
     )
 
     # TODO: Generate embeddings and attention_mask on device
@@ -198,10 +189,12 @@ def run_test_FalconCausalLM_inference(
 @pytest.mark.parametrize(
     "llm_mode, batch, seq_len, kv_cache_len",
     (
-        ("prefill", 2, 128, 0),
+        ("prefill", 1, 128, 0),
+        ("prefill", 1, 1024, 0),
+        ("prefill", 1, 2048, 0),
         ("decode", 32, 1, 128),
     ),
-    ids=["prefill_seq128", "decode_batch32"],
+    ids=["prefill_seq128", "prefill_seq1024", "prefill_seq2048", "decode_batch32"],
 )
 @pytest.mark.parametrize(
     "num_layers, pcc",
