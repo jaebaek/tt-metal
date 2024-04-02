@@ -266,191 +266,269 @@ class TtFalconAttention(nn.Module):
             )
             key_layer[i].deallocate()
 
-        if llm_mode == "decode":
-            # throw exception that it's not supported
-            raise NotImplementedError("Decode mode is not supported but prefill is optimized")
-
-        height_sharded_memory_config = tt_lib.tensor.MemoryConfig(
-            memory_layout=tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED, buffer_type=tt_lib.tensor.BufferType.L1
-        )
-        dram_interleaved_memory_config = tt_lib.tensor.MemoryConfig(
-            memory_layout=tt_lib.tensor.TensorMemoryLayout.INTERLEAVED,
-            buffer_type=tt_lib.tensor.BufferType.DRAM,
-        )
-        grid_size = (8, 8)
-        if seq_len == 128:
-            num_slices = 1
-        elif seq_len == 1024:
-            num_slices = 4
-        elif seq_len == 2048:
-            num_slices = 16
-        num_cores = 64
-
-        attention_output_shape = [1, self.num_heads, seq_len, 64]
-        torch_attention_output = torch.randn(attention_output_shape).bfloat16().float()
-        tiles_per_shard = math.ceil((((self.num_heads * seq_len) / num_cores) / num_slices) / 32)
-        mm_activations_height_shard_spec = [tiles_per_shard * 32, 2 * 32]
-        mm_output_height_shard_spec = [tiles_per_shard * 32, seq_len]
-
-        attention_outputs_concatenated = [
-            torch2tt_tensor(
-                torch_attention_output,
-                self.devices[device_id],
-                tt_memory_config=dram_interleaved_memory_config,
-                tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
+        if llm_mode == "prefill":
+            height_sharded_memory_config = tt_lib.tensor.MemoryConfig(
+                memory_layout=tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED, buffer_type=tt_lib.tensor.BufferType.L1
             )
-            for device_id in range(self.num_devices)
-        ]
+            dram_interleaved_memory_config = tt_lib.tensor.MemoryConfig(
+                memory_layout=tt_lib.tensor.TensorMemoryLayout.INTERLEAVED,
+                buffer_type=tt_lib.tensor.BufferType.DRAM,
+            )
+            grid_size = (8, 8)
+            if seq_len == 128:
+                num_slices = 1
+            elif seq_len == 1024:
+                num_slices = 4
+            elif seq_len == 2048:
+                num_slices = 16
+            num_cores = 64
 
-        compute_kernel_config = tt_lib.tensor.WormholeComputeKernelConfig(
-            math_fidelity=tt_lib.tensor.MathFidelity.HiFi4,
-            math_approx_mode=True,
-            fp32_dest_acc_en=False,
-            packer_l1_acc=True,
-        )
+            attention_output_shape = [1, self.num_heads, seq_len, 64]
+            torch_attention_output = torch.randn(attention_output_shape).bfloat16().float()
+            tiles_per_shard = math.ceil((((self.num_heads * seq_len) / num_cores) / num_slices) / 32)
+            mm_activations_height_shard_spec = [tiles_per_shard * 32, 2 * 32]
+            mm_output_height_shard_spec = [tiles_per_shard * 32, seq_len]
 
-        for i in range(num_slices):
-            slices = [
-                tt_lib.tensor.interleaved_to_sharded_partial(
-                    query_layer[device_id],
-                    grid_size,
-                    mm_activations_height_shard_spec,
-                    num_slices,  # num_slices
-                    i,  # slice_index
-                    tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-                    tt_lib.tensor.ShardOrientation.ROW_MAJOR,
+            attention_outputs_concatenated = [
+                torch2tt_tensor(
+                    torch_attention_output,
+                    self.devices[device_id],
+                    tt_memory_config=dram_interleaved_memory_config,
+                    tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
                 )
                 for device_id in range(self.num_devices)
             ]
 
-            subblock_h = 1
-            subblock_w = 1
-            if seq_len == 2048:
-                subblock_w = 8  # best option
-
-            # pre_softmax_mm
-            program_config = tt_lib.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-                compute_with_storage_grid_size=grid_size,
-                in0_block_w=2,
-                per_core_M=tiles_per_shard,
-                per_core_N=seq_len // 32,
-                out_subblock_h=subblock_h,
-                out_subblock_w=subblock_w,
-                fuse_batch=True,
-                fused_activation=None,
-                mcast_in0=False,
+            compute_kernel_config = tt_lib.tensor.WormholeComputeKernelConfig(
+                math_fidelity=tt_lib.tensor.MathFidelity.HiFi4,
+                math_approx_mode=True,
+                fp32_dest_acc_en=False,
+                packer_l1_acc=True,
             )
-            mm_slices = [
-                tt_lib.operations.primary.matmul(
-                    slices[device_id],
-                    key_layer_transposed[device_id],
-                    program_config=program_config,
-                    output_mem_config=height_sharded_memory_config,
-                    output_dtype=tt_lib.tensor.DataType.BFLOAT16,
-                    compute_kernel_config=compute_kernel_config,
+
+            for i in range(num_slices):
+                slices = [
+                    tt_lib.tensor.interleaved_to_sharded_partial(
+                        query_layer[device_id],
+                        grid_size,
+                        mm_activations_height_shard_spec,
+                        num_slices,  # num_slices
+                        i,  # slice_index
+                        tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+                        tt_lib.tensor.ShardOrientation.ROW_MAJOR,
+                    )
+                    for device_id in range(self.num_devices)
+                ]
+
+                subblock_h = 1
+                subblock_w = 1
+                if seq_len == 2048:
+                    subblock_w = 8  # best option
+
+                # pre_softmax_mm
+                program_config = tt_lib.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+                    compute_with_storage_grid_size=grid_size,
+                    in0_block_w=2,
+                    per_core_M=tiles_per_shard,
+                    per_core_N=seq_len // 32,
+                    out_subblock_h=subblock_h,
+                    out_subblock_w=subblock_w,
+                    fuse_batch=True,
+                    fused_activation=None,
+                    mcast_in0=False,
                 )
-                for device_id in range(self.num_devices)
+                mm_slices = [
+                    tt_lib.operations.primary.matmul(
+                        slices[device_id],
+                        key_layer_transposed[device_id],
+                        program_config=program_config,
+                        output_mem_config=height_sharded_memory_config,
+                        output_dtype=tt_lib.tensor.DataType.BFLOAT16,
+                        compute_kernel_config=compute_kernel_config,
+                    )
+                    for device_id in range(self.num_devices)
+                ]
+                mm_slices = [
+                    tt_lib.operations.primary.bcast(
+                        mm_slices[device_id],
+                        self.scalar[device_id],
+                        tt_lib.tensor.BcastOpMath.MUL,
+                        tt_lib.tensor.BcastOpDim.HW,
+                        output_mem_config=height_sharded_memory_config,
+                        in_place=True,
+                    )
+                    for device_id in range(self.num_devices)
+                ]
+
+                attn_mask_slices = [
+                    tt_lib.tensor.interleaved_to_sharded_partial(
+                        attention_mask[device_id],
+                        grid_size,
+                        mm_output_height_shard_spec,
+                        num_slices,
+                        i,
+                        tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+                        tt_lib.tensor.ShardOrientation.ROW_MAJOR,
+                    )
+                    for device_id in range(self.num_devices)
+                ]
+                mm_slices = [
+                    tt_lib.operations.primary.add(
+                        mm_slices[device_id],
+                        attn_mask_slices[device_id],
+                        fused_activations=None,
+                        output_mem_config=height_sharded_memory_config,
+                        output_dtype=tt_lib.tensor.DataType.BFLOAT16,
+                        in_place=True,
+                    )
+                    for device_id in range(self.num_devices)
+                ]
+
+                for device_id in range(self.num_devices):
+                    attn_mask_slices[device_id].deallocate()
+
+                softmax_program_config = tt_lib.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
+                    compute_with_storage_grid_size=grid_size,
+                    subblock_w=1,
+                    block_h=mm_output_height_shard_spec[0] // 32,
+                    block_w=mm_output_height_shard_spec[1] // 32,
+                    math_fidelity=tt_lib.tensor.MathFidelity.HiFi4,
+                    im_data_format=tt_lib.tensor.DataType.BFLOAT16,
+                )
+
+                mm_slices = [
+                    tt_lib.operations.primary.softmax_in_place(
+                        mm_slices[device_id],
+                        program_config=softmax_program_config,
+                    )
+                    for device_id in range(self.num_devices)
+                ]
+
+                subblock_w = 2
+                subblock_h = 1
+                program_config = tt_lib.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+                    compute_with_storage_grid_size=grid_size,
+                    in0_block_w=seq_len // 32,
+                    per_core_M=tiles_per_shard,
+                    per_core_N=2,
+                    out_subblock_h=subblock_h,
+                    out_subblock_w=subblock_w,
+                    fuse_batch=True,
+                    fused_activation=None,
+                    mcast_in0=False,
+                )
+
+                attn_out_slices = [
+                    tt_lib.operations.primary.matmul(
+                        mm_slices[device_id],
+                        value_layer[device_id],
+                        program_config=program_config,
+                        output_mem_config=height_sharded_memory_config,
+                        output_dtype=tt_lib.tensor.DataType.BFLOAT16,
+                        compute_kernel_config=compute_kernel_config,
+                    )
+                    for device_id in range(self.num_devices)
+                ]
+
+                for device_id in range(self.num_devices):
+                    tt_lib.tensor.sharded_to_interleaved_partial(
+                        attn_out_slices[device_id],
+                        attention_outputs_concatenated[device_id],
+                        num_slices,
+                        i,
+                        dram_interleaved_memory_config,
+                    )
+
+                for device_id in range(self.num_devices):
+                    attn_out_slices[device_id].deallocate()
+                    mm_slices[device_id].deallocate()
+                    slices[device_id].deallocate()
+
+            # V cache update
+            for device_id in range(self.num_devices):
+                tt_lib.tensor.fill_cache(layer_past[device_id][1], value_layer[device_id], user_id)
+
+            layer_present = layer_past if use_cache else None
+
+        elif llm_mode == "decode":
+            if is_wormhole_b0():
+                matmul = tt_lib.operations.primary.transformers.attn_matmul
+            else:
+                matmul = tt_lib.operations.primary.transformers.group_attn_matmul
+
+            attn_weights = [
+                matmul(
+                    query_layer[i],
+                    key_layer_transposed[i],
+                    compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+                    output_mem_config=self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
+                    output_dtype=self.model_config["PRE_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
+                )
+                for i, device in enumerate(self.devices)
             ]
-            mm_slices = [
-                tt_lib.operations.primary.bcast(
-                    mm_slices[device_id],
+            query_layer[i].deallocate()
+            key_layer_transposed[i].deallocate()
+
+            attn_weights = [
+                tt_lib.tensor.bcast(
+                    attn_weights[device_id],
                     self.scalar[device_id],
                     tt_lib.tensor.BcastOpMath.MUL,
                     tt_lib.tensor.BcastOpDim.HW,
-                    output_mem_config=height_sharded_memory_config,
-                    in_place=True,
+                    output_mem_config=self.model_config["PRE_SOFTMAX_SCALE_OUTPUT_MEMCFG"],
                 )
                 for device_id in range(self.num_devices)
             ]
 
-            attn_mask_slices = [
-                tt_lib.tensor.interleaved_to_sharded_partial(
-                    attention_mask[device_id],
-                    grid_size,
-                    mm_output_height_shard_spec,
-                    num_slices,
-                    i,
-                    tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-                    tt_lib.tensor.ShardOrientation.ROW_MAJOR,
-                )
-                for device_id in range(self.num_devices)
-            ]
-            mm_slices = [
-                tt_lib.operations.primary.add(
-                    mm_slices[device_id],
-                    attn_mask_slices[device_id],
-                    fused_activations=None,
-                    output_mem_config=height_sharded_memory_config,
-                    output_dtype=tt_lib.tensor.DataType.BFLOAT16,
-                    in_place=True,
-                )
-                for device_id in range(self.num_devices)
-            ]
+            if attention_mask is not None:
+                attn_weights = [
+                    tt_lib.tensor.add(
+                        attn_weights[device_id],
+                        attention_mask[device_id],
+                        output_mem_config=self.model_config["PRE_SOFTMAX_MASK_OUTPUT_MEMCFG"],
+                    )
+                    for device_id in range(self.num_devices)
+                ]
 
-            for device_id in range(self.num_devices):
-                attn_mask_slices[device_id].deallocate()
-
-            softmax_program_config = tt_lib.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
-                compute_with_storage_grid_size=grid_size,
-                subblock_w=1,
-                block_h=mm_output_height_shard_spec[0] // 32,
-                block_w=mm_output_height_shard_spec[1] // 32,
-                math_fidelity=tt_lib.tensor.MathFidelity.HiFi4,
-                im_data_format=tt_lib.tensor.DataType.BFLOAT16,
-            )
-
-            mm_slices = [
+            attn_weights = [
                 tt_lib.operations.primary.softmax_in_place(
-                    mm_slices[device_id],
-                    program_config=softmax_program_config,
+                    attn_weights[device_id],
                 )
                 for device_id in range(self.num_devices)
             ]
 
-            subblock_w = 2
-            subblock_h = 1
-            program_config = tt_lib.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-                compute_with_storage_grid_size=grid_size,
-                in0_block_w=seq_len // 32,
-                per_core_M=tiles_per_shard,
-                per_core_N=2,
-                out_subblock_h=subblock_h,
-                out_subblock_w=subblock_w,
-                fuse_batch=True,
-                fused_activation=None,
-                mcast_in0=False,
-            )
+            for device_id in range(self.num_devices):
+                # Update kv_cache in place
+                tt_lib.tensor.update_cache(layer_past[device_id][1], value_layer[i], layer_past_len)
 
-            attn_out_slices = [
-                tt_lib.operations.primary.matmul(
-                    mm_slices[device_id],
+            value_layer = [
+                tt_lib.tensor.unpad(
+                    layer_past[device_id][1],
+                    [0, 0, 0, 0],
+                    [batch - 1, 0, nearest_32(layer_past_len + 1) - 1, self.head_dim - 1],
+                    output_mem_config=self.model_config["V_CACHE_SLICE_OUTPUT_MEMCFG"],
+                )
+                for device_id in range(self.num_devices)
+            ]
+
+            attention_outputs_concatenated = [
+                matmul(
+                    attn_weights[device_id],
                     value_layer[device_id],
-                    program_config=program_config,
-                    output_mem_config=height_sharded_memory_config,
-                    output_dtype=tt_lib.tensor.DataType.BFLOAT16,
-                    compute_kernel_config=compute_kernel_config,
+                    compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+                    output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
+                    output_dtype=self.model_config["POST_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
                 )
-                for device_id in range(self.num_devices)
+                for device_id, device in enumerate(self.devices)
             ]
+            for i in range(self.num_devices):
+                attn_weights[i].deallocate()
+                value_layer[i].deallocate()
 
-            for device_id in range(self.num_devices):
-                tt_lib.tensor.sharded_to_interleaved_partial(
-                    attn_out_slices[device_id],
-                    attention_outputs_concatenated[device_id],
-                    num_slices,
-                    i,
-                    dram_interleaved_memory_config,
-                )
+            layer_present = layer_past if use_cache else None
 
-            for device_id in range(self.num_devices):
-                attn_out_slices[device_id].deallocate()
-                mm_slices[device_id].deallocate()
-                slices[device_id].deallocate()
-
-        for device_id in range(self.num_devices):
-            tt_lib.tensor.fill_cache(layer_past[device_id][1], value_layer[device_id], user_id)
-
-        layer_present = layer_past if use_cache else None
+        else:
+            raise NotImplementedError(f"Llm mode {llm_mode} is not supported! Must be one of prefill or decode.")
 
         attn_outputs = [
             tt_lib.tensor.nlp_concat_heads(
