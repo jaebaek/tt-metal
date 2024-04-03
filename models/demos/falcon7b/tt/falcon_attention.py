@@ -348,6 +348,9 @@ class TtFalconAttention(nn.Module):
                     )
                     for device_id in range(self.num_devices)
                 ]
+                for device_id in range(self.num_devices):
+                    slices[device_id].deallocate()
+
                 mm_slices = [
                     tt_lib.operations.primary.bcast(
                         mm_slices[device_id],
@@ -431,6 +434,9 @@ class TtFalconAttention(nn.Module):
                 ]
 
                 for device_id in range(self.num_devices):
+                    mm_slices[device_id].deallocate()
+
+                for device_id in range(self.num_devices):
                     tt_lib.tensor.sharded_to_interleaved_partial(
                         attn_out_slices[device_id],
                         attention_outputs_concatenated[device_id],
@@ -441,8 +447,6 @@ class TtFalconAttention(nn.Module):
 
                 for device_id in range(self.num_devices):
                     attn_out_slices[device_id].deallocate()
-                    mm_slices[device_id].deallocate()
-                    slices[device_id].deallocate()
 
             # V cache update
             for device_id in range(self.num_devices):

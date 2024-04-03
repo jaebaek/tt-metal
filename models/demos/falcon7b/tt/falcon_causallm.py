@@ -7,7 +7,7 @@ from typing import Optional, Tuple
 import torch
 import tt_lib
 from models.demos.falcon7b.tt.falcon_model import TtFalconModelShared
-from models.demos.falcon7b.tt.model_utils import get_weights_cached
+from models.demos.falcon7b.tt.model_utils import falcon_lm_head_matmul_2d, get_weights_cached
 
 
 class TtFalconCausalLM(TtFalconModelShared):
@@ -38,17 +38,28 @@ class TtFalconCausalLM(TtFalconModelShared):
         )
         self.num_devices = len(devices)
         self.model_config = model_config
+        self.seq_len = seq_len
 
         lm_head_str = f"lm_head.weight"
 
-        self.lm_head_weights = get_weights_cached(
-            devices,
-            model_config,
-            tt_cache_path,
-            lm_head_str,
-            weight_config_str="LM_HEAD_MM_WEIGHTS",
-            weights_to_cache=(torch.transpose(self.state_dict[f"lm_head.weight"], -2, -1) if self.state_dict else None),
-        )
+        num_slices = 4 if self.seq_len <= 1024 else 8
+        PADDING = torch.zeros([64, 254 * 32])
+
+        lm_head_weights = torch.transpose(self.state_dict[f"lm_head.weight"], -2, -1)
+        lm_head_weights = torch.chunk(lm_head_weights, num_slices, dim=-1)
+        lm_head_weights_padded = [torch.cat([weight, PADDING], 0) for weight in lm_head_weights]
+
+        self.lm_head_weights = [
+            get_weights_cached(
+                devices,
+                model_config,
+                tt_cache_path,
+                f"lm_head.weight_slice_{i}_of_{num_slices}",
+                weight_config_str="LM_HEAD_MM_WEIGHTS",
+                weights_to_cache=lm_head_weights_padded[i],
+            )
+            for i in range(num_slices)
+        ]
 
     def forward(
         self,
@@ -70,16 +81,18 @@ class TtFalconCausalLM(TtFalconModelShared):
             use_cache=use_cache,
         )
 
-        lm_logits = []
-        for i in range(self.num_devices):
-            lm_logits.append(
-                tt_lib.tensor.falcon_lm_head_matmul(
-                    hidden_states[i],
-                    self.lm_head_weights[i],
-                    bias=None,
-                    output_mem_config=self.model_config["LM_HEAD_MM_OUTPUT_MEMCFG"],
-                    output_dtype=self.model_config["LM_HEAD_MM_OUTPUT_DTYPE"],
-                )
+        lm_logits = [
+            falcon_lm_head_matmul_2d(
+                hidden_states[device_id],
+                # list of lists [[1, a], [2, b], [3, c]] - get device_id elements from each list
+                [weights[device_id] for weights in self.lm_head_weights],
+                num_slices=4 if self.seq_len <= 1024 else 8,
+                in0_mem_config=self.model_config["LM_HEAD_MM_INPUT_MEMCFG"],
+                in0_dtype=self.model_config["LM_HEAD_MM_INPUT_DTYPE"],
+                out_mem_config=self.model_config["LM_HEAD_MM_OUTPUT_MEMCFG"],
+                out_dtype=self.model_config["LM_HEAD_MM_OUTPUT_DTYPE"],
             )
+            for device_id in range(self.num_devices)
+        ]
 
         return lm_logits, presents
