@@ -359,7 +359,6 @@ TEST_F(CommandQueueSingleCardFixture, Sending131072Pages) {
 
 TEST_F(CommandQueueSingleCardFixture, TestNon32BAlignedPageSizeForDram) {
     TestBufferConfig config = {.num_pages = 1250, .page_size = 200, .buftype = BufferType::DRAM};
-    GTEST_SKIP() << "Failing on Grayskull and N150";
 
     for (Device *device : devices_) {
         local_test_functions::test_EnqueueWriteBuffer_and_EnqueueReadBuffer(device, device->command_queue(), config);
@@ -539,7 +538,7 @@ TEST_F(CommandQueueSingleCardFixture, TestNon32BAlignedPageSizeForL1) {
     }
 }
 
-TEST_F(CommandQueueSingleCardFixture, DISABLED_TestBackToBackNon32BAlignedPageSize) {
+TEST_F(CommandQueueSingleCardFixture, TestBackToBackNon32BAlignedPageSize) {
     constexpr BufferType buff_type = BufferType::L1;
 
     for (Device *device : devices_) {

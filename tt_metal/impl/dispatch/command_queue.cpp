@@ -795,6 +795,17 @@ void HWCommandQueue::copy_into_user_space(const detail::ReadBufferDescriptor &re
 
         completion_q_data.resize(bytes_xfered / sizeof(uint32_t));
 
+        // std::cout << "remaining bytes to read: " << remaining_bytes_to_read
+        //           << " completion q wr & toggle: " << completion_queue_write_ptr_and_toggle
+        //           << " completion q write ptr: " << completion_q_write_ptr
+        //           << " completion q read ptr: " << completion_q_read_ptr
+        //           << " completion q write toggle: " << completion_q_write_toggle
+        //           << " completion q read toggle: " << completion_q_read_toggle
+        //           << " bytes avail in completion q: " << bytes_avail_in_completion_queue
+        //           << " bytes_xfered " << bytes_xfered
+        //           << " num_pages_xfered: " << num_pages_xfered << std::endl;
+
+
         tt::Cluster::instance().read_sysmem(
             completion_q_data.data(), bytes_xfered, completion_q_read_ptr, mmio_device_id, channel);
 
@@ -814,23 +825,45 @@ void HWCommandQueue::copy_into_user_space(const detail::ReadBufferDescriptor &re
                 uint32_t src_offset = offset_in_completion_q_data;
                 uint32_t dst_offset_bytes = 0;
 
+                // for (int i = 0; i < completion_q_data.size(); i++) {
+                //     std::cout  << i << " : " << completion_q_data.at(i) << std::endl;
+                // }
+
                 uint32_t pad_size_bytes = padded_page_size - page_size;
+
+                // std::cout << "Done data - pad size bytes " << pad_size_bytes << std::endl;
 
                 while (src_offset < completion_q_data.size()) {
 
+                    // bool print = true;
                     uint32_t src_offset_increment = (padded_page_size / sizeof(uint32_t));
                     uint32_t num_bytes_to_copy;
                     if (remaining_bytes_of_nonaligned_page > 0) {
                         // Case 1: Portion of the page was copied into user buffer on the previous completion queue pop.
-                        num_bytes_to_copy = remaining_bytes_of_nonaligned_page - pad_size_bytes;
-                        remaining_bytes_of_nonaligned_page = 0;
+                        if (remaining_bytes_of_nonaligned_page <= pad_size_bytes) {
+                            num_bytes_to_copy = page_size;
+                            src_offset += (remaining_bytes_of_nonaligned_page / sizeof(uint32_t));
+                        } else {
+                            num_bytes_to_copy = remaining_bytes_of_nonaligned_page - pad_size_bytes;
+                        }
+                        // std::cout << "\tC1: remaining_bytes_of_nonaligned_page " << remaining_bytes_of_nonaligned_page;
                         src_offset_increment = (num_bytes_to_copy/sizeof(uint32_t)) + (pad_size_bytes/sizeof(uint32_t));
+                        // std::cout << " num to copy " << num_bytes_to_copy << " src offset increment " << src_offset_increment << std::endl;
+
+                        remaining_bytes_of_nonaligned_page = 0;
+
                     } else if (src_offset + src_offset_increment >= completion_q_data.size()) {
                         // Case 2: Last page of data that was popped off the completion queue
+                        // std::cout << "\tC2: src_offset " << src_offset << " + src_offset_increment " <<  src_offset_increment
+                        //           << " larger than " << completion_q_data.size();
                         uint32_t num_bytes_remaining = (completion_q_data.size() - src_offset) * sizeof(uint32_t);
                         num_bytes_to_copy = std::min(num_bytes_remaining, page_size);
-                        remaining_bytes_of_nonaligned_page = padded_page_size - num_bytes_to_copy;
+                        remaining_bytes_of_nonaligned_page = padded_page_size - (num_bytes_to_copy == page_size ? num_bytes_remaining : num_bytes_to_copy);
+                        // std::cout << " num bytes remaining " << num_bytes_remaining << " num bytes to copy " << num_bytes_to_copy
+                        //           << " remaining bytes of nonaligned page " << remaining_bytes_of_nonaligned_page << std::endl;
                     } else {
+                        // print = false;
+                        // std::cout << "\tC3: copying page size bytes" << std::endl;
                         num_bytes_to_copy = page_size;
                     }
 
@@ -843,6 +876,9 @@ void HWCommandQueue::copy_into_user_space(const detail::ReadBufferDescriptor &re
                     src_offset += src_offset_increment;
                     dst_offset_bytes += num_bytes_to_copy;
                     contig_dst_offset += num_bytes_to_copy;
+                    // if (print) {
+                    //     std::cout << "src_offset-" << src_offset << " dst_offset_bytes-" << dst_offset_bytes << " contig_dst_offset-" << contig_dst_offset << std::endl;
+                    // }
                 }
             }
         } else if (
