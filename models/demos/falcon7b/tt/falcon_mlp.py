@@ -54,7 +54,7 @@ class TtFalconMLP(nn.Module):
         if self.seq_len == 2048 or self.seq_len == 1024:
             # pad x last dim with zeros to match self.padding_size
             # concat with zeros tensor since it's faster
-            for device_id in range(len(x)):
+            for device_id in range(len(self.devices)):
                 # create tensor, put it on device and concat with existing tensor
                 tt_padding = (
                     torch.zeros((1, 1, x[device_id].shape[-2], self.padding_size - x[device_id].shape[-1]))
@@ -73,8 +73,10 @@ class TtFalconMLP(nn.Module):
                 x[device_id] = ttnn.concat([x[device_id], tt_padding], dim=3)
 
             grid_size = (8, 8)
-            out_shape = [(1, 1, x[i].shape[-2], self.dense_4h_to_h_weights[i].shape[-1]) for i in range(len(x))]
-            out_tensors = [torch.zeros(out_shape[i]).bfloat16().float() for i in range(len(x))]
+            out_shape = [
+                (1, 1, x[i].shape[-2], self.dense_4h_to_h_weights[i].shape[-1]) for i in range(len(self.devices))
+            ]
+            out_tensors = [torch.zeros(out_shape[i]).bfloat16().float() for i in range(len(self.devices))]
             out_tt = [
                 ttnn.from_torch(
                     out_tensors[i],
@@ -83,7 +85,7 @@ class TtFalconMLP(nn.Module):
                     layout=ttnn.TILE_LAYOUT,
                     memory_config=ttnn.DRAM_MEMORY_CONFIG,
                 )
-                for i in range(len(x))
+                for i in range(len(self.devices))
             ]
 
             dram_interleaved_mem_cfg = tt_lib.tensor.MemoryConfig(
@@ -103,7 +105,7 @@ class TtFalconMLP(nn.Module):
                         tt_lib.tensor.TensorMemoryLayout.BLOCK_SHARDED,
                         tt_lib.tensor.ShardOrientation.ROW_MAJOR,
                     )
-                    for device_id in range(len(x))
+                    for device_id in range(len(self.devices))
                 ]
 
                 prog_cfg = tt_lib.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
@@ -132,9 +134,9 @@ class TtFalconMLP(nn.Module):
                         memory_config=ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG,
                         compute_kernel_config=kernel_config,
                     )
-                    for device_id in range(len(x))
-                ]
-                for i in range(len(x)):
+                    for device_id in range(len(self.devices))
+                ]  # 4544 -> 4608
+                for i in range(len(self.devices)):
                     slices[i].deallocate()
 
                 prog_cfg = tt_lib.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
@@ -157,22 +159,25 @@ class TtFalconMLP(nn.Module):
                         memory_config=ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG,
                         compute_kernel_config=kernel_config,
                     )
-                    for device_id in range(len(x))
+                    for device_id in range(len(self.devices))
                 ]
-                for i in range(len(x)):
+                for i in range(len(self.devices)):
                     hidden_states[i].deallocate()
 
-                for device_id in range(len(x)):
+                for device_id in range(len(self.devices)):
                     tt_lib.tensor.sharded_to_interleaved_partial(
                         out_data[device_id], out_tt[device_id], num_slices, slice_idx, dram_interleaved_mem_cfg
                     )
                     out_data[device_id].deallocate()
 
+            for device_id in range(len(self.devices)):
+                x[device_id].deallocate()
+
             # remove padding from output
             hidden_states = [out_tensor[..., : self.hidden_size] for out_tensor in out_tt]
 
         else:
-            for device_id in range(len(x)):
+            for device_id in range(len(self.devices)):
                 hidden_states.append(
                     tt_lib.tensor.falcon_dense_h_to_4h_matmul(
                         x[device_id],
@@ -183,7 +188,7 @@ class TtFalconMLP(nn.Module):
                     )
                 )
                 x[device_id].deallocate()
-            for device_id in range(len(x)):
+            for device_id in range(len(self.devices)):
                 hidden_states[device_id] = tt_lib.tensor.falcon_dense_4h_to_h_matmul(
                     hidden_states[device_id],
                     self.dense_4h_to_h_weights[device_id],
