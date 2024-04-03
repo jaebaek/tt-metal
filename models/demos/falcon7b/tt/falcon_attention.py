@@ -196,16 +196,49 @@ class TtFalconAttention(nn.Module):
         #################
         ### FUSED QKV ###
         #################
-        fused_query_key_value = []
-        for i in range(self.num_devices):
-            fused_query_key_value.append(
-                tt_lib.tensor.falcon_fused_qkv_matmul(
-                    hidden_states[i],
-                    self.query_key_value_weights[i],
-                    output_mem_config=self.model_config["FUSED_QKV_MM_OUTPUT_MEMCFG"],
-                    output_dtype=self.model_config["FUSED_QKV_MM_OUTPUT_DTYPE"],
-                )
+        if seq_len == 2048:
+            compute_kernel_config = tt_lib.tensor.WormholeComputeKernelConfig(
+                math_fidelity=tt_lib.tensor.MathFidelity.LoFi,
+                math_approx_mode=True,
+                fp32_dest_acc_en=False,
+                packer_l1_acc=True,
             )
+            program_config = tt_lib.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+                compute_with_storage_grid_size=self.devices[0].compute_with_storage_grid_size(),
+                in0_block_w=2,
+                per_core_M=8,
+                per_core_N=21,
+                out_subblock_h=1,
+                out_subblock_w=7,
+                transpose_mcast=False,
+                fused_activation=None,
+            )
+            dram_interleaved_mem_config = tt_lib.tensor.MemoryConfig(
+                tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.DRAM
+            )
+            fused_query_key_value = [
+                tt_lib.operations.primary.matmul(
+                    hidden_states[device_id],
+                    self.query_key_value_weights[device_id],
+                    program_config=program_config,
+                    output_mem_config=dram_interleaved_mem_config,
+                    output_dtype=tt_lib.tensor.DataType.BFLOAT16,
+                    compute_kernel_config=compute_kernel_config,
+                )
+                for device_id in range(self.num_devices)
+            ]
+
+        else:
+            fused_query_key_value = []
+            for i in range(self.num_devices):
+                fused_query_key_value.append(
+                    tt_lib.tensor.falcon_fused_qkv_matmul(
+                        hidden_states[i],
+                        self.query_key_value_weights[i],
+                        output_mem_config=self.model_config["FUSED_QKV_MM_OUTPUT_MEMCFG"],
+                        output_dtype=self.model_config["FUSED_QKV_MM_OUTPUT_DTYPE"],
+                    )
+                )
 
         ###########
         ### TMs ###
@@ -348,9 +381,6 @@ class TtFalconAttention(nn.Module):
                     )
                     for device_id in range(self.num_devices)
                 ]
-                for device_id in range(self.num_devices):
-                    slices[device_id].deallocate()
-
                 mm_slices = [
                     tt_lib.operations.primary.bcast(
                         mm_slices[device_id],
@@ -432,10 +462,6 @@ class TtFalconAttention(nn.Module):
                     )
                     for device_id in range(self.num_devices)
                 ]
-
-                for device_id in range(self.num_devices):
-                    mm_slices[device_id].deallocate()
-
                 for device_id in range(self.num_devices):
                     tt_lib.tensor.sharded_to_interleaved_partial(
                         attn_out_slices[device_id],
@@ -447,6 +473,8 @@ class TtFalconAttention(nn.Module):
 
                 for device_id in range(self.num_devices):
                     attn_out_slices[device_id].deallocate()
+                    mm_slices[device_id].deallocate()
+                    slices[device_id].deallocate()
 
             # V cache update
             for device_id in range(self.num_devices):
