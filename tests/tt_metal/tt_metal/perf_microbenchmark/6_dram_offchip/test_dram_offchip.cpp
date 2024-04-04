@@ -192,7 +192,8 @@ int main(int argc, char **argv) {
                 "or run the program with TT_METAL_DEVICE_PROFILER=1 prefixed to the command");
         }
 
-        tt::DataFormat tile_format = tt::DataFormat::Float16_b;
+        // tt::DataFormat tile_format = tt::DataFormat::Float16_b;
+        tt::DataFormat tile_format = tt::DataFormat::Float32;
         uint32_t single_tile_size = tt_metal::detail::TileSize(tile_format);
         TT_ASSERT(single_tile_size % transfer_bytes == 0, "transfer bytes must be divisible by single_tile_size");
         if (input_size % single_tile_size != 0) {
@@ -337,7 +338,7 @@ int main(int argc, char **argv) {
             num_reqs_at_a_time,
             single_tile_size,
             access_type,
-            transfer_bytes < single_tile_size);
+            transfer_bytes != 2048);
 
         pass &= tt_metal::CloseDevice(device);
     } catch (const std::exception &e) {

@@ -479,7 +479,7 @@ void noc_async_read(std::uint64_t src_noc_addr, std::uint32_t dst_local_l1_addr,
 // TODO: write docs
 // this issues only a single packet with size <= NOC_MAX_BURST_SIZE (ie maximum packet size)
 FORCE_INLINE
-void noc_async_read_one_packet(std::uint64_t src_noc_addr, std::uint32_t dst_local_l1_addr, std::uint32_t size) {
+void noc_async_read_one_packet(std::uint64_t src_noc_addr, std::uint32_t dst_local_l1_addr, std::uint32_t size, std::uint32_t vc=NOC_UNICAST_READ_REQ_VC) {
     /*
         Read requests - use static VC
         Read responses - assigned VCs dynamically
@@ -492,12 +492,44 @@ void noc_async_read_one_packet(std::uint64_t src_noc_addr, std::uint32_t dst_loc
     DEBUG_STATUS('N', 'A', 'R', 'W');
     DEBUG_SANITIZE_NOC_READ_TRANSACTION(src_noc_addr, dst_local_l1_addr, size);
 
+    uint32_t noc_rd_cmd_field = NOC_CMD_CPY | NOC_CMD_RD | NOC_CMD_RESP_MARKED | NOC_CMD_VC_STATIC | NOC_CMD_STATIC_VC(vc);
+
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_CTRL, noc_rd_cmd_field);
     NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_RET_ADDR_LO, dst_local_l1_addr);
     NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_LO, (uint32_t)src_noc_addr);
     NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_MID, src_noc_addr >> 32);
     NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_AT_LEN_BE, size);
     NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
     noc_reads_num_issued[noc_index] += 1;
+
+    DEBUG_STATUS('N', 'A', 'R', 'D');
+}
+
+FORCE_INLINE
+void noc_async_read_one_packet(std::uint32_t noc, std::uint64_t src_noc_addr, std::uint32_t dst_local_l1_addr, std::uint32_t size, std::uint32_t vc=NOC_UNICAST_READ_REQ_VC) {
+    /*
+        Read requests - use static VC
+        Read responses - assigned VCs dynamically
+    */
+
+    DEBUG_STATUS('R', 'P', 'W');
+    while (!noc_cmd_buf_ready(noc, NCRISC_RD_CMD_BUF));
+    DEBUG_STATUS('R', 'P', 'D');
+
+    DEBUG_STATUS('N', 'A', 'R', 'W');
+    DEBUG_SANITIZE_NOC_ADDR(src_noc_addr, size);
+    DEBUG_SANITIZE_WORKER_ADDR(dst_local_l1_addr, size);
+
+    uint32_t noc_rd_cmd_field = NOC_CMD_CPY | NOC_CMD_RD | NOC_CMD_RESP_MARKED | NOC_CMD_VC_STATIC | NOC_CMD_STATIC_VC(vc);
+
+    NOC_CMD_BUF_WRITE_REG(noc, NCRISC_RD_CMD_BUF, NOC_CTRL, noc_rd_cmd_field);
+
+    NOC_CMD_BUF_WRITE_REG(noc, NCRISC_RD_CMD_BUF, NOC_RET_ADDR_LO, dst_local_l1_addr);
+    NOC_CMD_BUF_WRITE_REG(noc, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_LO, (uint32_t)src_noc_addr);
+    NOC_CMD_BUF_WRITE_REG(noc, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_MID, src_noc_addr >> 32);
+    NOC_CMD_BUF_WRITE_REG(noc, NCRISC_RD_CMD_BUF, NOC_AT_LEN_BE, size);
+    NOC_CMD_BUF_WRITE_REG(noc, NCRISC_RD_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
+    noc_reads_num_issued[noc] += 1;
 
     DEBUG_STATUS('N', 'A', 'R', 'D');
 }

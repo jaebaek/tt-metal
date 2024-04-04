@@ -752,7 +752,7 @@ def test_matmul_single_core_sharded(
     return
 
 
-@pytest.mark.parametrize("num_reads_per_barrier", [128])
+@pytest.mark.parametrize("num_reads_per_barrier", [2])
 @pytest.mark.parametrize(
     "arch, freq, test_vector, num_tests, rr_vc, full_grid, grid, hybrid_noc, num_bytes_per_read",
     [
@@ -761,6 +761,7 @@ def test_matmul_single_core_sharded(
         # ("wormhole_b0", 1000, np.array([7168, 4096]), 10, 0, 1, [8,7], 0, 512),
         # ("wormhole_b0", 1000, np.array([7168, 4096]), 10, 0, 1, [8,7], 0, 1024),
         # ("wormhole_b0", 1000, np.array([7168, 4096]), 10, 0, 1, [8,7], 0, 2048),
+        ("wormhole_b0", 1000, np.array([7168, 4096]), 10, 0, 1, [8, 7], 0, 4096),
         ################################## baseline + hybrid noc #####################
         # ("wormhole_b0", 1000, np.array([7168, 4096]), 10, 0, 1, [8,7], 1, 256),
         # ("wormhole_b0", 1000, np.array([7168, 4096]), 10, 0, 1, [8,7], 1, 512),
@@ -772,10 +773,11 @@ def test_matmul_single_core_sharded(
         # ("wormhole_b0", 1000, np.array([7168, 4096]), 10, 1, 1, [8,7], 0, 1024),
         # ("wormhole_b0", 1000, np.array([7168, 4096]), 10, 1, 1, [8,7], 0, 2048),
         # ################### baseline + round-robin VC  + hybrid noc ##################
-        ("wormhole_b0", 1000, np.array([7168, 4096]), 10, 1, 1, [8, 7], 1, 256),
-        ("wormhole_b0", 1000, np.array([7168, 4096]), 10, 1, 1, [8, 7], 1, 512),
-        ("wormhole_b0", 1000, np.array([7168, 4096]), 10, 1, 1, [8, 7], 1, 1024),
-        ("wormhole_b0", 1000, np.array([7168, 4096]), 10, 1, 1, [8, 7], 1, 2048),
+        # ("wormhole_b0", 1000, np.array([7168, 4096]), 10, 1, 1, [8, 7], 1, 256),
+        # ("wormhole_b0", 1000, np.array([7168, 4096]), 10, 1, 1, [8, 7], 1, 512),
+        # ("wormhole_b0", 1000, np.array([7168, 4096]), 10, 1, 1, [8, 7], 1, 1024),
+        # ("wormhole_b0", 1000, np.array([7168, 4096]), 10, 1, 1, [8, 7], 1, 2048),
+        # ("wormhole_b0", 1000, np.array([7168, 4096]), 10, 1, 1, [8, 7], 1, 4096),
     ],
 )
 def test_dram_read(

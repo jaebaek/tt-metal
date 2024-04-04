@@ -15,6 +15,16 @@ const uint32_t NCRISC_RD_CMD_BUF = 1;
 const uint32_t NCRISC_WR_REG_CMD_BUF = 2;
 const uint32_t NCRISC_AT_CMD_BUF = 3;
 
+// const uint32_t NCRISC_RD_CMD_BUF = 0;
+// const uint32_t NCRISC_WR_CMD_BUF = 1;
+// const uint32_t NCRISC_WR_REG_CMD_BUF = 2;
+// const uint32_t NCRISC_AT_CMD_BUF = 3;
+
+// const uint32_t BRISC_RD_CMD_BUF = 2;
+// const uint32_t BRISC_WR_CMD_BUF = 3;
+// const uint32_t BRISC_WR_REG_CMD_BUF = 2;
+// const uint32_t BRISC_AT_CMD_BUF = 2;
+
 extern uint32_t noc_reads_num_issued[NUM_NOCS];
 extern uint32_t noc_nonposted_writes_num_issued[NUM_NOCS];
 extern uint32_t noc_nonposted_writes_acked[NUM_NOCS];
