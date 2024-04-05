@@ -37,7 +37,7 @@ constexpr uint32_t DEFAULT_SCRATCH_DB_SIZE = 128 * 1024;
 constexpr uint32_t DEFAULT_ITERATIONS = 10000;
 
 constexpr uint32_t PREFETCH_Q_LOG_MINSIZE = 4;
-constexpr uint32_t HUGEPAGE_ALIGNMENT = ((1 << PREFETCH_Q_LOG_MINSIZE) > CQ_PREFETCH_CMD_BARE_MIN_SIZE) ? (1 << PREFETCH_Q_LOG_MINSIZE) : CQ_PREFETCH_CMD_BARE_MIN_SIZE;
+constexpr uint32_t PCIE_ALIGNMENT = ((1 << PREFETCH_Q_LOG_MINSIZE) > CQ_PREFETCH_CMD_MIN_SIZE) ? (1 << PREFETCH_Q_LOG_MINSIZE) : CQ_PREFETCH_CMD_MIN_SIZE;
 
 constexpr uint32_t DRAM_DATA_SIZE_BYTES = 16 * 1024 * 1024;
 constexpr uint32_t DRAM_DATA_SIZE_WORDS = DRAM_DATA_SIZE_BYTES / sizeof(uint32_t);
@@ -178,7 +178,7 @@ void init(int argc, char **argv) {
 }
 
 uint32_t round_cmd_size_up(uint32_t size) {
-    constexpr uint32_t align_mask = HUGEPAGE_ALIGNMENT - 1;
+    constexpr uint32_t align_mask = PCIE_ALIGNMENT - 1;
 
     return (size + align_mask) & ~align_mask;
 }
@@ -194,7 +194,7 @@ void add_bare_prefetcher_cmd(vector<uint32_t>& cmds,
 
     if (pad) {
         // Pad debug cmd to always be the alignment size
-        for (uint32_t i = 0; i < (CQ_PREFETCH_CMD_BARE_MIN_SIZE - sizeof(CQPrefetchCmd)) / sizeof(uint32_t); i++) {
+        for (uint32_t i = 0; i < (CQ_PREFETCH_CMD_MIN_SIZE - sizeof(CQPrefetchCmd)) / sizeof(uint32_t); i++) {
             cmds.push_back(std::rand());
         }
     }
@@ -311,7 +311,7 @@ void add_prefetcher_cmd(vector<uint32_t>& cmds,
         CQPrefetchCmd* debug_cmd_ptr;
         debug_cmd_ptr = (CQPrefetchCmd *)&cmds[prior_end];
         debug_cmd_ptr->debug.size = (cmds.size() - prior_end) * sizeof(uint32_t) - sizeof(CQPrefetchCmd);
-        debug_cmd_ptr->debug.stride = CQ_PREFETCH_CMD_BARE_MIN_SIZE;
+        debug_cmd_ptr->debug.stride = CQ_PREFETCH_CMD_MIN_SIZE;
         uint32_t checksum = 0;
         for (uint32_t i = prior_end + sizeof(CQPrefetchCmd) / sizeof(uint32_t); i < cmds.size(); i++) {
             checksum += cmds[i];

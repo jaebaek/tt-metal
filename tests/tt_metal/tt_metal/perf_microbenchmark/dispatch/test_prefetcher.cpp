@@ -30,9 +30,6 @@ constexpr uint32_t DEFAULT_SCRATCH_DB_SIZE = 128 * 1024;
 
 constexpr uint32_t DEFAULT_ITERATIONS = 10000;
 
-// constexpr uint32_t PREFETCH_Q_LOG_MINSIZE = 4;
-// constexpr uint32_t HUGEPAGE_ALIGNMENT = ((1 << PREFETCH_Q_LOG_MINSIZE) > CQ_PREFETCH_CMD_BARE_MIN_SIZE) ? (1 << PREFETCH_Q_LOG_MINSIZE) : CQ_PREFETCH_CMD_BARE_MIN_SIZE;
-
 constexpr uint32_t DRAM_DATA_SIZE_BYTES = 16 * 1024 * 1024;
 constexpr uint32_t DRAM_DATA_SIZE_WORDS = DRAM_DATA_SIZE_BYTES / sizeof(uint32_t);
 constexpr uint32_t DRAM_HACKED_BASE_ADDR = 1024 * 1024;  // don't interfere w/ fast dispatch storing our kernels...
@@ -160,6 +157,11 @@ bool validate_host_results(
     const vector<uint32_t>& cmds,
     uint32_t*& host_hugepage_completion_buffer) {
 
+    /*
+        16
+        32
+    */
+
     log_info(tt::LogTest, "Validating data from hugepage");
 
     bool failed = false;
@@ -170,6 +172,7 @@ bool validate_host_results(
     bool done = false;
     int cmd_index = 0;
     int host_data_index = 0;
+    uint32_t dispatch_cmd_size_words = sizeof(CQDispatchCmd) / sizeof(uint32_t);
     while (cmd_index < cmds.size()) {
         CQDispatchCmd *cmd = (CQDispatchCmd *)&cmds[cmd_index + sizeof(CQPrefetchCmd) / sizeof(uint32_t)];
         cmd_index += (sizeof(CQPrefetchCmd)) / sizeof(uint32_t);
@@ -191,7 +194,7 @@ bool validate_host_results(
             cmd_index++;
         }
 
-        cmd_index += (4 - (cmd_index & 3)) & 3; // L1 alignment in words;
+        cmd_index += (dispatch_cmd_size_words - (cmd_index & (dispatch_cmd_size_words-1))) & (dispatch_cmd_size_words - 1); // CQDispatchCmd is 32B alignment in words;
         uint32_t dbps_words = dispatch_buffer_page_size_g / sizeof(uint32_t);
         host_data_index += (dbps_words - (host_data_index & (dbps_words - 1))) & (dbps_words - 1);
     }
@@ -202,7 +205,7 @@ bool validate_host_results(
 }
 
 uint32_t round_cmd_size_up(uint32_t size) {
-    constexpr uint32_t align_mask = HUGEPAGE_ALIGNMENT - 1;
+    constexpr uint32_t align_mask = PCIE_ALIGNMENT - 1;
 
     return (size + align_mask) & ~align_mask;
 }
@@ -218,7 +221,7 @@ void add_bare_prefetcher_cmd(vector<uint32_t>& cmds,
 
     if (pad) {
         // Pad debug cmd to always be the alignment size
-        for (uint32_t i = 0; i < (CQ_PREFETCH_CMD_BARE_MIN_SIZE - sizeof(CQPrefetchCmd)) / sizeof(uint32_t); i++) {
+        for (uint32_t i = 0; i < (CQ_PREFETCH_CMD_MIN_SIZE - sizeof(CQPrefetchCmd)) / sizeof(uint32_t); i++) {
             cmds.push_back(std::rand());
         }
     }
@@ -338,7 +341,7 @@ void add_prefetcher_cmd(vector<uint32_t>& cmds,
         CQPrefetchCmd* debug_cmd_ptr;
         debug_cmd_ptr = (CQPrefetchCmd *)&cmds[prior_end];
         debug_cmd_ptr->debug.size = (cmds.size() - prior_end) * sizeof(uint32_t) - sizeof(CQPrefetchCmd);
-        debug_cmd_ptr->debug.stride = CQ_PREFETCH_CMD_BARE_MIN_SIZE;
+        debug_cmd_ptr->debug.stride = CQ_PREFETCH_CMD_MIN_SIZE;
         uint32_t checksum = 0;
         for (uint32_t i = prior_end + sizeof(CQPrefetchCmd) / sizeof(uint32_t); i < cmds.size(); i++) {
             checksum += cmds[i];
@@ -703,7 +706,7 @@ void gen_rnd_inline_cmd(Device *device,
     case 0:
         // unicast write
         {
-            uint32_t cmd_size_bytes = CQ_PREFETCH_CMD_BARE_MIN_SIZE;
+            uint32_t cmd_size_bytes = CQ_PREFETCH_CMD_MIN_SIZE;
             if (debug_g) {
                 cmd_size_bytes += sizeof(CQDispatchCmd);
             }
@@ -1014,7 +1017,7 @@ void write_prefetcher_cmds(uint32_t iterations,
         uint32_t cmd_ptr = 0;
         for (uint32_t j = 0; j < cmd_sizes.size(); j++) {
             uint32_t cmd_size_words = ((uint32_t)cmd_sizes[j] << PREFETCH_Q_LOG_MINSIZE) / sizeof(uint32_t);
-            uint32_t space_at_end_for_wrap_words = CQ_PREFETCH_CMD_BARE_MIN_SIZE / sizeof(uint32_t);
+            uint32_t space_at_end_for_wrap_words = CQ_PREFETCH_CMD_MIN_SIZE / sizeof(uint32_t);
             if ((void *)(host_mem_ptr + cmd_size_words) > (void *)((uint8_t *)host_hugepage_base + hugepage_issue_buffer_size_g)) {
                 // Wrap huge page
                 uint32_t offset = 0;

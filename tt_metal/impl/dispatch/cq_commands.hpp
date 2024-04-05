@@ -10,8 +10,10 @@
 
 #pragma once
 
-constexpr uint32_t CQ_PREFETCH_CMD_BARE_MIN_SIZE = 32; // for NOC PCIe alignemnt
-constexpr uint32_t CQ_DISPATCH_CMD_SIZE = 16;          // for L1 alignment
+constexpr uint32_t CQ_PREFETCH_CMD_SIZE = 16;          // for L1 alignment
+constexpr uint32_t CQ_DISPATCH_CMD_SIZE = 32;          // for DRAM and L1 alignment
+constexpr uint32_t CQ_PREFETCH_CMD_MIN_SIZE = 32;          // for NOC PCIe alignment, min PCIe stride for single prefetch cmd
+constexpr uint32_t CQ_PREFETCH_DISPATCH_CMD_MIN_SIZE = (((CQ_PREFETCH_CMD_SIZE + CQ_DISPATCH_CMD_SIZE) - 1) | (CQ_PREFETCH_CMD_MIN_SIZE - 1)) + 1; // for NOC PCIe alignment, min PCIe stride for prefetch cmd followed by dispatch cmd
 
 // Prefetcher CMD ID enums
 enum CQPrefetchCmdId : uint8_t {
@@ -101,7 +103,9 @@ struct CQDispatchBaseCmd {
 
 struct CQDispatchWriteCmd {
     uint8_t num_mcast_dests;    // 0 = unicast, 1+ = multicast
-    uint16_t pad1;
+    uint64_t pad1;
+    uint64_t pad2;
+    uint16_t pad3;
     uint32_t noc_xy_addr;
     uint32_t addr;
     uint32_t length;
@@ -110,14 +114,18 @@ struct CQDispatchWriteCmd {
 struct CQDispatchWriteHostCmd {
     uint8_t pad1;
     uint16_t pad2;
-    uint32_t pad3;
-    uint32_t pad4;
+    uint64_t pad3;
+    uint64_t pad4;
+    uint64_t pad5;
     uint32_t length;
 } __attribute__((packed));
 
 struct CQDispatchWritePagedCmd {
     uint8_t is_dram;          // one flag, false=l1
-    uint16_t start_page;
+    uint64_t pad1;
+    uint32_t pad2;
+    uint16_t pad3;
+    uint32_t start_page;
     uint32_t base_addr;
     uint32_t page_size;
     uint32_t pages;
@@ -125,7 +133,7 @@ struct CQDispatchWritePagedCmd {
 
 struct CQDispatchWritePackedCmd {
     uint8_t is_multicast;
-    uint16_t count;           // number of sub-cmds (max 1020 unicast, 510 mcast)
+    uint16_t count;           // number of sub-cmds (max 1016 = unicast, 508 mcast). max num sub cmds = (TRANSFER_PAGE_SIZE - sizeof(CQDispatchCmd)) / sizeof(CQDispatchWritePacked*castSubCmd)
     uint32_t addr;            // common memory address across all packed SubCmds
     uint16_t size;            // size of each packet, stride is padded to L1 alignment and less than dispatch_cb_page_size
 } __attribute__((packed));
@@ -142,16 +150,22 @@ struct CQDispatchWritePackedMulticastSubCmd {
 struct CQDispatchWaitCmd {
     uint8_t barrier;          // if true, issue write barrier
     uint8_t notify_prefetch;    // if true, inc prefetch sem
-    uint8_t pad1;
+    uint64_t pad1;
+    uint64_t pad2;
+    uint32_t pad3;
+    uint8_t pad4;
     uint32_t addr;            // address to read
     uint32_t count;           // wait while address is < count
-};
+} __attribute__((packed));
 
 struct CQDispatchDelayCmd {
-    uint8_t pad1;
-    uint16_t pad2;
+    uint64_t pad1;
+    uint64_t pad2;
+    uint64_t pad3;
+    uint16_t pad4;
+    uint8_t pad5;
     uint32_t delay;
-};
+} __attribute__((packed));
 
 struct CQDispatchCmd {
     CQDispatchBaseCmd base;
@@ -184,6 +198,6 @@ struct CQPrefetchHToPrefetchDHeader {
 
 static_assert(sizeof(CQPrefetchBaseCmd) == sizeof(uint8_t)); // if this fails, padding above needs to be adjusted
 static_assert(sizeof(CQDispatchBaseCmd) == sizeof(uint8_t)); // if this fails, padding above needs to be adjusted
-static_assert((sizeof(CQPrefetchCmd) & (CQ_DISPATCH_CMD_SIZE - 1)) == 0);
-static_assert((sizeof(CQDispatchCmd) & (CQ_DISPATCH_CMD_SIZE - 1)) == 0);
-static_assert((sizeof(CQPrefetchHToPrefetchDHeader) & (CQ_PREFETCH_CMD_BARE_MIN_SIZE - 1)) == 0);
+static_assert((sizeof(CQPrefetchCmd) & (CQ_PREFETCH_CMD_SIZE - 1)) == 0);
+static_assert((sizeof(CQDispatchCmd) & (CQ_DISPATCH_CMD_SIZE - 1)) == 0, "");
+static_assert((sizeof(CQPrefetchHToPrefetchDHeader) & (CQ_PREFETCH_CMD_MIN_SIZE - 1)) == 0);

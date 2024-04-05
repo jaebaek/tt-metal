@@ -288,7 +288,7 @@ static uint32_t process_relay_inline_noflush_cmd(uint32_t cmd_ptr,
     noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, dispatch_data_ptr), length);
     dispatch_data_ptr += length;
 
-    return CQ_PREFETCH_CMD_BARE_MIN_SIZE;
+    return CQ_PREFETCH_DISPATCH_CMD_MIN_SIZE;
 }
 
 template<uint32_t extra_space,
@@ -421,7 +421,7 @@ uint32_t process_relay_paged_cmd(uint32_t cmd_ptr,
     // One page was acquired w/ the cmd in CMD_RELAY_INLINE_NOFLUSH
     cb_release_pages<downstream_noc_xy, downstream_cb_sem_id>(npages + 1);
 
-    return CQ_PREFETCH_CMD_BARE_MIN_SIZE;
+    return CQ_PREFETCH_CMD_MIN_SIZE;
 }
 
 uint32_t process_relay_linear_cmd(uint32_t cmd_ptr,
@@ -487,7 +487,7 @@ uint32_t process_relay_linear_cmd(uint32_t cmd_ptr,
     // One page was acquired w/ the cmd in CMD_RELAY_INLINE_NOFLUSH
     cb_release_pages<downstream_noc_xy, downstream_cb_sem_id>(npages + 1);
 
-    return CQ_PREFETCH_CMD_BARE_MIN_SIZE;
+    return CQ_PREFETCH_CMD_MIN_SIZE;
 }
 
 uint32_t process_stall(uint32_t cmd_ptr) {
@@ -502,7 +502,7 @@ uint32_t process_stall(uint32_t cmd_ptr) {
     while (*sem_addr != count);
     DEBUG_STATUS('P', 'S', 'D');
 
-    return CQ_PREFETCH_CMD_BARE_MIN_SIZE;
+    return CQ_PREFETCH_CMD_MIN_SIZE;
 }
 
 template<bool cmddat_wrap_enable>

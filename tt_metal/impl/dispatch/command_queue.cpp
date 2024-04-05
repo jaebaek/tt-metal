@@ -69,11 +69,26 @@ EnqueueReadBufferCommand::EnqueueReadBufferCommand(
     this->dispatch_core_type = dispatch_core_manager::get(device->num_hw_cqs()).get_dispatch_core_type(device->id());
 
     // Create commands once, subsequent enqueue_read_buffer calls can just update dynamic fields
+    /*
+        prefetch wait
+        dispatch wait
+
+        prefetch stall
+
+        prefetch relay inline no flush
+        dispatch write host
+
+        prefetch relay paged
+    */
+
     if (this->commands.empty()) {
+
+
+
         CQPrefetchCmd relay_wait;
         relay_wait.base.cmd_id = CQ_PREFETCH_CMD_RELAY_INLINE;
         relay_wait.relay_inline.length = sizeof(CQDispatchCmd);
-        static_assert((sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd)) % HUGEPAGE_ALIGNMENT == 0);
+        // static_assert((sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd)) % PCIE_ALIGNMENT == 0);
         relay_wait.relay_inline.stride = sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd);
 
         uint32_t *relay_wait_l1_ptr = (uint32_t *)&relay_wait;
@@ -100,8 +115,8 @@ EnqueueReadBufferCommand::EnqueueReadBufferCommand(
             this->commands.push_back(*stall_ptr++);
         }
 
-        uint32_t stall_aligned_size = align(sizeof(CQPrefetchCmd), HUGEPAGE_ALIGNMENT);
-        TT_ASSERT(stall_aligned_size == CQ_PREFETCH_CMD_BARE_MIN_SIZE);
+        uint32_t stall_aligned_size = align(sizeof(CQPrefetchCmd), PCIE_ALIGNMENT);
+        TT_ASSERT(stall_aligned_size == CQ_PREFETCH_CMD_MIN_SIZE);
 
         uint32_t padding = stall_aligned_size - sizeof(CQPrefetchCmd);
         for (int i = 0; i < padding / sizeof(uint32_t); i++) {
@@ -111,7 +126,7 @@ EnqueueReadBufferCommand::EnqueueReadBufferCommand(
         CQPrefetchCmd no_flush;
         no_flush.base.cmd_id = CQ_PREFETCH_CMD_RELAY_INLINE_NOFLUSH;
         no_flush.relay_inline.length = sizeof(CQDispatchCmd);
-        no_flush.relay_inline.stride = align(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd), HUGEPAGE_ALIGNMENT);
+        no_flush.relay_inline.stride = align(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd), PCIE_ALIGNMENT);
 
         uint32_t *no_flush_ptr = (uint32_t *)&no_flush;
         for (int i = 0; i < sizeof(CQPrefetchCmd) / sizeof(uint32_t); i++) {
@@ -127,7 +142,7 @@ EnqueueReadBufferCommand::EnqueueReadBufferCommand(
             this->commands.push_back(*dev_to_host_cmd_ptr++);
         }
 
-        padding = align(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd), HUGEPAGE_ALIGNMENT) - (sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd));
+        padding = align(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd), PCIE_ALIGNMENT) - (sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd));
         for (int i = 0; i < padding / sizeof(uint32_t); i++) {
             this->commands.push_back(0);
         }
@@ -146,7 +161,7 @@ EnqueueReadBufferCommand::EnqueueReadBufferCommand(
             this->commands.push_back(*relay_buffer_ptr++);
         }
 
-        padding = align(sizeof(CQPrefetchCmd), HUGEPAGE_ALIGNMENT) - sizeof(CQPrefetchCmd);
+        padding = align(sizeof(CQPrefetchCmd), PCIE_ALIGNMENT) - sizeof(CQPrefetchCmd);
         for (int i = 0; i < padding / sizeof(uint32_t); i++) {
             this->commands.push_back(0);
         }
@@ -162,7 +177,7 @@ const void EnqueueReadBufferCommand::assemble_device_commands(uint32_t dst_addre
 
     uint32_t dev_to_host_cmd_offset = align(
         sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd) + sizeof(CQPrefetchCmd), // CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_CMD_WAIT + CQ_PREFETCH_CMD_STALL
-        HUGEPAGE_ALIGNMENT
+        PCIE_ALIGNMENT
     );
     dev_to_host_cmd_offset += sizeof(CQPrefetchCmd); // add CQ_PREFETCH_CMD_RELAY_INLINE_NOFLUSH offset
 
@@ -171,7 +186,7 @@ const void EnqueueReadBufferCommand::assemble_device_commands(uint32_t dst_addre
     dev_to_host_cmd->write_linear_host.length = sizeof(CQDispatchCmd) + (this->pages_to_read * padded_page_size);
 
     uint32_t relay_paged_cmd_offset = dev_to_host_cmd_offset + sizeof(CQDispatchCmd);
-    TT_ASSERT(relay_paged_cmd_offset % HUGEPAGE_ALIGNMENT == 0);
+    TT_ASSERT(relay_paged_cmd_offset % PCIE_ALIGNMENT == 0);
     uint32_t relay_buffer_cmd_idx = relay_paged_cmd_offset / sizeof(uint32_t);
 
     CQPrefetchCmd *relay_buffer = (CQPrefetchCmd*)(this->commands.data() + relay_buffer_cmd_idx);
@@ -233,7 +248,7 @@ EnqueueWriteBufferCommand::EnqueueWriteBufferCommand(
         CQPrefetchCmd relay_wait;
         relay_wait.base.cmd_id = CQ_PREFETCH_CMD_RELAY_INLINE;
         relay_wait.relay_inline.length = sizeof(CQDispatchCmd);
-        static_assert((sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd)) % HUGEPAGE_ALIGNMENT == 0);
+        // static_assert((sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd)) % PCIE_ALIGNMENT == 0);
         relay_wait.relay_inline.stride = sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd);
 
         uint32_t *relay_wait_l1_ptr = (uint32_t *)&relay_wait;
@@ -293,7 +308,7 @@ const void EnqueueWriteBufferCommand::assemble_device_commands(uint32_t) {
     CQPrefetchCmd *relay_write_cmd = (CQPrefetchCmd*)(this->commands.data() + relay_write_idx);
     uint32_t payload_size_bytes = sizeof(CQDispatchCmd) + (this->pages_to_write * padded_page_size);
     relay_write_cmd->relay_inline.length = payload_size_bytes;
-    relay_write_cmd->relay_inline.stride = align(sizeof(CQPrefetchCmd) + payload_size_bytes, HUGEPAGE_ALIGNMENT);
+    relay_write_cmd->relay_inline.stride = align(sizeof(CQPrefetchCmd) + payload_size_bytes, PCIE_ALIGNMENT);
 
     uint32_t write_paged_cmd_idx = relay_write_idx + (sizeof(CQPrefetchCmd) / sizeof(uint32_t));
     CQDispatchCmd *write_paged_cmd = (CQDispatchCmd*)(this->commands.data() + write_paged_cmd_idx);
@@ -382,7 +397,7 @@ EnqueueProgramCommand::EnqueueProgramCommand(
         // Wait Noc Write Barrier, wait for binaries to be written to DRAM
         // also wait for previous program to be done
         flush.relay_inline.length = sizeof(CQDispatchCmd);
-        flush.relay_inline.stride = align(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd), HUGEPAGE_ALIGNMENT);
+        flush.relay_inline.stride = align(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd), PCIE_ALIGNMENT);
 
         flush_ptr = (uint32_t*)&flush;
         for (int i = 0; i < sizeof(CQPrefetchCmd) / sizeof(uint32_t); i++) {
@@ -401,7 +416,7 @@ EnqueueProgramCommand::EnqueueProgramCommand(
             this->commands.push_back(*write_barrier_cmd_ptr++);
         }
 
-        align_commands_vector(this->commands, HUGEPAGE_ALIGNMENT);
+        align_commands_vector(this->commands, PCIE_ALIGNMENT);
 
         // Stall to allow binaries to commit to DRAM first
         // TODO: this can be removed for all but the first program run
@@ -412,8 +427,8 @@ EnqueueProgramCommand::EnqueueProgramCommand(
             this->commands.push_back(*stall_ptr++);
         }
 
-        uint32_t stall_aligned_size = align(sizeof(CQPrefetchCmd), HUGEPAGE_ALIGNMENT);
-        TT_ASSERT(stall_aligned_size == CQ_PREFETCH_CMD_BARE_MIN_SIZE);
+        uint32_t stall_aligned_size = align(sizeof(CQPrefetchCmd), PCIE_ALIGNMENT);
+        TT_ASSERT(stall_aligned_size == CQ_PREFETCH_CMD_MIN_SIZE);
 
         padding = stall_aligned_size - sizeof(CQPrefetchCmd);
         for (int i = 0; i < padding / sizeof(uint32_t); i++) {
@@ -434,7 +449,7 @@ EnqueueProgramCommand::EnqueueProgramCommand(
             }
             // In general, length does not include alignment
             flush.relay_inline.length = flush.relay_inline.stride - sizeof(CQPrefetchCmd);
-            flush.relay_inline.stride = align(flush.relay_inline.stride, HUGEPAGE_ALIGNMENT);
+            flush.relay_inline.stride = align(flush.relay_inline.stride, PCIE_ALIGNMENT);
 
             flush_ptr = (uint32_t*)&flush;
             for (int i = 0; i < sizeof(CQPrefetchCmd) / sizeof(uint32_t); i++) {
@@ -472,7 +487,7 @@ EnqueueProgramCommand::EnqueueProgramCommand(
                     }
                 }
             }
-            align_commands_vector(this->commands, HUGEPAGE_ALIGNMENT);
+            align_commands_vector(this->commands, PCIE_ALIGNMENT);
         }
         // Multicast Semaphores Cmd
         for (const auto& [dst, transfer_info_vec] : program.program_transfer_info.multicast_semaphores) {
@@ -494,7 +509,7 @@ EnqueueProgramCommand::EnqueueProgramCommand(
                 }
             }
             flush.relay_inline.length = flush.relay_inline.stride - sizeof(CQPrefetchCmd);
-            flush.relay_inline.stride = align(flush.relay_inline.stride, HUGEPAGE_ALIGNMENT);
+            flush.relay_inline.stride = align(flush.relay_inline.stride, PCIE_ALIGNMENT);
 
             flush_ptr = (uint32_t*)&flush;
             for (int i = 0; i < sizeof(CQPrefetchCmd) / sizeof(uint32_t); i++) {
@@ -538,7 +553,7 @@ EnqueueProgramCommand::EnqueueProgramCommand(
                     }
                 }
             }
-            align_commands_vector(this->commands, HUGEPAGE_ALIGNMENT);
+            align_commands_vector(this->commands, PCIE_ALIGNMENT);
         }
 
         // Unicast Semaphores Cmd
@@ -562,7 +577,7 @@ EnqueueProgramCommand::EnqueueProgramCommand(
                 }
             }
             flush.relay_inline.length = flush.relay_inline.stride - sizeof(CQPrefetchCmd);
-            flush.relay_inline.stride = align(flush.relay_inline.stride, HUGEPAGE_ALIGNMENT);
+            flush.relay_inline.stride = align(flush.relay_inline.stride, PCIE_ALIGNMENT);
 
             flush_ptr = (uint32_t*)&flush;
             for (int i = 0; i < sizeof(CQPrefetchCmd) / sizeof(uint32_t); i++) {
@@ -606,7 +621,7 @@ EnqueueProgramCommand::EnqueueProgramCommand(
                     }
                 }
             }
-            align_commands_vector(this->commands, HUGEPAGE_ALIGNMENT);
+            align_commands_vector(this->commands, PCIE_ALIGNMENT);
         }
 
         // CB Configs Cmd
@@ -623,8 +638,8 @@ EnqueueProgramCommand::EnqueueProgramCommand(
                 for (const auto buffer_index : cb->buffer_indices()) {
                     // 1 cmd per buffer index
                     flush.relay_inline.length = sizeof(CQDispatchCmd) + UINT32_WORDS_PER_CIRCULAR_BUFFER_CONFIG * sizeof(uint32_t);
-                    flush.relay_inline.stride = align(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd), HUGEPAGE_ALIGNMENT) +
-                                               align(UINT32_WORDS_PER_CIRCULAR_BUFFER_CONFIG * sizeof(uint32_t), HUGEPAGE_ALIGNMENT);
+                    flush.relay_inline.stride = align(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd), PCIE_ALIGNMENT) +
+                                               align(UINT32_WORDS_PER_CIRCULAR_BUFFER_CONFIG * sizeof(uint32_t), PCIE_ALIGNMENT);
 
                     flush_ptr = (uint32_t*)&flush;
                     for (int i = 0; i < sizeof(CQPrefetchCmd) / sizeof(uint32_t); i++) {
@@ -647,7 +662,7 @@ EnqueueProgramCommand::EnqueueProgramCommand(
                         this->commands.push_back(0);
                     }
 
-                    align_commands_vector(this->commands, HUGEPAGE_ALIGNMENT);
+                    align_commands_vector(this->commands, PCIE_ALIGNMENT);
                 }
             }
         }
@@ -659,7 +674,7 @@ EnqueueProgramCommand::EnqueueProgramCommand(
                 for (const pair<uint32_t, uint32_t>& dst_noc_info : kg_transfer_info.dst_noc_info) {
                     no_flush.relay_inline.length = sizeof(CQDispatchCmd);
                     no_flush.relay_inline.stride =
-                        align(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd), HUGEPAGE_ALIGNMENT);
+                        align(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd), PCIE_ALIGNMENT);
 
                     no_flush_ptr = (uint32_t*)&no_flush;
                     for (int i = 0; i < sizeof(CQPrefetchCmd) / sizeof(uint32_t); i++) {
@@ -677,7 +692,7 @@ EnqueueProgramCommand::EnqueueProgramCommand(
                         this->commands.push_back(*write_program_bins_cmd_ptr++);
                     }
 
-                    align_commands_vector(this->commands, HUGEPAGE_ALIGNMENT);
+                    align_commands_vector(this->commands, PCIE_ALIGNMENT);
 
                     CQPrefetchCmd relay_program_bins_cmd;  // program binaries
                     relay_program_bins_cmd.base.cmd_id = CQ_PREFETCH_CMD_RELAY_PAGED;
@@ -694,7 +709,7 @@ EnqueueProgramCommand::EnqueueProgramCommand(
                         this->commands.push_back(*relay_program_bins_cmd_ptr++);
                     }
 
-                    align_commands_vector(this->commands, HUGEPAGE_ALIGNMENT);
+                    align_commands_vector(this->commands, PCIE_ALIGNMENT);
 
                 }
             }
@@ -703,7 +718,7 @@ EnqueueProgramCommand::EnqueueProgramCommand(
         if(program.program_transfer_info.num_active_cores > 0) {
             // Wait Noc Write Barrier, wait for binaries to be written to worker cores
             flush.relay_inline.length = sizeof(CQDispatchCmd);
-            flush.relay_inline.stride = align(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd), HUGEPAGE_ALIGNMENT);
+            flush.relay_inline.stride = align(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd), PCIE_ALIGNMENT);
 
             flush_ptr = (uint32_t*)&flush;
             for (int i = 0; i < sizeof(CQPrefetchCmd) / sizeof(uint32_t); i++) {
@@ -724,15 +739,15 @@ EnqueueProgramCommand::EnqueueProgramCommand(
                 this->commands.push_back(*write_barrier_cmd_ptr++);
             }
 
-            align_commands_vector(this->commands, HUGEPAGE_ALIGNMENT);
+            align_commands_vector(this->commands, PCIE_ALIGNMENT);
         }
 
         for (const auto& transfer_info : program.program_transfer_info.go_signals) {
             for (const pair<uint32_t, uint32_t>& dst_noc_info : transfer_info.dst_noc_info) {
                 // Go Signal Cmd
                 flush.relay_inline.length = sizeof(CQDispatchCmd) + transfer_info.data.size() * sizeof(uint32_t);
-                flush.relay_inline.stride = align(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd), HUGEPAGE_ALIGNMENT) +
-                                            align(transfer_info.data.size() * sizeof(uint32_t), HUGEPAGE_ALIGNMENT);
+                flush.relay_inline.stride = align(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd), PCIE_ALIGNMENT) +
+                                            align(transfer_info.data.size() * sizeof(uint32_t), PCIE_ALIGNMENT);
 
                 flush_ptr = (uint32_t*)&flush;
                 for (int i = 0; i < sizeof(CQPrefetchCmd) / sizeof(uint32_t); i++) {
@@ -750,8 +765,8 @@ EnqueueProgramCommand::EnqueueProgramCommand(
                 for (int i = 0; i < sizeof(CQDispatchCmd) / sizeof(uint32_t); i++) {
                     this->commands.push_back(*write_go_signal_cmd_ptr++);
                 }
-                if ((padding = (sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd)) % HUGEPAGE_ALIGNMENT) != 0) {
-                    for (int i = 0; i < (HUGEPAGE_ALIGNMENT - padding) / sizeof(uint32_t); i++) {
+                if ((padding = (sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd)) % PCIE_ALIGNMENT) != 0) {
+                    for (int i = 0; i < (PCIE_ALIGNMENT - padding) / sizeof(uint32_t); i++) {
                         this->commands.push_back(0);
                     }
                 }
@@ -759,8 +774,8 @@ EnqueueProgramCommand::EnqueueProgramCommand(
                 for (int i = 0; i < transfer_info.data.size(); i++) {
                     this->commands.push_back(transfer_info.data[i]);
                 }
-                if ((padding = (transfer_info.data.size() * sizeof(uint32_t)) % HUGEPAGE_ALIGNMENT) != 0) {
-                    for (int i = 0; i < (HUGEPAGE_ALIGNMENT - padding) / sizeof(uint32_t); i++) {
+                if ((padding = (transfer_info.data.size() * sizeof(uint32_t)) % PCIE_ALIGNMENT) != 0) {
+                    for (int i = 0; i < (PCIE_ALIGNMENT - padding) / sizeof(uint32_t); i++) {
                         this->commands.push_back(0);
                     }
                 }
@@ -772,7 +787,7 @@ EnqueueProgramCommand::EnqueueProgramCommand(
             // Wait Done
             // TODO: maybe this can be removed, see the very first wait of EnqueueProgram
             flush.relay_inline.length = sizeof(CQDispatchCmd);
-            flush.relay_inline.stride = align(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd), HUGEPAGE_ALIGNMENT);
+            flush.relay_inline.stride = align(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd), PCIE_ALIGNMENT);
 
             flush_ptr = (uint32_t*)&flush;
             for (int i = 0; i < sizeof(CQPrefetchCmd) / sizeof(uint32_t); i++) {
@@ -791,7 +806,7 @@ EnqueueProgramCommand::EnqueueProgramCommand(
                 this->commands.push_back(*wait_cmd_ptr++);
             }
 
-            align_commands_vector(this->commands, HUGEPAGE_ALIGNMENT);
+            align_commands_vector(this->commands, PCIE_ALIGNMENT);
         }
         program.loaded_onto_device = true;
         program.cached_commands = this->commands;
@@ -805,11 +820,11 @@ const void EnqueueProgramCommand::assemble_device_commands(uint32_t host_data_sr
     // uint32_t padded_page_size = align(this->buffer.page_size(), 32);
     uint32_t prefetch_cmd_idx_offset = sizeof(CQPrefetchCmd) / sizeof(uint32_t);
     uint32_t hp_aligned_prefetch_cmd_idx_offset = sizeof(CQPrefetchCmd);
-    hp_aligned_prefetch_cmd_idx_offset += hp_aligned_prefetch_cmd_idx_offset % HUGEPAGE_ALIGNMENT;
+    hp_aligned_prefetch_cmd_idx_offset += hp_aligned_prefetch_cmd_idx_offset % PCIE_ALIGNMENT;
     hp_aligned_prefetch_cmd_idx_offset /= sizeof(uint32_t);
 
     uint32_t hp_aligned_inline_cmds_idx_offset = sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd);
-    hp_aligned_inline_cmds_idx_offset += hp_aligned_inline_cmds_idx_offset % HUGEPAGE_ALIGNMENT;
+    hp_aligned_inline_cmds_idx_offset += hp_aligned_inline_cmds_idx_offset % PCIE_ALIGNMENT;
     hp_aligned_inline_cmds_idx_offset /= sizeof(uint32_t);
 
     uint32_t cmd_idx = 0;   // this should always be HUGEPAGE aligned
@@ -822,10 +837,10 @@ const void EnqueueProgramCommand::assemble_device_commands(uint32_t host_data_sr
     write_barrier_cmd->wait.addr = DISPATCH_MESSAGE_ADDR;
     write_barrier_cmd->wait.count = expected_num_workers_completed;
 
-    cmd_idx += align(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd), HUGEPAGE_ALIGNMENT) / sizeof(uint32_t);
+    cmd_idx += align(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd), PCIE_ALIGNMENT) / sizeof(uint32_t);
 
     // Stall Cmd
-    cmd_idx += align(sizeof(CQPrefetchCmd), HUGEPAGE_ALIGNMENT) / sizeof(uint32_t);
+    cmd_idx += align(sizeof(CQPrefetchCmd), PCIE_ALIGNMENT) / sizeof(uint32_t);
 
     // Runtime Args
     // Runtime Args Cmd
@@ -860,7 +875,7 @@ const void EnqueueProgramCommand::assemble_device_commands(uint32_t host_data_sr
             packed_data_idx += transfer_info[i].data.size();
             packed_data_idx = align(packed_data_idx * sizeof(uint32_t), L1_ALIGNMENT) / sizeof(uint32_t);
         }
-        cmd_idx = align(packed_data_idx * sizeof(uint32_t), HUGEPAGE_ALIGNMENT) / sizeof(uint32_t);
+        cmd_idx = align(packed_data_idx * sizeof(uint32_t), PCIE_ALIGNMENT) / sizeof(uint32_t);
     }
 
     // TODO: semaphores can be moved to static portion of commands
@@ -887,7 +902,7 @@ const void EnqueueProgramCommand::assemble_device_commands(uint32_t host_data_sr
                 packed_data_idx = align(packed_data_idx * sizeof(uint32_t), L1_ALIGNMENT) / sizeof(uint32_t);
             }
         }
-        cmd_idx = align(packed_data_idx * sizeof(uint32_t), HUGEPAGE_ALIGNMENT) / sizeof(uint32_t);
+        cmd_idx = align(packed_data_idx * sizeof(uint32_t), PCIE_ALIGNMENT) / sizeof(uint32_t);
     }
 
     // Unicast Semaphore Cmd
@@ -911,14 +926,14 @@ const void EnqueueProgramCommand::assemble_device_commands(uint32_t host_data_sr
                 packed_data_idx = align(packed_data_idx * sizeof(uint32_t), L1_ALIGNMENT) / sizeof(uint32_t);
             }
         }
-        cmd_idx = align(packed_data_idx * sizeof(uint32_t), HUGEPAGE_ALIGNMENT) / sizeof(uint32_t);
+        cmd_idx = align(packed_data_idx * sizeof(uint32_t), PCIE_ALIGNMENT) / sizeof(uint32_t);
     }
 
     // CB Configs commands already programmed, just populate data
     for (const shared_ptr<CircularBuffer>& cb : program.circular_buffers()) {
         for (const CoreRange& core_range : cb->core_ranges().ranges()) {
             for (const auto buffer_index : cb->buffer_indices()) {
-                cmd_idx += align(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd), HUGEPAGE_ALIGNMENT) / sizeof(uint32_t);
+                cmd_idx += align(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd), PCIE_ALIGNMENT) / sizeof(uint32_t);
 
                 uint32_t* cb_config_data = (uint32_t*)(this->commands.data() + cmd_idx);
                 cb_config_data[0] = cb->address() >> 4;
@@ -926,7 +941,7 @@ const void EnqueueProgramCommand::assemble_device_commands(uint32_t host_data_sr
                 cb_config_data[2] = cb->num_pages(buffer_index);
                 cb_config_data[3] = cb->size() / cb->num_pages(buffer_index) >> 4;
 
-                cmd_idx += align(UINT32_WORDS_PER_CIRCULAR_BUFFER_CONFIG * sizeof(uint32_t), HUGEPAGE_ALIGNMENT) / sizeof(uint32_t);
+                cmd_idx += align(UINT32_WORDS_PER_CIRCULAR_BUFFER_CONFIG * sizeof(uint32_t), PCIE_ALIGNMENT) / sizeof(uint32_t);
             }
         }
     }
@@ -937,8 +952,8 @@ const void EnqueueProgramCommand::assemble_device_commands(uint32_t host_data_sr
         const auto& kg_transfer_info = program.program_transfer_info.kernel_bins[buffer_idx];
         for (int kernel_idx = 0; kernel_idx < kg_transfer_info.dst_base_addrs.size(); kernel_idx++) {
             for (const pair<uint32_t, uint32_t>& dst_noc_info : kg_transfer_info.dst_noc_info) {
-                cmd_idx += align(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd), HUGEPAGE_ALIGNMENT) / sizeof(uint32_t);
-                cmd_idx += align(sizeof(CQPrefetchCmd), HUGEPAGE_ALIGNMENT) / sizeof(uint32_t);
+                cmd_idx += align(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd), PCIE_ALIGNMENT) / sizeof(uint32_t);
+                cmd_idx += align(sizeof(CQPrefetchCmd), PCIE_ALIGNMENT) / sizeof(uint32_t);
             }
         }
     }
@@ -951,15 +966,15 @@ const void EnqueueProgramCommand::assemble_device_commands(uint32_t host_data_sr
         write_barrier_cmd->wait.addr = DISPATCH_MESSAGE_ADDR;
         write_barrier_cmd->wait.count = expected_num_workers_completed;
 
-        cmd_idx += align(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd), HUGEPAGE_ALIGNMENT) / sizeof(uint32_t);
+        cmd_idx += align(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd), PCIE_ALIGNMENT) / sizeof(uint32_t);
     }
 
     // Go Signals
     // already programmed, offset idx
     for (const auto& transfer_info : program.program_transfer_info.go_signals) {
         for (const pair<uint32_t, uint32_t>& dst_noc_info : transfer_info.dst_noc_info) {
-            cmd_idx += align(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd), HUGEPAGE_ALIGNMENT) / sizeof(uint32_t);
-            cmd_idx += align(transfer_info.data.size() * sizeof(uint32_t), HUGEPAGE_ALIGNMENT) / sizeof(uint32_t);
+            cmd_idx += align(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd), PCIE_ALIGNMENT) / sizeof(uint32_t);
+            cmd_idx += align(transfer_info.data.size() * sizeof(uint32_t), PCIE_ALIGNMENT) / sizeof(uint32_t);
         }
     }
 
@@ -971,7 +986,7 @@ const void EnqueueProgramCommand::assemble_device_commands(uint32_t host_data_sr
         write_barrier_cmd->wait.addr = DISPATCH_MESSAGE_ADDR;
         write_barrier_cmd->wait.count = expected_num_workers_completed + program.program_transfer_info.num_active_cores;
 
-        cmd_idx += align(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd), HUGEPAGE_ALIGNMENT) / sizeof(uint32_t);
+        cmd_idx += align(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd), PCIE_ALIGNMENT) / sizeof(uint32_t);
     }
 }
 
@@ -1003,7 +1018,7 @@ EnqueueRecordEventCommand::EnqueueRecordEventCommand(
         CQPrefetchCmd relay_wait;
         relay_wait.base.cmd_id = CQ_PREFETCH_CMD_RELAY_INLINE;
         relay_wait.relay_inline.length = sizeof(CQDispatchCmd);
-        static_assert((sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd)) % HUGEPAGE_ALIGNMENT == 0);
+        // static_assert((sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd)) % PCIE_ALIGNMENT == 0);
         relay_wait.relay_inline.stride = sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd);
 
         uint32_t *relay_wait_l1_ptr = (uint32_t *)&relay_wait;
@@ -1024,12 +1039,12 @@ EnqueueRecordEventCommand::EnqueueRecordEventCommand(
         }
 
         uint32_t dispatch_event_payload = sizeof(CQDispatchCmd) + EVENT_PADDED_SIZE;
-        static_assert((sizeof(CQDispatchCmd) + EVENT_PADDED_SIZE) % 16 == 0);
+        // static_assert((sizeof(CQDispatchCmd) + EVENT_PADDED_SIZE) % 16 == 0);
         // Command to write event to L1
         CQPrefetchCmd relay_event_l1;
         relay_event_l1.base.cmd_id = CQ_PREFETCH_CMD_RELAY_INLINE;
         relay_event_l1.relay_inline.length = dispatch_event_payload;
-        relay_event_l1.relay_inline.stride = align(sizeof(CQPrefetchCmd) + dispatch_event_payload, HUGEPAGE_ALIGNMENT);
+        relay_event_l1.relay_inline.stride = align(sizeof(CQPrefetchCmd) + dispatch_event_payload, PCIE_ALIGNMENT);
 
         uint32_t *relay_event_l1_ptr = (uint32_t *)&relay_event_l1;
         for (int i = 0; i < sizeof(CQPrefetchCmd) / sizeof(uint32_t); i++) {
@@ -1058,7 +1073,7 @@ EnqueueRecordEventCommand::EnqueueRecordEventCommand(
             this->commands.push_back(0);
         }
 
-        uint32_t padding = align(sizeof(CQPrefetchCmd) + dispatch_event_payload, HUGEPAGE_ALIGNMENT) - (sizeof(CQPrefetchCmd) + dispatch_event_payload);
+        uint32_t padding = align(sizeof(CQPrefetchCmd) + dispatch_event_payload, PCIE_ALIGNMENT) - (sizeof(CQPrefetchCmd) + dispatch_event_payload);
         for (int i = 0; i < padding / sizeof(uint32_t); i++) {
             this->commands.push_back(0);
         }
@@ -1067,7 +1082,7 @@ EnqueueRecordEventCommand::EnqueueRecordEventCommand(
         CQPrefetchCmd relay_event_host;
         relay_event_host.base.cmd_id = CQ_PREFETCH_CMD_RELAY_INLINE;
         relay_event_host.relay_inline.length = dispatch_event_payload;
-        relay_event_host.relay_inline.stride = align(sizeof(CQPrefetchCmd) + dispatch_event_payload, HUGEPAGE_ALIGNMENT);
+        relay_event_host.relay_inline.stride = align(sizeof(CQPrefetchCmd) + dispatch_event_payload, PCIE_ALIGNMENT);
 
         uint32_t *relay_event_host_ptr = (uint32_t *)&relay_event_host;
         for (int i = 0; i < sizeof(CQPrefetchCmd) / sizeof(uint32_t); i++) {
@@ -1103,7 +1118,7 @@ const void EnqueueRecordEventCommand::assemble_device_commands(uint32_t) {
     uint32_t *event_l1_location = (uint32_t*)(this->commands.data() + write_event_l1_idx);
     *event_l1_location = this->event_id;
 
-    uint32_t write_host_cmd_offset = align(event_payload_offset + EVENT_PADDED_SIZE, HUGEPAGE_ALIGNMENT);
+    uint32_t write_host_cmd_offset = align(event_payload_offset + EVENT_PADDED_SIZE, PCIE_ALIGNMENT);
 
     uint32_t write_event_host_idx = (write_host_cmd_offset + sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd)) / sizeof(uint32_t);
 

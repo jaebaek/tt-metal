@@ -234,6 +234,7 @@ void gen_paged_write_test(uint32_t& cmd_count,
     uint32_t total_size_bytes = 0;
     uint32_t total_data_size_bytes = 0;
     uint32_t buffer_size = prefetcher_buffer_size_g - page_size; // for terminate
+    std::cout << "Buffer size " << buffer_size << std::endl;
     uint32_t start_page = 0;
     TT_ASSERT(is_paged_test()); // Ensure test-numbers kept up to date in this function.
 

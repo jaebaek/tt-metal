@@ -21,7 +21,7 @@ static constexpr uint32_t MAX_PREFETCH_COMMAND_SIZE = 64 * 1024;
 static constexpr uint32_t CMDDAT_Q_SIZE = 128 * 1024;
 static constexpr uint32_t SCRATCH_DB_SIZE = 128 * 1024;
 
-constexpr uint32_t HUGEPAGE_ALIGNMENT = ((1 << PREFETCH_Q_LOG_MINSIZE) > CQ_PREFETCH_CMD_BARE_MIN_SIZE) ? (1 << PREFETCH_Q_LOG_MINSIZE) : CQ_PREFETCH_CMD_BARE_MIN_SIZE;
+constexpr uint32_t PCIE_ALIGNMENT = 32;
 
 static constexpr uint32_t LOG_TRANSFER_PAGE_SIZE = 12;
 static constexpr uint32_t TRANSFER_PAGE_SIZE = 1 << LOG_TRANSFER_PAGE_SIZE;
@@ -101,7 +101,7 @@ struct SystemMemoryCQInterface {
       completion_fifo_limit(issue_fifo_limit + completion_fifo_size),
       offset(get_absolute_cq_offset(channel, cq_id, cq_size))
      {
-        TT_ASSERT(this->command_completion_region_size % HUGEPAGE_ALIGNMENT == 0 and this->command_issue_region_size % HUGEPAGE_ALIGNMENT == 0, "Issue queue and completion queue need to be {}B aligned!", HUGEPAGE_ALIGNMENT);
+        TT_ASSERT(this->command_completion_region_size % PCIE_ALIGNMENT == 0 and this->command_issue_region_size % PCIE_ALIGNMENT == 0, "Issue queue and completion queue need to be {}B aligned!", PCIE_ALIGNMENT);
         TT_ASSERT(this->issue_fifo_limit != 0, "Cannot have a 0 fifo limit");
         // Currently read / write pointers on host and device assumes contiguous ranges for each channel
         // Device needs absolute offset of a hugepage to access the region of sysmem that holds a particular command queue
