@@ -574,6 +574,7 @@ class TtFalconAttentionPrefill(nn.Module):
         max_position_embeddings: int = 2048,
         model_config=None,
         tt_cache_path=None,
+        weights_dict=None,
     ):
         super().__init__()
         self.hidden_size = hidden_size
@@ -603,6 +604,7 @@ class TtFalconAttentionPrefill(nn.Module):
             query_key_value_str,
             weight_config_str="FUSED_QKV_MM_WEIGHTS",
             weights_to_cache=(torch.transpose(state_dict[query_key_value_str], -2, -1) if state_dict else None),
+            weights_dict=weights_dict,
         )
         self.dense_weights = get_weights_cached(
             devices,
@@ -611,6 +613,7 @@ class TtFalconAttentionPrefill(nn.Module):
             selfout_str,
             weight_config_str="SELFOUT_MM_WEIGHTS",
             weights_to_cache=(torch.transpose(state_dict[selfout_str], -2, -1) if state_dict else None),
+            weights_dict=weights_dict,
         )
 
         self.rotary_embedding = TtFalconRotaryEmbedding(
@@ -1036,6 +1039,7 @@ class TtFalconAttentionDecode(nn.Module):
         max_position_embeddings: int = 2048,
         model_config=None,
         tt_cache_path=None,
+        weights_dict=None,
     ):
         super().__init__()
         self.hidden_size = hidden_size
@@ -1065,6 +1069,7 @@ class TtFalconAttentionDecode(nn.Module):
             query_key_value_str,
             weight_config_str="FUSED_QKV_MM_WEIGHTS",
             weights_to_cache=(torch.transpose(state_dict[query_key_value_str], -2, -1) if state_dict else None),
+            weights_dict=weights_dict,
         )
         self.dense_weights = get_weights_cached(
             devices,
@@ -1073,6 +1078,7 @@ class TtFalconAttentionDecode(nn.Module):
             selfout_str,
             weight_config_str="SELFOUT_MM_WEIGHTS",
             weights_to_cache=(torch.transpose(state_dict[selfout_str], -2, -1) if state_dict else None),
+            weights_dict=weights_dict,
         )
 
         self.rotary_embedding = TtFalconRotaryEmbedding(
