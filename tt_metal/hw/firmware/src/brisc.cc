@@ -306,6 +306,9 @@ int main() {
 
         DEBUG_STATUS('G', 'W');
         while (mailboxes->launch.run != RUN_MSG_GO);
+
+        notify_arc_workload_start();
+
         DEBUG_STATUS('G', 'D');
 
         {

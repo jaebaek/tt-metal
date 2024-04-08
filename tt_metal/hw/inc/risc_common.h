@@ -135,6 +135,12 @@ inline void assert_just_ncrisc_reset() {
   WRITE_REG(RISCV_DEBUG_REG_SOFT_RESET_0, RISCV_SOFT_RESET_0_NCRISC);
 }
 
+inline void notify_arc_workload_start() {
+  WRITE_REG(RISCV_DEBUG_REG_WDT_CNTL, 0x2);
+  uint32_t reg_read = READ_REG(RISCV_DEBUG_REG_WDT_CNTL); // dummy read
+  WRITE_REG(RISCV_DEBUG_REG_WDT_CNTL, 0x0);
+}
+
 inline uint32_t special_mult(uint32_t a, uint32_t special_b) {
   if (special_b == TILE_WORD_8_BIT)
     return a * TILE_WORD_8_BIT;
