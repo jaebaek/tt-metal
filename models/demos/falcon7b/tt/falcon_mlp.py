@@ -298,14 +298,11 @@ class TtFalconMLPDecode(nn.Module):
 
         custom_output_shape_h_to_4h = (
             (1, 1, self.padding_value, 4 * self.padding_value) if self.prefill_seq_len in [1024, 2048] else None
-        )
         custom_output_shape_4h_to_h = (
             (1, 1, 4 * self.padding_value, self.padding_value) if self.prefill_seq_len in [1024, 2048] else None
         )
 
         self.dense_h_to_4h_weights = get_weights_cached(
-            devices,
-            model_config,
             tt_cache_path,
             dense_h_to_4h_str,
             weight_config_str="DENSE_H_TO_4H_MM_WEIGHTS",
