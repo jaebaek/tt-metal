@@ -12,6 +12,7 @@ from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
     comp_equal,
     comp_pcc,
 )
+import time
 
 
 # @skip_for_wormhole_b0("WH ND hang, see issue #4392")
@@ -397,9 +398,11 @@ def test_loop_multi_core_matmul_2d_8x8(
 
     num_loops = int(os.environ["WL_NUM_LOOPS"]) if "WL_NUM_LOOPS" in os.environ else 1
     en_checks = int(os.environ["WL_EN_CHECKS"]) if "WL_EN_CHECKS" in os.environ else 0
+    delay = float(os.environ["WL_DELAY"]) if "WL_DELAY" in os.environ else 0
     print(f"Running {num_loops} loops")
     for i in range(num_loops):
         logger.info(i)
+        time.sleep(delay)
         run_multi_core_matmul_2d_8x8(
             device,
             dtype,
