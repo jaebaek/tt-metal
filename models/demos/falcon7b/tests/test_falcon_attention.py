@@ -2,24 +2,22 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-import torch
 import pytest
-from loguru import logger
-
+import torch
 import tt_lib
-from models.demos.falcon7b.reference.hf_modeling_falcon import (
-    FalconForCausalLM,
-)
-from models.demos.falcon7b.tt.falcon_attention import TtFalconAttention
-from models.demos.falcon7b.tt.model_config import (
-    get_model_config,
-)
-from models.demos.falcon7b.tests.test_utils import get_rand_falcon_inputs, concat_device_outputs
+from loguru import logger
+from models.demos.falcon7b.reference.hf_modeling_falcon import \
+    FalconForCausalLM
+from models.demos.falcon7b.tests.test_utils import (concat_device_outputs,
+                                                    get_rand_falcon_inputs)
+from models.demos.falcon7b.tt.falcon_attention import (
+    TtFalconAttentionDecode, TtFalconAttentionPrefill)
+from models.demos.falcon7b.tt.model_config import (get_model_config,
+                                                   get_tt_cache_path)
+from models.utility_functions import (get_devices_for_t3000, torch2tt_tensor,
+                                      tt2torch_tensor)
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
-    comp_allclose,
-    comp_pcc,
-)
-from models.utility_functions import torch2tt_tensor, tt2torch_tensor, get_devices_for_t3000
+    comp_allclose, comp_pcc)
 
 
 class PytorchFalconAttentionModel(torch.nn.Module):
@@ -97,9 +95,15 @@ def run_test_FalconAttention_inference(
         layer_past=layer_past,
         use_cache=use_cache,
     )
+    if llm_mode == "decode":
+        ttFalconAttention = TtFalconAttentionDecode
+    elif llm_mode == "prefill":
+        ttFalconAttention = TtFalconAttentionPrefill
+    else:
+        raise ValueError(f"Unknown llm_mode: {llm_mode}")
 
     # TT hardware execution -------------------------------------------------------------
-    tt_FalconAttention_model = TtFalconAttention(
+    tt_FalconAttention_model = ttFalconAttention(
         devices,
         state_dict,
         # None,

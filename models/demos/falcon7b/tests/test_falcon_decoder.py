@@ -2,24 +2,20 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-import torch
 import pytest
-from loguru import logger
-
+import torch
 import tt_lib
-from models.demos.falcon7b.reference.hf_modeling_falcon import (
-    FalconForCausalLM,
-)
+from loguru import logger
+from models.demos.falcon7b.reference.hf_modeling_falcon import \
+    FalconForCausalLM
+from models.demos.falcon7b.tests.test_utils import (concat_device_outputs,
+                                                    get_rand_falcon_inputs)
 from models.demos.falcon7b.tt.falcon_decoder import TtFalconDecoderLayer
-from models.demos.falcon7b.tt.model_config import (
-    get_model_config,
-)
-from models.demos.falcon7b.tests.test_utils import get_rand_falcon_inputs, concat_device_outputs
-from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
-    comp_allclose,
-    comp_pcc,
-)
+from models.demos.falcon7b.tt.model_config import (get_model_config,
+                                                   get_tt_cache_path)
 from models.utility_functions import get_devices_for_t3000
+from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
+    comp_allclose, comp_pcc)
 
 
 class PytorchFalconDecoderModel(torch.nn.Module):
