@@ -7,8 +7,10 @@ from typing import Optional, Tuple
 import pytest
 import torch
 import tt_lib
-from models.demos.falcon7b.tt.falcon_attention import TtFalconAttentionDecode, TtFalconAttentionPrefill
-from models.demos.falcon7b.tt.falcon_mlp import TtFalconMLPDecode, TtFalconMLPPrefill
+from models.demos.falcon7b.tt.falcon_attention import (
+    TtFalconAttentionDecode, TtFalconAttentionPrefill)
+from models.demos.falcon7b.tt.falcon_mlp import (TtFalconMLPDecode,
+                                                 TtFalconMLPPrefill)
 from models.demos.falcon7b.tt.model_utils import get_weights_cached
 from torch import nn
 
