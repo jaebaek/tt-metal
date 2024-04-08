@@ -354,6 +354,19 @@ def test_multi_core_matmul_2d_8x8(
             True,
             True,
             3072,
+            1024,
+            3072,
+            None,
+            ttl.tensor.DataType.BFLOAT8_B,
+            ttl.tensor.MathFidelity.HiFi2,
+            False,
+            False,
+        ),
+        (
+            False,
+            True,
+            True,
+            3072,
             2048,
             4096,
             None,
@@ -383,6 +396,7 @@ def test_loop_multi_core_matmul_2d_8x8(
     import os
 
     num_loops = int(os.environ["WL_NUM_LOOPS"]) if "WL_NUM_LOOPS" in os.environ else 1
+    en_checks = int(os.environ["WL_EN_CHECKS"]) if "WL_EN_CHECKS" in os.environ else 0
     print(f"Running {num_loops} loops")
     for i in range(num_loops):
         logger.info(i)
@@ -401,6 +415,7 @@ def test_loop_multi_core_matmul_2d_8x8(
             N,
             activation,
             function_level_defaults,
+            en_checks,
         )
 
 
@@ -419,6 +434,7 @@ def run_multi_core_matmul_2d_8x8(
     N,
     activation,
     function_level_defaults,
+    en_checks,
 ):
     in0_shape = [1, 1, M, K]
     in1_shape = [1, 1, K, N]
@@ -434,8 +450,10 @@ def run_multi_core_matmul_2d_8x8(
         out_subblock_w = 4
         out_subblock_h = 1
     else:
-        out_subblock_w = 8
         out_subblock_h = 1
+        out_subblock_w = 8 // out_subblock_h
+        while out_block_w % out_subblock_w != 0:
+            out_subblock_w = out_subblock_w - 1
 
     logger.debug("in0 block h w " + str(in0_block_h * 32) + " " + str(in0_block_w * 32))
     logger.debug("in1 block h w " + str(in0_block_w * 32) + " " + str(out_block_w * 32))
@@ -502,18 +520,21 @@ def run_multi_core_matmul_2d_8x8(
     if out_sharded:
         output_t = ttl.tensor.sharded_to_interleaved(output_t, interleaved_mem_config_L1)
 
-    pt_out = in0 @ in1
+    if en_checks:
+        pt_out = in0 @ in1
 
-    if has_bias:
-        pt_out = pt_out + bias
+        if has_bias:
+            pt_out = pt_out + bias
 
-    if activation != None:
-        pt_out = torch.nn.functional.gelu(pt_out)
-    tt_out = tt2torch_tensor(output_t)
+        if activation != None:
+            pt_out = torch.nn.functional.gelu(pt_out)
+        tt_out = tt2torch_tensor(output_t)
 
-    passing, output = comp_pcc(pt_out, tt_out)
-    logger.info(output)
-    assert passing
+        passing, output = comp_pcc(pt_out, tt_out)
+        logger.info(output)
+        assert passing
+    else:
+        assert True
 
 
 @skip_for_wormhole_b0("WH ND hang, see issue #4392")
