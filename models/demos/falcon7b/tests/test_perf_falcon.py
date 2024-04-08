@@ -79,9 +79,6 @@ def run_test_FalconCausalLM_end_to_end(
     # Clear global profiler state before starting measurements
     profiler.clear()
 
-    for device in devices:
-        device.enable_program_cache()
-
     num_devices = len(devices)
     global_batch = batch * num_devices
     model_name = model_location_generator(model_version, model_subdir="Falcon")
@@ -373,6 +370,7 @@ class TestParametrized:
     )
     @skip_for_wormhole_b0()
     def test_perf_gs_bare_metal(
+        self,
         use_program_cache,
         model_version,
         llm_mode,
@@ -434,6 +432,7 @@ class TestParametrized:
     )
     @skip_for_grayskull()
     def test_perf_wh_bare_metal(
+        self,
         use_program_cache,
         model_version,
         num_devices,
