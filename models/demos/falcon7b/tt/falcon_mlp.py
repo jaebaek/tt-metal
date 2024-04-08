@@ -84,6 +84,7 @@ class TtFalconMLPPrefill(nn.Module):
         hidden_size: int,
         model_config,
         tt_cache_path,
+        weights_dict,
     ):
         super().__init__()
 
@@ -103,6 +104,7 @@ class TtFalconMLPPrefill(nn.Module):
             dense_h_to_4h_str,
             weight_config_str="DENSE_H_TO_4H_MM_WEIGHTS",
             weights_to_cache=(torch.transpose(state_dict[dense_h_to_4h_str], -2, -1) if state_dict else None),
+            weights_dict=weights_dict,
         )
         self.dense_4h_to_h_weights = get_weights_cached(
             devices,
@@ -111,6 +113,7 @@ class TtFalconMLPPrefill(nn.Module):
             dense_4h_to_h_str,
             weight_config_str="DENSE_4H_TO_H_MM_WEIGHTS",
             weights_to_cache=(torch.transpose(state_dict[dense_4h_to_h_str], -2, -1) if state_dict else None),
+            weights_dict=weights_dict,
         )
 
     def forward(self, x: tt_lib.tensor.Tensor) -> tt_lib.tensor.Tensor:
@@ -149,6 +152,7 @@ class TtFalconMLPDecode(nn.Module):
         hidden_size: int,
         model_config,
         tt_cache_path,
+        weights_dict,
     ):
         super().__init__()
 
@@ -168,6 +172,7 @@ class TtFalconMLPDecode(nn.Module):
             dense_h_to_4h_str,
             weight_config_str="DENSE_H_TO_4H_MM_WEIGHTS",
             weights_to_cache=(torch.transpose(state_dict[dense_h_to_4h_str], -2, -1) if state_dict else None),
+            weights_dict=weights_dict,
         )
         self.dense_4h_to_h_weights = get_weights_cached(
             devices,
@@ -176,6 +181,7 @@ class TtFalconMLPDecode(nn.Module):
             dense_4h_to_h_str,
             weight_config_str="DENSE_4H_TO_H_MM_WEIGHTS",
             weights_to_cache=(torch.transpose(state_dict[dense_4h_to_h_str], -2, -1) if state_dict else None),
+            weights_dict=weights_dict,
         )
 
     def forward(self, x: tt_lib.tensor.Tensor) -> tt_lib.tensor.Tensor:
