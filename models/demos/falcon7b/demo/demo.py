@@ -234,11 +234,11 @@ def run_falcon_demo_kv(
     for user_id, output_id in enumerate(output_ids):
         decode_ids[user_id] = output_id
 
-    kv_cache_len = num_input_tokens  # This will increment by one after each decode
+    # kv_cache_len = num_input_tokens  # This will increment by one after each decode
     prompt_is_done = [False for _ in range(num_users)]
 
     time_decode_compile = 0
-    for output_token_index in tqdm(range(max_seq_len - num_input_tokens)):
+    for kv_cache_len in tqdm(range(num_input_tokens, max_seq_len, 32)):
         time_decode_compile_start = time.time()
         (
             tt_decode_embeddings,
@@ -270,7 +270,7 @@ def run_falcon_demo_kv(
         decode_ids = post_processor(logits=logits, index=...).reshape(batch_size, 1)
 
         generated_ids = torch.concat((generated_ids, decode_ids[:num_users]), dim=1)
-        kv_cache_len += 1
+        # kv_cache_len += 1
 
     logger.info("Finished 1st run decode stage with compile!")
     tt_lib.device.Synchronize(device)
@@ -298,6 +298,14 @@ def run_falcon_demo_kv(
         tt_cache_path,
     )
 
+    model_name = model_location_generator(model_version, model_subdir="Falcon")
+    hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_name, low_cpu_mem_usage=True)
+    hugging_face_reference_model.eval()
+    from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
+        comp_allclose,
+        comp_pcc,
+    )
+
     ### Second prefill run without compile ###
     profiler.enable()
     enable_persistent_kernel_cache()
@@ -316,6 +324,10 @@ def run_falcon_demo_kv(
             "prefill", prefill_ids[user_id : user_id + 1], 0, num_input_tokens=num_input_tokens
         )
         assert tt_prefill_attention_mask is not None
+
+        pytorch_out, pytorch_layer_present = hugging_face_reference_model(
+            input_ids=prefill_ids[user_id : user_id + 1, :num_input_tokens], use_cache=use_cache, return_dict=False
+        )
 
         tt_logits, kv_cache = tt_FalconCausalLM(
             input_embeddings=tt_prefill_embeddings,
@@ -337,12 +349,26 @@ def run_falcon_demo_kv(
         logits = tt2torch_tensor(tt_logits[0]).squeeze(1)
         tt_logits[0].deallocate()
 
+        does_pass, output_pcc = comp_pcc(pytorch_out, logits[:, :num_input_tokens, :], 0.95)
+        print(f"pcc logits: {output_pcc}")
+
+        kcache = tt2torch_tensor(kv_cache[31][0][0])[0]
+        does_pass, output_pcc = comp_pcc(pytorch_layer_present[31][0][0], kcache[:, :num_input_tokens, :], 0.95)
+        print(f"pcc kcache: {output_pcc}")
+
+        vcache = tt2torch_tensor(kv_cache[31][0][1])[0]
+        does_pass, output_pcc = comp_pcc(pytorch_layer_present[31][1][0], vcache[:, :num_input_tokens, :], 0.95)
+        print(f"pcc vcache: {output_pcc}")
+
         user_output_ids = post_processor(logits=logits, index=num_input_tokens - 1)
         output_ids[user_id] = user_output_ids
 
     logger.info("Finished inference prefill stage!")
 
     generated_ids = torch.concat((prefill_ids[..., :num_input_tokens], output_ids), dim=1)
+
+    output_id_torch = pytorch_out[:, num_input_tokens - 1, :].argmax(dim=-1, keepdims=True)
+    generated_ids_torch = torch.concat((prefill_ids[..., :num_input_tokens], output_id_torch), dim=-1)
 
     profiler.disable()
 
@@ -368,6 +394,12 @@ def run_falcon_demo_kv(
         ) = tt_FalconCausalLM.model_preprocessing("decode", decode_ids, kv_cache_len, num_input_tokens=kv_cache_len + 1)
         assert tt_decode_attention_mask is not None
 
+        # breakpoint()
+
+        pytorch_out, pytorch_layer_present = hugging_face_reference_model(
+            input_ids=output_id_torch, past_key_values=pytorch_layer_present, use_cache=use_cache, return_dict=False
+        )
+
         tt_logits, kv_cache = tt_FalconCausalLM(
             input_embeddings=tt_decode_embeddings,
             llm_mode="decode",
@@ -387,10 +419,27 @@ def run_falcon_demo_kv(
         logits = tt2torch_tensor(tt_logits[0]).squeeze(1)
         tt_logits[0].deallocate()
 
+        pytorch_in = logits.argmax(dim=-1)
+
+        does_pass, output_pcc = comp_pcc(pytorch_out, logits[:, 0:1, :], 0.95)
+        print(f"pcc logits: {output_pcc}")
+
+        pytorch_kvlen = pytorch_layer_present[0][0][0].shape[1]
+
+        kcache = tt2torch_tensor(kv_cache[31][0][0])[0]
+        does_pass, output_pcc = comp_pcc(pytorch_layer_present[31][0][0], kcache[:, :pytorch_kvlen, :], 0.95)
+        print(f"pcc kcache: {output_pcc}")
+
+        vcache = tt2torch_tensor(kv_cache[31][0][1])[0]
+        does_pass, output_pcc = comp_pcc(pytorch_layer_present[31][1][0], vcache[:, :pytorch_kvlen, :], 0.95)
+        print(f"pcc vcache: {output_pcc}")
+
         decode_ids = post_processor(logits=logits, index=...).reshape(batch_size, 1)
 
         for user_id, user_decode_id in enumerate(decode_ids[:num_users]):
             if user_decode_id == END_OF_TEXT:
+                print("end")
+                breakpoint()
                 prompt_is_done[user_id] = True
             if prompt_is_done[user_id]:
                 decode_ids[user_id] = SPACE
@@ -398,12 +447,24 @@ def run_falcon_demo_kv(
         if all(prompt_is_done):
             break
 
+        if output_token_index > 100:
+            breakpoint()
+
+        output_id_torch = pytorch_out[:, 0, :].argmax(dim=-1, keepdims=True)
+        generated_ids_torch = torch.concat((generated_ids_torch, output_id_torch), dim=-1)
+
         generated_ids = torch.concat((generated_ids, decode_ids[:num_users]), dim=1)
         kv_cache_len += 1
 
         # TODO: Remove if we don't want to print per generated token
-        os.system("clear")
+        # os.system("clear")
+        print("\nmetal")
         print_output_prompts(generated_ids, tokenizer)
+
+        print("\ntorch")
+        print_output_prompts(generated_ids_torch, tokenizer)
+
+        # breakpoint()
 
     logger.info("Finished inference decode stage!")
     num_tokens_generated_decode = batch_size * (output_token_index + 1)
@@ -468,7 +529,7 @@ def test_demo(
         model_version="tiiuae/falcon-7b-instruct",
         batch_size=32,
         num_layers=32,
-        max_seq_len=1024,
+        max_seq_len=128,
         model_config_strs_prefill_decode=["BFLOAT16-DRAM", "BFLOAT16-L1_SHARDED"]
         if is_wormhole_b0()
         else ["BFLOAT16-DRAM", "BFLOAT16-DRAM"],
