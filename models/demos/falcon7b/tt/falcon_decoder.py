@@ -34,6 +34,7 @@ class TtFalconDecoderLayer(nn.Module):
         self.layer_num = layer_num
         self.max_position_embeddings = max_position_embeddings
         self.model_config = model_config
+        self.weights_dict = {}
 
         assert config.parallel_attn, "Path for config.parallel_attn=False is not implemented in TtFalconDecoderLayer!"
 
@@ -47,6 +48,7 @@ class TtFalconDecoderLayer(nn.Module):
             max_position_embeddings=max_position_embeddings,
             model_config=model_config,
             tt_cache_path=tt_cache_path,
+            weights_dict=self.weights_dict,
         )
 
         self.self_attn_decode = TtFalconAttentionDecode(
@@ -59,6 +61,7 @@ class TtFalconDecoderLayer(nn.Module):
             max_position_embeddings=max_position_embeddings,
             model_config=model_config,
             tt_cache_path=tt_cache_path,
+            weights_dict=self.weights_dict,
         )
 
         self.mlp_prefill = TtFalconMLPPrefill(
@@ -69,6 +72,7 @@ class TtFalconDecoderLayer(nn.Module):
             hidden_size=config.hidden_size,
             model_config=model_config,
             tt_cache_path=tt_cache_path,
+            weights_dict=self.weights_dict,
         )
 
         self.mlp_decode = TtFalconMLPDecode(
@@ -79,6 +83,7 @@ class TtFalconDecoderLayer(nn.Module):
             hidden_size=config.hidden_size,
             model_config=model_config,
             tt_cache_path=tt_cache_path,
+            weights_dict=self.weights_dict,
         )
 
         layer_name = f"{base_url}.{layer_num}"
