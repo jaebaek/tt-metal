@@ -56,7 +56,7 @@ def test_vit_concat(device, batch_0, height_0, width_0, batch_1, height_1, width
         torch_input_tensor_b, layout=ttnn.ROW_MAJOR_LAYOUT, device=device, memory_config=l1_memory_config
     )
 
-    output = ttnn.concat([input_tensor_a, input_tensor_b], dim=dim)
+    output = ttnn.experimental.tensor.concat([input_tensor_a, input_tensor_b], dim, l1_memory_config)
     output = ttnn.to_torch(output)
 
     assert_with_pcc(torch_output_tensor, output, 0.9999)
