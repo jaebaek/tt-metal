@@ -321,12 +321,13 @@ def concat(
         )
 
     rank = len(tensors[0].shape)
-
     all_tensors_are_tile_layout_without_padding = all(
         tensor.layout == ttnn.TILE_LAYOUT and not ttnn.has_tile_padding(tensor) for tensor in tensors
     )
 
-    if rank <= 4 and all_tensors_are_tile_layout_without_padding:
+    breakpoint()
+    if rank <= 4:
+        # and all_tensors_are_tile_layout_without_padding:
         tensors_4d = [ttnn.unsqueeze_to_4D(tensor) for tensor in tensors]
         dim = dim + 4 - rank
         output_tensor = ttl.tensor.concat(tensors_4d, dim=dim, output_mem_config=memory_config)
