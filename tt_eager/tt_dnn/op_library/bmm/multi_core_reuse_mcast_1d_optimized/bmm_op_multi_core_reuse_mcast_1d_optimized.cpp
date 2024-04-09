@@ -276,27 +276,27 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
     tt_metal::NOC in0_noc = detail::GetPreferredNOCForDRAMWrite(device->arch());
     tt_metal::NOC in1_noc = detail::GetPreferredNOCForDRAMRead(device->arch());
 
-    auto mm_kernel_in0_sender_id = tt_metal::CreateKernel(
-        program,
-        in0_is_sharded ? "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in0_sender_receiver_padding_block_sharded.cpp" : "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in0_sender_padding.cpp",
-        mcast_sender,
-        tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_1, .noc = in0_noc, .compile_args = in0_sender_compile_time_args});
+    // auto mm_kernel_in0_sender_id = tt_metal::CreateKernel(
+    //     program,
+    //     in0_is_sharded ? "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in0_sender_receiver_padding_block_sharded.cpp" : "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in0_sender_padding.cpp",
+    //     mcast_sender,
+    //     tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_1, .noc = in0_noc, .compile_args = in0_sender_compile_time_args});
 
-    auto mm_kernel_in1_sender_writer_id = tt_metal::CreateKernel(
-        program,
-        "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in1_sender_writer_padding.cpp",
-        all_cores,
-        tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_0, .noc = in1_noc, .compile_args = in1_sender_writer_compile_time_args, .defines = mm_kernel_in1_sender_writer_defines});
+    // auto mm_kernel_in1_sender_writer_id = tt_metal::CreateKernel(
+    //     program,
+    //     "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in1_sender_writer_padding.cpp",
+    //     all_cores,
+    //     tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_0, .noc = in1_noc, .compile_args = in1_sender_writer_compile_time_args, .defines = mm_kernel_in1_sender_writer_defines});
 
 
-    KernelHandle mm_kernel_in0_receiver_id = 0;
-    if (!in0_is_sharded) {
-        mm_kernel_in0_receiver_id = tt_metal::CreateKernel(
-            program,
-            "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in0_receiver.cpp",
-            mcast_receivers,
-            tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_1, .noc = in0_noc, .compile_args = in0_receiver_compile_time_args});
-    }
+    // KernelHandle mm_kernel_in0_receiver_id = 0;
+    // if (!in0_is_sharded) {
+    //     mm_kernel_in0_receiver_id = tt_metal::CreateKernel(
+    //         program,
+    //         "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in0_receiver.cpp",
+    //         mcast_receivers,
+    //         tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_1, .noc = in0_noc, .compile_args = in0_receiver_compile_time_args});
+    // }
     // Compute kernel compile time args
 
     uint32_t in0_subblock_num_tiles = out_subblock_h * in0_block_w;
@@ -456,8 +456,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
             mm_in0_sender_args.push_back(end_core_noc.y);
             mm_in0_sender_args.insert(mm_in0_sender_args.end(), in0_mcast_noc_x.begin(), in0_mcast_noc_x.end());
             mm_in0_sender_args.insert(mm_in0_sender_args.end(), in0_mcast_noc_y.begin(), in0_mcast_noc_y.end());
-            tt_metal::SetRuntimeArgs(program, mm_kernel_in0_sender_id, core, mm_in0_sender_args); // RISCV_0_default
-            reader_kernel_ids.push_back(mm_kernel_in0_sender_id);
+            // tt_metal::SetRuntimeArgs(program, mm_kernel_in0_sender_id, core, mm_in0_sender_args); // RISCV_0_default
+            // reader_kernel_ids.push_back(mm_kernel_in0_sender_id);
         }
         // in0 sender and in1 sender
         else if (core_idx_x == 0 and core_idx_y == 0) {
@@ -474,8 +474,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
                 // padding args
                 (std::uint32_t) per_core_M // last_block_h
             };
-            tt_metal::SetRuntimeArgs(program, mm_kernel_in0_sender_id, core, mm_in0_sender_args); // RISCV_0_default
-            reader_kernel_ids.push_back(mm_kernel_in0_sender_id);
+            // tt_metal::SetRuntimeArgs(program, mm_kernel_in0_sender_id, core, mm_in0_sender_args); // RISCV_0_default
+            // reader_kernel_ids.push_back(mm_kernel_in0_sender_id);
         }
         // in0 receiver and in 1 sender
         else {
@@ -484,8 +484,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
                 (std::uint32_t)  top_left_core_physical.x, // in0_mcast_sender_noc_x
                 (std::uint32_t)  top_left_core_physical.y // in0_mcast_sender_noc_y
             };
-            tt_metal::SetRuntimeArgs(program, mm_kernel_in0_receiver_id, core, mm_in0_receiver_args); // RISCV_1_default
-            reader_kernel_ids.push_back(mm_kernel_in0_receiver_id);
+            // tt_metal::SetRuntimeArgs(program, mm_kernel_in0_receiver_id, core, mm_in0_receiver_args); // RISCV_1_default
+            // reader_kernel_ids.push_back(mm_kernel_in0_receiver_id);
         }
         std::vector<uint32_t> mm_in1_sender_writer_args = {
             // READER
@@ -530,12 +530,12 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
             mm_in1_sender_writer_args.push_back(0);
         }
 
-        if (bias_buffer != nullptr) {
-            mm_in1_sender_writer_args.push_back((std::uint32_t)  bias_buffer->address());
-            mm_in1_sender_writer_args.push_back((std::uint32_t)  per_core_N * output_idx_x); //in3_tensor_start_tile_id
-        }
-        tt_metal::SetRuntimeArgs(program, mm_kernel_in1_sender_writer_id, core, mm_in1_sender_writer_args); // RISCV_0_default
-        writer_kernel_ids.push_back(mm_kernel_in1_sender_writer_id);
+        // if (bias_buffer != nullptr) {
+        //     mm_in1_sender_writer_args.push_back((std::uint32_t)  bias_buffer->address());
+        //     mm_in1_sender_writer_args.push_back((std::uint32_t)  per_core_N * output_idx_x); //in3_tensor_start_tile_id
+        // }
+        // tt_metal::SetRuntimeArgs(program, mm_kernel_in1_sender_writer_id, core, mm_in1_sender_writer_args); // RISCV_0_default
+        // writer_kernel_ids.push_back(mm_kernel_in1_sender_writer_id);
     }
 
     auto override_runtime_arguments_callback = [
@@ -1313,7 +1313,22 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_1d_optimized_(cons
           );
       }
     } else {
-        TT_FATAL(false, "Grid is invalid for mcast matmul!");
+        // TT_FATAL(false, "Grid is invalid for mcast matmul!");
+        return reuse_mcast_1d_optimized_helpers::create_program_mcast_in0(
+            device,
+            math_fidelity, fp32_dest_acc_en, math_approx_mode, packer_l1_acc,
+            compute_with_storage_grid_size,
+            B, Mt, Nt, Kt,
+            bcast_batch,
+            in0_block_w,
+            out_subblock_h, out_subblock_w,
+            per_core_M, per_core_N,
+            fused_activation,
+            in0_buffer, in1_buffer, bias_buffer, out_buffer,
+            in0_data_format, in1_data_format, bias_data_format, output_data_format,
+            a.memory_config().is_sharded(), output.memory_config().is_sharded(),
+            untilize_out
+        );
     }
 }
 

@@ -669,7 +669,7 @@ from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
 def test_reproduce_l1_acc_hang(device):
     M = 32
     K = 142
-    N = 32
+    N = 16
 
     a_shape = [1, 1, M * 32, K * 32]
     b_slice_shape = [1, 1, K * 32, N * 32]
@@ -698,7 +698,7 @@ def test_reproduce_l1_acc_hang(device):
     )
 
     program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-        compute_with_storage_grid_size=(2, 1),
+        compute_with_storage_grid_size=(1, 1),
         in0_block_w=1,
         out_subblock_h=1,
         out_subblock_w=1,
