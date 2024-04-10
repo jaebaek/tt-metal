@@ -2,13 +2,12 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-import torch
-import pytest
-from torch import nn
 from typing import Optional, Tuple
 
+import pytest
+import torch
 import tt_lib
-
+from models.demos.falcon7b.tt.falcon_lm_head import falcon_lm_head_matmul_2d
 from models.demos.falcon7b.tt.falcon_model import TtFalconModelShared
 from models.demos.falcon7b.tt.model_utils import get_weights_cached
 
@@ -24,6 +23,7 @@ class TtFalconCausalLM(TtFalconModelShared):
         max_position_embeddings,
         model_config,
         tt_cache_path,
+        seq_len,
     ):
         assert base_url == "", "base_url should be empty at the root of the model!"
 
@@ -39,17 +39,42 @@ class TtFalconCausalLM(TtFalconModelShared):
         )
         self.num_devices = len(devices)
         self.model_config = model_config
+        self.seq_len = seq_len
 
-        lm_head_str = f"lm_head.weight"
+        # Optimization for lm_head matmul
+        self.num_slices = 4 if self.seq_len <= 1024 else 8
 
-        self.lm_head_weights = get_weights_cached(
-            devices,
-            model_config,
-            tt_cache_path,
-            lm_head_str,
-            weight_config_str="LM_HEAD_MM_WEIGHTS",
-            weights_to_cache=(torch.transpose(self.state_dict[f"lm_head.weight"], -2, -1) if self.state_dict else None),
-        )
+        lm_head_weight = None
+        if self.state_dict:
+            lm_head_weight = self.state_dict["lm_head.weight"]
+            lm_head_weight = torch.transpose(lm_head_weight, -2, -1)
+
+        if self.seq_len > 512:
+            if lm_head_weight is not None:
+                PADDING = torch.zeros([64, lm_head_weight.shape[1] // self.num_slices])
+                lm_head_weights = torch.chunk(lm_head_weight, self.num_slices, dim=-1)
+                lm_head_weights_padded = [torch.cat([weight, PADDING], 0) for weight in lm_head_weights]
+
+            self.lm_head_weights = [
+                get_weights_cached(
+                    devices,
+                    model_config,
+                    tt_cache_path,
+                    f"lm_head.weight_slice_{i}_of_{self.num_slices}",
+                    weight_config_str="LM_HEAD_MM_WEIGHTS",
+                    weights_to_cache=lm_head_weights_padded[i] if lm_head_weight is not None else None,
+                )
+                for i in range(self.num_slices)
+            ]
+        else:
+            self.lm_head_weights = get_weights_cached(
+                devices,
+                model_config,
+                tt_cache_path,
+                f"lm_head.weight",
+                weight_config_str="LM_HEAD_MM_WEIGHTS",
+                weights_to_cache=lm_head_weight,
+            )
 
     def forward(
         self,
@@ -71,16 +96,29 @@ class TtFalconCausalLM(TtFalconModelShared):
             use_cache=use_cache,
         )
 
-        lm_logits = []
-        for i in range(self.num_devices):
-            lm_logits.append(
+        if self.seq_len > 512:
+            lm_logits = [
+                falcon_lm_head_matmul_2d(
+                    hidden_states[device_id],
+                    [weights[device_id] for weights in self.lm_head_weights],
+                    self.num_slices,
+                    in0_mem_config=self.model_config["LM_HEAD_MM_INPUT_MEMCFG"],
+                    in0_dtype=self.model_config["LM_HEAD_MM_INPUT_DTYPE"],
+                    out_mem_config=self.model_config["LM_HEAD_MM_OUTPUT_MEMCFG"],
+                    out_dtype=self.model_config["LM_HEAD_MM_OUTPUT_DTYPE"],
+                )
+                for device_id in range(self.num_devices)
+            ]
+        else:
+            lm_logits = [
                 tt_lib.tensor.falcon_lm_head_matmul(
-                    hidden_states[i],
-                    self.lm_head_weights[i],
+                    hidden_states[device_id],
+                    self.lm_head_weights[device_id],
                     bias=None,
                     output_mem_config=self.model_config["LM_HEAD_MM_OUTPUT_MEMCFG"],
                     output_dtype=self.model_config["LM_HEAD_MM_OUTPUT_DTYPE"],
                 )
-            )
+                for device_id in range(self.num_devices)
+            ]
 
         return lm_logits, presents
