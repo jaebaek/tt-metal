@@ -91,6 +91,7 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(const Tensor& 
     auto all_cores = shard_spec.grid;
     uint32_t input_cb_index = CB::c_in0;
     uint32_t scratch_cb_index = CB::c_in1;
+    uint32_t sync_cb_index = CB::c_intermed0;
     uint32_t out_cb_index = input_cb_index;
     uint32_t num_input_units = num_units_per_shard;
     uint32_t output_page_size = align(output_unit_size, ADDRESS_ALIGNMENT);
@@ -107,6 +108,10 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(const Tensor& 
             .set_page_size(out_cb_index, output_page_size)
             .set_globally_allocated_address(*output.buffer());
     auto cb_output = tt_metal::CreateCircularBuffer(program, all_cores, output_cb_out_config);
+    tt_metal::CircularBufferConfig sync_cb_out_config =
+        tt_metal::CircularBufferConfig(2*ADDRESS_ALIGNMENT, {{sync_cb_index, input_cb_data_format}})
+                    .set_page_size(sync_cb_index, ADDRESS_ALIGNMENT);
+    auto cb_sync = tt_metal::CreateCircularBuffer(program, all_cores, sync_cb_out_config);
     if (src_is_dram && input_unit_size % DRAM_ALIGNMENT != 0) {
         uint32_t scratch_cb_page_size = align(input_unit_size, DRAM_ALIGNMENT);
         tt_metal::CircularBufferConfig scratch_cb_out_config =
@@ -116,14 +121,20 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(const Tensor& 
     }
 
     tt_metal::KernelHandle unary_reader_kernel_id;
+    tt_metal::KernelHandle unary_writer_kernel_id;
     if (input.get_layout() == Layout::TILE) {
-        std::vector<uint32_t> reader_compile_time_args = {(std::uint32_t)input_cb_index, (std::uint32_t)src_is_dram};
-
+        std::vector<uint32_t> reader_compile_time_args = {(std::uint32_t)input_cb_index, (std::uint32_t)src_is_dram, (std::uint32_t)sync_cb_index, (std::uint32_t)1, (std::uint32_t)convert_df};
         unary_reader_kernel_id = tt_metal::CreateKernel(
             program,
             "tt_eager/tt_dnn/op_library/sharded/kernels/dataflow/reader_unary_sharded_blocks_interleaved_start_id.cpp",
             all_cores,
             tt_metal::ReaderDataMovementConfig(reader_compile_time_args));
+        std::vector<uint32_t> writer_compile_time_args = {(std::uint32_t)input_cb_index, (std::uint32_t)src_is_dram, (std::uint32_t)sync_cb_index, (std::uint32_t)0, (std::uint32_t)convert_df};
+        unary_writer_kernel_id = tt_metal::CreateKernel(
+            program,
+            "tt_eager/tt_dnn/op_library/sharded/kernels/dataflow/reader_unary_sharded_blocks_interleaved_start_id.cpp",
+            all_cores,
+            tt_metal::WriterDataMovementConfig(writer_compile_time_args));
     } else {
         bool src_stick_size_is_power_of_two = is_power_of_two_at_least_32(num_units_per_row);
         uint32_t src_log2_stick_size = src_stick_size_is_power_of_two ? (std::uint32_t)log2(num_units_per_row) : 0;
@@ -140,14 +151,14 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(const Tensor& 
             "reader_unary_stick_layout_sharded_blocks_interleaved_start_id.cpp",
             all_cores,
             tt_metal::ReaderDataMovementConfig(reader_compile_time_args));
-    }
 
-    std::vector<uint32_t> writer_compile_time_args = {out_cb_index};
-    tt_metal::KernelHandle unary_writer_kernel_id = tt_metal::CreateKernel(
-        program,
-        "tt_eager/tt_dnn/op_library/sharded/kernels/dataflow/writer_unary_sharded.cpp",
-        all_cores,
-        tt_metal::WriterDataMovementConfig(writer_compile_time_args));
+        std::vector<uint32_t> writer_compile_time_args = {out_cb_index};
+        unary_writer_kernel_id = tt_metal::CreateKernel(
+            program,
+            "tt_eager/tt_dnn/op_library/sharded/kernels/dataflow/writer_unary_sharded.cpp",
+            all_cores,
+            tt_metal::WriterDataMovementConfig(writer_compile_time_args));
+    }
 
     tt_metal::KernelHandle compute_kernel_id = 0;
     if (convert_df) {
@@ -193,16 +204,34 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(const Tensor& 
                 }
             }
             curr_num_units_per_shard = shard_height * shard_width;
+            uint32_t first_shard_height = (shard_height + 1) / 2;
+            uint32_t second_shard_height = shard_height - first_shard_height;
+            uint32_t first_curr_num_units_per_shard = first_shard_height * shard_width;
+            uint32_t second_curr_num_units_per_shard = second_shard_height * shard_width;
+            uint32_t second_curr_idx_h = curr_idx_h + num_units_per_row * first_shard_height;
             tt_metal::SetRuntimeArgs(
                 program,
                 unary_reader_kernel_id,
                 core,
                 {src_buffer->address(),
-                 shard_height,
+                 first_shard_height,
                  shard_width,
                  num_units_offset,
-                 curr_num_units_per_shard,
-                 curr_idx_h + curr_idx_w});
+                 first_curr_num_units_per_shard,
+                 curr_idx_h + curr_idx_w,
+                 curr_num_units_per_shard});
+
+            tt_metal::SetRuntimeArgs(
+                program,
+                unary_writer_kernel_id,
+                core,
+                {src_buffer->address(),
+                 second_shard_height,
+                 shard_width,
+                 num_units_offset,
+                 second_curr_num_units_per_shard,
+                 second_curr_idx_h + curr_idx_w,
+                 curr_num_units_per_shard});
             curr_idx_w += num_units_per_shard_width;
             if (curr_idx_w == num_units_per_row) {
                 curr_idx_w = 0;
@@ -262,8 +291,8 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(const Tensor& 
                 curr_idx_w = 0;
                 curr_idx_h += num_units_per_shard_height;
             }
+            tt_metal::SetRuntimeArgs(program, unary_writer_kernel_id, core, {curr_num_units_per_shard});
         }
-        tt_metal::SetRuntimeArgs(program, unary_writer_kernel_id, core, {curr_num_units_per_shard});
         if (convert_df) {
             tt_metal::SetRuntimeArgs(program, compute_kernel_id, core, {curr_num_units_per_shard});
         }
@@ -276,6 +305,7 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(const Tensor& 
                                                    const std::vector<std::optional<const Tensor>>&,
                                                    const std::vector<Tensor>& output_tensors) {
         auto src_buffer = input_tensors.at(0).buffer();
+        bool is_src_tiled = input_tensors.at(0).get_layout() == Layout::TILE;
 
         auto dst_buffer = output_tensors.at(0).buffer();
 
@@ -286,6 +316,10 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(const Tensor& 
             {
                 auto& runtime_args = GetRuntimeArgs(program, unary_reader_kernel_id, core);
                 runtime_args[0] = src_buffer->address();
+                if (is_src_tiled) {
+                    auto& runtime_args2 = GetRuntimeArgs(program, unary_writer_kernel_id, core);
+                    runtime_args2[0] = src_buffer->address();
+                }
             }
         }
         UpdateDynamicCircularBufferAddress(program, cb_output, *dst_buffer);
