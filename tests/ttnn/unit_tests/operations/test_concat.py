@@ -50,12 +50,13 @@ def test_vit_concat(device, batch_0, height_0, width_0, batch_1, height_1, width
     )
 
     input_tensor_a = ttnn.from_torch(
-        torch_input_tensor_a, layout=ttnn.ROW_MAJOR_LAYOUT, device=device, memory_config=dram_memory_config
+        torch_input_tensor_a, layout=ttnn.TILE_LAYOUT, device=device, memory_config=dram_memory_config
     )
     input_tensor_b = ttnn.from_torch(
         torch_input_tensor_b, layout=ttnn.ROW_MAJOR_LAYOUT, device=device, memory_config=l1_memory_config
     )
 
+    input_tensor_a = ttnn.to_layout(input_tensor_a, ttnn.ROW_MAJOR_LAYOUT)
     output = ttnn.experimental.tensor.concat([input_tensor_a, input_tensor_b], dim, l1_memory_config)
     output = ttnn.to_torch(output)
 
