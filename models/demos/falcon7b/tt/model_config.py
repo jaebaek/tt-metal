@@ -2,9 +2,10 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from pathlib import Path
+
 import tt_lib as ttl
 from loguru import logger
-from pathlib import Path
 from models.utility_functions import is_wormhole_b0
 
 OP_KEYS = (
@@ -49,6 +50,7 @@ OP_KEYS = (
     "LN_F_BIAS",
     "LN_F_OUTPUT",
     # LM Head
+    "LM_HEAD_MM_INPUT",
     "LM_HEAD_MM_WEIGHTS",
     "LM_HEAD_MM_OUTPUT",
 )
