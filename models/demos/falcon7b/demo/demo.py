@@ -3,30 +3,30 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import json
-import pytest
-from functools import partial
-import tt_lib
-import torch
-from loguru import logger
-import time
-from pathlib import Path
-from transformers import AutoTokenizer
 import os
-from tqdm import tqdm
-from models.utility_functions import is_wormhole_b0
+import time
+from functools import partial
+from pathlib import Path
 
-from models.demos.falcon7b.tt.falcon_causallm import TtFalconCausalLM
+import pytest
+import torch
+import tt_lib
+from loguru import logger
 from models.demos.falcon7b.reference.hf_modeling_falcon import FalconConfig, FalconForCausalLM
+from models.demos.falcon7b.tt.falcon_causallm import TtFalconCausalLM
 from models.demos.falcon7b.tt.model_config import get_model_config, get_tt_cache_path, model_config_entries
 from models.utility_functions import (
     disable_compilation_reports,
     disable_persistent_kernel_cache,
     enable_persistent_kernel_cache,
+    is_wormhole_b0,
+    nearest_32,
     profiler,
     torch2tt_tensor,
     tt2torch_tensor,
-    nearest_32,
 )
+from tqdm import tqdm
+from transformers import AutoTokenizer
 
 END_OF_TEXT = 11
 SPACE = 204
@@ -122,6 +122,14 @@ def run_falcon_demo_kv(
 
     profiler.end(f"loading_inputs")
 
+    logger.info("Tokenizing inputs...")
+    profiler.start(f"tokenizing_inputs")
+
+    tokenizer = AutoTokenizer.from_pretrained(model_version)
+    prefill_ids, num_users, num_input_tokens = preprocess_and_validate_inputs(input_prompts, tokenizer, max_seq_len)
+
+    profiler.end(f"tokenizing_inputs")
+
     # State dict is needed for embeddings
     logger.info("Loading weights...")
     profiler.start(f"loading_weights")
@@ -155,20 +163,13 @@ def run_falcon_demo_kv(
         max_seq_len,
         get_model_config(model_config_strs_prefill_decode[0]),
         tt_cache_path,
+        nearest_32(num_input_tokens),
     )  # single layer only used for compile
 
     logger.info("Moved weights to device!")
     profiler.end(f"moving_to_device")
 
     tt_lib.device.Synchronize(device)
-
-    logger.info("Tokenizing inputs...")
-    profiler.start(f"tokenizing_inputs")
-
-    tokenizer = AutoTokenizer.from_pretrained(model_version)
-    prefill_ids, num_users, num_input_tokens = preprocess_and_validate_inputs(input_prompts, tokenizer, max_seq_len)
-
-    profiler.end(f"tokenizing_inputs")
 
     logger.info("Initializing KV cache...")
     profiler.start(f"initializing_KV_cache")
@@ -296,6 +297,7 @@ def run_falcon_demo_kv(
         max_seq_len,
         get_model_config(model_config_strs_prefill_decode[0]),
         tt_cache_path,
+        nearest_32(num_input_tokens),
     )
 
     ### Second prefill run without compile ###
