@@ -71,12 +71,12 @@ def get_weights_cached(
                 tt_dtype=model_config[f"{weight_config_str}_DTYPE"],
             )
             
-            # Store weights
-            tt_lib.tensor.dump_tensor(str(path), weights_host)
-
         weights = [weights_host.to(device, model_config[f"{weight_config_str}_MEMCFG"]) for device in devices]
         # Save weights for reuse between prefill/decode
         if weights_dict is not None:
             weights_dict[str(path)] = weights[0]
-            
+        # Store weights
+        tt_lib.tensor.dump_tensor(str(path), weights_host)
+
     return weights
+
