@@ -160,7 +160,7 @@ def run_falcon_demo_kv(
     if perf_mode:
         logger.info("Running in performance measurement mode (invalid outputs)!")
 
-    model_config = get_model_config(model_config_strs_prefill_decode[0])
+    model_config = get_model_config(model_config_strs_prefill_decode[0], max_seq_len)
     tt_cache_path = get_tt_cache_path(
         model_version, model_subdir="Falcon", default_dir=model_config["DEFAULT_CACHE_PATH"]
     )
