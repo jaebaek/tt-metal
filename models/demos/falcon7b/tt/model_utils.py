@@ -24,9 +24,7 @@ def get_weights_cached(
         weights = weights_dict[str(path)]
     elif not overwrite and path.exists():
         # Load cached weights
-        weights_host = tt_lib.tensor.load_tensor(
-            str(tt_cache_path / f"{weight_cache_str}_{model_config[f'{weight_config_str}_DTYPE'].name}.bin")
-        )
+        weights_host = tt_lib.tensor.load_tensor(str(path))
         # Duplicate weights on all devices
         weights = [weights_host.to(device, model_config[f"{weight_config_str}_MEMCFG"]) for device in devices]
         # Add to weights_dict
@@ -48,10 +46,7 @@ def get_weights_cached(
                 tt_dtype=model_config[f"{weight_config_str}_DTYPE"],
             )
         # Store weights
-        tt_lib.tensor.dump_tensor(
-            str(tt_cache_path / f"{weight_cache_str}_{model_config[f'{weight_config_str}_DTYPE'].name}.bin"),
-            weights_host,
-        )
+        tt_lib.tensor.dump_tensor(str(path), weights_host)
 
         # Duplicate weights on all devices
         weights = [weights_host.to(device, model_config[f"{weight_config_str}_MEMCFG"]) for device in devices]
