@@ -12,6 +12,10 @@ from tt_eager.tt_dnn.op_library.sliding_window_op_infra.tt_py_composite_conv imp
 )
 
 
+def _golden_function(self, activations):
+    breakpoint()
+
+
 class Conv2d:
     def __init__(
         self,
@@ -128,7 +132,10 @@ class Conv2d:
         self.out_channels = out_channels
 
     @ttnn.register_operation(
-        name="ttnn.Conv2d.__call__", validate_input_tensors=lambda *args, **kwargs: None, is_method=True
+        name="ttnn.Conv2d.__call__",
+        validate_input_tensors=lambda *args, **kwargs: None,
+        is_method=True,
+        golden_function=_golden_function,
     )
     def __call__(self, activation: ttnn.Tensor):
         return self.conv(activation)
