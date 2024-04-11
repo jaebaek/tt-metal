@@ -101,7 +101,7 @@ def run_test_FalconMLP_inference(
         assert does_pass, f"PCC value is lower than {pcc}"
 
 
-@pytest.mark.parametrize("num_devices", (1,))
+@pytest.mark.parametrize("num_devices", (1, 2, 4))
 @pytest.mark.parametrize(
     "model_version, llm_mode, batch, seq_len, pcc",
     (
