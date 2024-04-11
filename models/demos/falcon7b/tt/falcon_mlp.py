@@ -85,7 +85,7 @@ class TtFalconMLPPrefill(nn.Module):
         hidden_size: int,
         model_config,
         tt_cache_path,
-        weights_dict,
+        weights_dict=None,
     ):
         super().__init__()
 
