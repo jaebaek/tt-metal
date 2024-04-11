@@ -96,8 +96,8 @@ def print_output_prompts(generated_ids, tokenizer, num_users_to_display=None):
         logger.info(f"Output for user {user_id}:\n{output_prompt}")
 
 
-def update_model_config(model, model_config_str):
-    model.model_config.update(get_model_config(model_config_str))
+def update_model_config(model, model_config_str, seq_len):
+    model.model_config.update(get_model_config(model_config_str, seq_len))
 
 
 def top_pk_logits(logits, p=0.9, k=10, temperature=1.0, return_probs=False):
@@ -190,7 +190,7 @@ def run_falcon_demo_kv(
         1,
         configuration,
         max_seq_len,
-        get_model_config(model_config_strs_prefill_decode[0]),
+        get_model_config(model_config_strs_prefill_decode[0], nearest_32(num_input_tokens)),
         tt_cache_path,
         nearest_32(num_input_tokens),
     )  # single layer only used for compile
@@ -250,7 +250,9 @@ def run_falcon_demo_kv(
     logger.info("Running 1st run decode stage with compile...")
 
     # Update model config
-    update_model_config(tt_FalconCausalLM_singlelayer, model_config_strs_prefill_decode[1])
+    update_model_config(
+        tt_FalconCausalLM_singlelayer, model_config_strs_prefill_decode[1], nearest_32(num_input_tokens)
+    )
 
     decode_ids = torch.randint(low=0, high=configuration.vocab_size - 1, size=(batch_size, 1), dtype=torch.int64)
 
@@ -303,7 +305,7 @@ def run_falcon_demo_kv(
         num_layers,
         configuration,
         max_seq_len,
-        get_model_config(model_config_strs_prefill_decode[0]),
+        get_model_config(model_config_strs_prefill_decode[0], nearest_32(num_input_tokens)),
         tt_cache_path,
         nearest_32(num_input_tokens),
     )
@@ -369,7 +371,7 @@ def run_falcon_demo_kv(
     logger.info("Running inference decode stage...")
 
     # Update model config
-    update_model_config(tt_FalconCausalLM, model_config_strs_prefill_decode[1])
+    update_model_config(tt_FalconCausalLM, model_config_strs_prefill_decode[1], nearest_32(num_input_tokens))
 
     decode_ids = torch.zeros(batch_size, 1, dtype=torch.int64)
     for user_id, output_id in enumerate(output_ids):

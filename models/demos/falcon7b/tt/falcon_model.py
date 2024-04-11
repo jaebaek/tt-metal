@@ -2,19 +2,15 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-import torch
 from abc import abstractmethod
 from typing import Optional, Tuple
 
+import torch
 import tt_lib
-
+import ttnn
 from models.demos.falcon7b.tt.falcon_decoder import TtFalconDecoderLayer
-from models.utility_functions import (
-    torch2tt_tensor,
-    pad_by_zero,
-    nearest_32,
-)
 from models.demos.falcon7b.tt.model_utils import get_weights_cached
+from models.utility_functions import nearest_32, pad_by_zero, torch2tt_tensor
 
 
 class TtFalconModelShared(torch.nn.Module):
@@ -41,6 +37,10 @@ class TtFalconModelShared(torch.nn.Module):
         self.config = config
         self.max_position_embeddings = max_position_embeddings
         self.model_config = model_config
+
+        # # Load MLP padded tensors for 1024 and 2048 if they are smaller than max_position_embeddings or equal
+        # update max_position_embeddings in model_config
+        self.model_config["MAX_POSITION_EMBEDDINGS"] = max_position_embeddings
 
         # So far on CPU until we add embeddings support on device
         self.embeddings = torch.nn.Embedding(config.vocab_size, config.hidden_size)
