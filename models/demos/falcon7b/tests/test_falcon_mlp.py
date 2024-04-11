@@ -101,7 +101,7 @@ def run_test_FalconMLP_inference(
         assert does_pass, f"PCC value is lower than {pcc}"
 
 
-@pytest.mark.parametrize("num_devices", (1,))
+@pytest.mark.parametrize("num_devices", (1, 2, 4))
 @pytest.mark.parametrize(
     "model_version, llm_mode, batch, seq_len, pcc",
     (
@@ -109,10 +109,32 @@ def run_test_FalconMLP_inference(
             "tiiuae/falcon-7b-instruct",
             "prefill",
             1,
+            2048,
+            0.98,
+        ),
+        (
+            "tiiuae/falcon-7b-instruct",
+            "prefill",
+            1,
+            1024,
+            0.98,
+        ),
+        (
+            "tiiuae/falcon-7b-instruct",
+            "prefill",
+            1,
             128,
             0.98,
         ),
+        (
+            "tiiuae/falcon-7b-instruct",
+            "decode",
+            1,
+            32,
+            0.98,
+        ),
     ),
+    ids=["prefill_seq2048", "prefill_seq1024", "prefill_seq128", "decode_batch32"],
 )
 @pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM", "BFLOAT16-L1"))
 def test_FalconMLP_inference(
@@ -129,7 +151,8 @@ def test_FalconMLP_inference(
 ):
     devices = get_devices_for_t3000(all_devices, num_devices)
 
-    model_config = get_model_config(model_config_str)
+    model_config = get_model_config(model_config_str, seq_len)
+    model_config["MAX_POSITION_EMBEDDINGS"] = 2048
     tt_cache_path = get_tt_cache_path(
         model_version, model_subdir="Falcon", default_dir=model_config["DEFAULT_CACHE_PATH"]
     )

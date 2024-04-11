@@ -93,7 +93,7 @@ def pretty_print_model_config(model_config):
     return "\n".join(print_str)
 
 
-def get_model_config(model_config_str):
+def get_model_config(model_config_str, seq_len):
     assert model_config_str in ACCEPTABLE_MODEL_CONFIG_STRS
     DRAM_MEMCFG = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
     L1_MEMCFG = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1)
@@ -189,8 +189,57 @@ def get_model_config(model_config_str):
 
     # uncomment if need to see all the configs
     # logger.debug(f"Falcon model config: \n{pretty_print_model_config(model_config)}")
+    set_prefill_config(model_config, seq_len, DRAM_MEMCFG)
 
     return model_config
+
+
+def set_prefill_config(model_config, seq_len, dram_memcfg):
+    model_config["MLP_SEQ_LEN"] = seq_len
+    model_config["MLP_PADDING_VALUE"] = 4608
+    model_config["MLP_GRID_SIZE"] = (8, 8)
+
+    model_config["MLP_KERNEL_CONFIG"] = ttl.tensor.WormholeComputeKernelConfig(
+        math_fidelity=ttl.tensor.MathFidelity.LoFi,
+        math_approx_mode=False,
+        fp32_dest_acc_en=False,
+        packer_l1_acc=True,
+    )
+
+    mm_h_to_4h_prog_cfg = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+        compute_with_storage_grid_size=model_config["MLP_GRID_SIZE"],
+        in0_block_w=3,
+        out_subblock_h=1,
+        out_subblock_w=8,
+        per_core_M=4,
+        per_core_N=72,
+        transpose_mcast=False,
+        fused_activation=[ttl.tensor.FusibleActivation.GELU, True],
+    )
+    model_config["DENSE_H_TO_4H_MM_PROGCFG"] = mm_h_to_4h_prog_cfg
+
+    mm_4h_to_h_prog_cfg = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+        compute_with_storage_grid_size=model_config["MLP_GRID_SIZE"],
+        in0_block_w=8,
+        out_subblock_h=1,
+        out_subblock_w=6,
+        per_core_M=4,
+        per_core_N=18,
+        transpose_mcast=False,
+        fused_activation=None,
+    )
+    model_config["DENSE_4H_TO_H_MM_PROGCFG"] = mm_4h_to_h_prog_cfg
+    model_config["MLP_INTERLEAVED_TO_SHARDED_MEM_CFG"] = dram_memcfg
+
+
+# TODO: Generalize TT tensor caching
+def get_tt_cache_path(model_version):
+    tt_cache_path = Path("/mnt/MLPerf/tt_dnn-models/tt/Falcon") / model_version
+    if tt_cache_path.exists():
+        return tt_cache_path
+    else:
+        Path(f"models/demos/falcon7b/datasets/{model_version}").mkdir(parents=True, exist_ok=True)
+        return Path(f"models/demos/falcon7b/datasets/{model_version}")
 
 
 model_config_entries = {

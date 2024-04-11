@@ -2,21 +2,16 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-import torch
 from abc import abstractmethod
 from typing import Optional, Tuple
-from tqdm import tqdm
 
+import torch
 import tt_lib
 import ttnn
-
 from models.demos.falcon7b.tt.falcon_decoder import TtFalconDecoderLayer
-from models.utility_functions import (
-    torch2tt_tensor,
-    pad_by_zero,
-    nearest_32,
-)
 from models.demos.falcon7b.tt.model_utils import get_weights_cached
+from models.utility_functions import nearest_32, pad_by_zero, torch2tt_tensor
+from tqdm import tqdm
 
 
 class TtFalconModelShared(torch.nn.Module):
@@ -55,6 +50,8 @@ class TtFalconModelShared(torch.nn.Module):
             weights_to_cache=(state_dict[embedding_weights_str] if state_dict else None),
             tt_layout=tt_lib.tensor.Layout.ROW_MAJOR,
         )
+
+        self.model_config["MAX_POSITION_EMBEDDINGS"] = max_position_embeddings
 
         # stack all decoders
         self.layers = torch.nn.ModuleList(
