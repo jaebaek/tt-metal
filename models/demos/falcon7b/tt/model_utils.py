@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+import torch
 import tt_lib
 from models.utility_functions import pad_by_zero, torch2tt_tensor
 
@@ -16,10 +17,17 @@ def get_weights_cached(
     overwrite=False,
     padzero=False,
     weights_dict=None,
+    custom_output_shape=None,
 ):
     """Load weights from weights_dict or cache and duplicate per device. Store if not cached."""
+    custom_output_shape_str = ""
+    if custom_output_shape is not None:
+        custom_output_shape_str = f"_{custom_output_shape[-2]}_{custom_output_shape[-1]}"
+    path = (
+        tt_cache_path
+        / f"{weight_cache_str}_{model_config[f'{weight_config_str}_DTYPE'].name}{custom_output_shape_str}.bin"
+    )
 
-    path = tt_cache_path / f"{weight_cache_str}_{model_config[f'{weight_config_str}_DTYPE'].name}.bin"
     if weights_dict and str(path) in weights_dict.keys():
         weights = weights_dict[str(path)]
     elif not overwrite and path.exists():
@@ -31,6 +39,9 @@ def get_weights_cached(
         if weights_dict is not None:
             weights_dict[str(path)] = weights
     else:
+        if weights_to_cache is None:
+            raise ValueError(f"weights_to_cache is None for {weight_cache_str}")
+
         # Duplicate weights on all devices
         if padzero:
             weights = [
@@ -43,6 +54,15 @@ def get_weights_cached(
                 for device in devices
             ]
         else:
+            if custom_output_shape is not None:
+                padding = (
+                    0,
+                    custom_output_shape[-1] - weights_to_cache.shape[-1],
+                    0,
+                    custom_output_shape[-2] - weights_to_cache.shape[-2],
+                )
+                weights_to_cache = torch.nn.functional.pad(weights_to_cache, padding, "constant", 0.0)
+
             weights = [
                 torch2tt_tensor(
                     weights_to_cache,
