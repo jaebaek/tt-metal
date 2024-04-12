@@ -163,7 +163,7 @@ def run_falcon_demo_kv(
     logger.info("Loading weights...")
     profiler.start(f"loading_weights")
     if (tt_cache_path == Path(f"models/demos/falcon7b/datasets/{model_version}")) and (
-        len(os.listdir(f"models/demos/falcon7b/datasets/{model_version}")) < 260
+        len(os.listdir(f"models/demos/falcon7b/datasets/{model_version}")) < 330
     ):
         logger.info("Weights not found on machine; downloading weights...")
         model_name = model_location_generator(model_version, model_subdir="Falcon")
@@ -509,7 +509,7 @@ def test_demo(
         model_version="tiiuae/falcon-7b-instruct",
         batch_size=32,
         num_layers=32,
-        max_seq_len=1024,
+        max_seq_len=128,
         model_config_strs_prefill_decode=["BFLOAT16-DRAM", "BFLOAT16-L1_SHARDED"]
         if is_wormhole_b0()
         else ["BFLOAT16-DRAM", "BFLOAT16-DRAM"],

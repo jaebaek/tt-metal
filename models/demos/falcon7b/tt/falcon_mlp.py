@@ -290,12 +290,18 @@ class TtFalconMLPDecode(nn.Module):
         self.hidden_size = hidden_size
         self.model_config = model_config
         self.padding_value = model_config["MLP_PADDING_VALUE"]
+        self.prefill_seq_len = model_config["MLP_SEQ_LEN"]
+
         layer_name = f"{base_url}.{layer_num}"
         dense_h_to_4h_str = f"{layer_name}.mlp.dense_h_to_4h.weight"
         dense_4h_to_h_str = f"{layer_name}.mlp.dense_4h_to_h.weight"
 
-        custom_output_shape_h_to_4h = (1, 1, self.padding_value, 4 * self.padding_value)
-        custom_output_shape_4h_to_h = (1, 1, 4 * self.padding_value, self.padding_value)
+        custom_output_shape_h_to_4h = (
+            (1, 1, self.padding_value, 4 * self.padding_value) if self.prefill_seq_len in [1024, 2048] else None
+        )
+        custom_output_shape_4h_to_h = (
+            (1, 1, 4 * self.padding_value, self.padding_value) if self.prefill_seq_len in [1024, 2048] else None
+        )
 
         self.dense_h_to_4h_weights = get_weights_cached(
             devices,
@@ -339,7 +345,7 @@ class TtFalconMLPDecode(nn.Module):
         hidden_states = []
         for device_id in range(len(x)):
             # pad inputs with padding tensor if not already padded
-            if x[device_id].shape[-2] < self.padding_value:
+            if x[device_id].shape[-2] < self.padding_value and self.prefill_seq_len in [1024, 2048]:
                 x[device_id] = ttnn.concat(
                     [x[device_id], self.model_config["MLP_DECODE_PADDING_TENSORS"][device_id]], dim=3
                 )
@@ -362,7 +368,8 @@ class TtFalconMLPDecode(nn.Module):
                 packer_l1_acc=True,
             )
         # remove padding from output
-        hidden_states = [hidden_states[i][:, :, :, : self.hidden_size] for i in range(len(self.devices))]
+        if self.prefill_seq_len in [1024, 2048]:
+            hidden_states = [hidden_states[i][:, :, :, : self.hidden_size] for i in range(len(self.devices))]
 
         # return TT Tensor
         return hidden_states
