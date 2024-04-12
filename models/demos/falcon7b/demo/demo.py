@@ -188,7 +188,9 @@ def run_falcon_demo_kv(
     # State dict is needed for embeddings
     logger.info("Loading weights...")
     profiler.start(f"loading_weights")
-    if len(os.listdir(tt_cache_path)) < 261:
+    if (tt_cache_path == Path(f"models/demos/falcon7b/datasets/{model_version}")) and (
+        len(os.listdir(f"models/demos/falcon7b/datasets/{model_version}")) < 330
+    ):
         logger.info("Weights not found on machine; downloading weights...")
         model_name = model_location_generator(model_version, model_subdir="Falcon")
         hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_name, low_cpu_mem_usage=True)
@@ -509,3 +511,36 @@ def run_falcon_demo_kv(
     )
 
     return generated_text, measurements
+
+
+# Option to measure perf using max seq length (with invalid outputs)
+@pytest.mark.parametrize("perf_mode", (False,))
+@pytest.mark.parametrize("greedy_sampling", (False,))
+def test_demo(
+    perf_mode,
+    greedy_sampling,
+    user_input,
+    model_location_generator,
+    device,
+    use_program_cache,
+):
+    disable_persistent_kernel_cache()
+    disable_compilation_reports()
+
+    if perf_mode:
+        logger.info("Running in performance measurement mode (invalid outputs)!")
+
+    return run_falcon_demo_kv(
+        user_input=user_input,
+        model_version="tiiuae/falcon-7b-instruct",
+        batch_size=32,
+        num_layers=32,
+        max_seq_len=128,
+        model_config_strs_prefill_decode=["BFLOAT16-DRAM", "BFLOAT16-L1_SHARDED"]
+        if is_wormhole_b0()
+        else ["BFLOAT16-DRAM", "BFLOAT16-DRAM"],
+        model_location_generator=model_location_generator,
+        device=device,
+        perf_mode=perf_mode,
+        greedy_sampling=greedy_sampling,
+    )
