@@ -54,8 +54,8 @@ class TtFalconCausalLM(TtFalconModelShared):
                 PADDING = torch.zeros([64, lm_head_weight.shape[1] // self.num_slices])
                 lm_head_weights = torch.chunk(lm_head_weight, self.num_slices, dim=-1)
                 lm_head_weights_padded = [torch.cat([weight, PADDING], 0) for weight in lm_head_weights]
-
-            self.lm_head_weights = [
+            # Cache sliced weights for lm_head with different seq_len
+            self.lm_head_sliced_weights = [
                 get_weights_cached(
                     devices,
                     model_config,
@@ -66,15 +66,15 @@ class TtFalconCausalLM(TtFalconModelShared):
                 )
                 for i in range(self.num_slices)
             ]
-        else:
-            self.lm_head_weights = get_weights_cached(
-                devices,
-                model_config,
-                tt_cache_path,
-                f"lm_head.weight",
-                weight_config_str="LM_HEAD_MM_WEIGHTS",
-                weights_to_cache=lm_head_weight,
-            )
+
+        self.lm_head_weights = get_weights_cached(
+            devices,
+            model_config,
+            tt_cache_path,
+            f"lm_head.weight",
+            weight_config_str="LM_HEAD_MM_WEIGHTS",
+            weights_to_cache=lm_head_weight,
+        )
 
     def forward(
         self,
@@ -96,11 +96,11 @@ class TtFalconCausalLM(TtFalconModelShared):
             use_cache=use_cache,
         )
 
-        if self.seq_len > 512:
+        if hidden_states[0].get_legacy_shape()[-2] > 512:
             lm_logits = [
                 falcon_lm_head_matmul_2d(
                     hidden_states[device_id],
-                    [weights[device_id] for weights in self.lm_head_weights],
+                    [weights[device_id] for weights in self.lm_head_sliced_weights],
                     self.num_slices,
                     in0_mem_config=self.model_config["LM_HEAD_MM_INPUT_MEMCFG"],
                     in0_dtype=self.model_config["LM_HEAD_MM_INPUT_DTYPE"],
