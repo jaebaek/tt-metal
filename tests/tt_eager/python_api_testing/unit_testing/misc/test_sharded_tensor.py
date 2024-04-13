@@ -29,6 +29,7 @@ class DirectReadWriteType(Enum):
     READ_ONLY = 0
     WRITE_ONLY = 1
     READ_WRITE = 2
+    NONE = 3
 
 
 def print_tiles(tiled_tensor, num_tiles_height, num_tiles_width):
@@ -232,9 +233,9 @@ def get_tensor(shape, dtype):
             DirectReadWriteType.READ_WRITE,
         ),
         (
-            ttl.tensor.ShardOrientation.ROW_MAJOR,
+            ttl.tensor.ShardOrientation.COL_MAJOR,
             [1, 1, 8192, 1536],
-            ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED,
+            ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED,
             (1024, 320),
             ttl.tensor.CoreRangeSet(
                 {
@@ -244,7 +245,19 @@ def get_tensor(shape, dtype):
             DirectReadWriteType.READ_WRITE,
         ),
         (
-            ttl.tensor.ShardOrientation.ROW_MAJOR,
+            ttl.tensor.ShardOrientation.COL_MAJOR,
+            [1, 1, 8192, 1536],
+            ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED,
+            (1024, 320),
+            ttl.tensor.CoreRangeSet(
+                {
+                    ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 4)),  # 40 cores
+                }
+            ),
+            DirectReadWriteType.READ_ONLY,
+        ),
+        (
+            ttl.tensor.ShardOrientation.COL_MAJOR,
             [1, 1, 64, 96],
             ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED,
             (64, 64),
@@ -276,7 +289,7 @@ def test_tensor_conversion_between_torch_and_tt_tile(
     two_d_shape = (tensor_shape[0] * tensor_shape[1] * tensor_shape[2], tensor_shape[3])
     num_tiles_width = (two_d_shape[1]) / TILE_WIDTH
     num_tiles_height = (two_d_shape[0]) / TILE_HEIGHT
-
+    debug = True
     if debug:
         torch_tensor = get_debug_tensor(num_tiles_width, num_tiles_height, dtype)
     else:
@@ -288,18 +301,18 @@ def test_tensor_conversion_between_torch_and_tt_tile(
     mem_config = ttl.tensor.MemoryConfig(shard_scheme, ttl.tensor.BufferType.L1, shard_spec)
 
     # test not doing direct write
-    if direct_read_write_type == DirectReadWriteType.READ_ONLY:
+    if direct_read_write_type == DirectReadWriteType.READ_ONLY or direct_read_write_type == DirectReadWriteType.NONE:
         tt_tensor = tt_tensor.to(device, interleaved_mem_config)
         tt_tensor = ttl.tensor.interleaved_to_sharded(tt_tensor, mem_config)
     else:
         tt_tensor = tt_tensor.to(device, mem_config)
     ttl.device.Synchronize(device)
     # not doing direct read
-    if direct_read_write_type == DirectReadWriteType.WRITE_ONLY:
+    if direct_read_write_type == DirectReadWriteType.WRITE_ONLY or direct_read_write_type == DirectReadWriteType.NONE:
         tt_tensor = ttl.tensor.sharded_to_interleaved(tt_tensor, interleaved_mem_config)
+
     tt_tensor = tt_tensor.cpu().to(ttl.tensor.Layout.ROW_MAJOR)
     torch_tensor_after_round_trip = tt_tensor.to_torch()
-
     assert torch_tensor.dtype == torch_tensor_after_round_trip.dtype
     assert torch_tensor.shape == torch_tensor_after_round_trip.shape
 

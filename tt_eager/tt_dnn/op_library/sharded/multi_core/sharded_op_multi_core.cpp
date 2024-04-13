@@ -203,10 +203,10 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(const Tensor& 
                  num_units_offset,
                  curr_num_units_per_shard,
                  curr_idx_h + curr_idx_w});
-            curr_idx_w += num_units_per_shard_width;
+            curr_idx_w += shard_width;
             if (curr_idx_w == num_units_per_row) {
                 curr_idx_w = 0;
-                curr_idx_h += num_units_per_row * num_units_per_shard_height;
+                curr_idx_h += num_units_per_row * shard_height;
             }
         } else {
             uint32_t shard_height = num_units_per_shard_height;
@@ -420,6 +420,7 @@ operation::ProgramWithCallbacks sharded_to_interleaved_multi_core(const Tensor& 
     uint32_t curr_idx_w = 0;
 
     const auto cores = corerange_to_cores(all_cores, std::nullopt, rm_orientation);
+    uint32_t core_id = 0;
     for (const auto& core : cores) {
         if (input.get_layout() == Layout::TILE) {
             uint32_t shard_height = num_units_per_shard_height;
@@ -461,10 +462,10 @@ operation::ProgramWithCallbacks sharded_to_interleaved_multi_core(const Tensor& 
                  num_units_offset,
                  num_units_per_shard,
                  curr_idx_h + curr_idx_w});
-            curr_idx_w += num_units_per_shard_width;
+            curr_idx_w += shard_width;
             if (curr_idx_w >= num_units_per_row) {
                 curr_idx_w = 0;
-                curr_idx_h += num_units_per_row * num_units_per_shard_height;
+                curr_idx_h += num_units_per_row * shard_height;
             }
         } else {
             uint32_t shard_height = num_units_per_shard_height;
