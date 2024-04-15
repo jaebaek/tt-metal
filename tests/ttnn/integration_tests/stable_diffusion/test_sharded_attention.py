@@ -581,12 +581,14 @@ def test_attnention(
 
 @pytest.mark.parametrize("size", [4096, 1024, 256, 64])
 @pytest.mark.parametrize("data_format", [ttl.tensor.DataType.BFLOAT16])
-@pytest.mark.parametrize("interleaved_output", [True, False])
+@pytest.mark.parametrize("interleaved_output", [False, True])
+@pytest.mark.parametrize("interleaved_input", [False, True])
 def test_qkv(
     device,
     size,
     data_format,
     interleaved_output,
+    interleaved_input,
     function_level_defaults,
 ):
     sizes = {
@@ -650,14 +652,6 @@ def test_qkv(
     passing = True
     output = None
 
-    in_0_sharded = ttl.tensor.interleaved_to_sharded(
-        in_0,
-        grid_size,
-        [M // grid_size[0], K // grid_size[1]],
-        ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED,
-        ttl.tensor.ShardOrientation.COL_MAJOR,
-    )
-
     Nt = N // 32
     G = grid_size[1]
     per_core_N = (Nt - 1) // (G - 1)
@@ -678,14 +672,34 @@ def test_qkv(
         fp32_dest_acc_en=False,
         packer_l1_acc=False,
     )
-    mm = ttl.operations.primary.matmul(
-        in_0_sharded,
-        in_1,
-        program_config=program_config,
-        output_mem_config=dram_interleaved_memory_config if interleaved_output else block_sharded_memory_config,
-        output_dtype=data_format,
-        compute_kernel_config=compute_kernel_config,
-    )
+
+    if interleaved_input:
+        mm = ttl.operations.primary.matmul(
+            in_0,
+            in_1,
+            program_config=program_config,
+            output_mem_config=dram_interleaved_memory_config if interleaved_output else block_sharded_memory_config,
+            output_dtype=data_format,
+            compute_kernel_config=compute_kernel_config,
+        )
+    else:
+        in_0_sharded = ttl.tensor.interleaved_to_sharded(
+            in_0,
+            grid_size,
+            [M // grid_size[0], K // grid_size[1]],
+            ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED,
+            ttl.tensor.ShardOrientation.COL_MAJOR,
+        )
+        mm = ttl.operations.primary.matmul(
+            in_0_sharded,
+            in_1,
+            program_config=program_config,
+            output_mem_config=dram_interleaved_memory_config if interleaved_output else block_sharded_memory_config,
+            output_dtype=data_format,
+            compute_kernel_config=compute_kernel_config,
+        )
+    mm_out_torch = tt2torch_tensor(mm)
+
     # mm = ttl.tensor.bmm(
     #     in_0,
     #     in_1,
@@ -693,11 +707,10 @@ def test_qkv(
     #     compute_kernel_config,
     # )
 
-    mm_out_torch = tt2torch_tensor(mm)
-
     out_torch = in_0_torch @ in_1_torch
 
-    passing, output = comp_pcc(mm_out_torch, out_torch)
+    # passing, output = comp_pcc(mm_out_torch_sharded, mm_out_torch_interleaved)
+    passing, output = comp_pcc(out_torch, mm_out_torch)
 
     print(output)
     assert passing
@@ -829,6 +842,5 @@ def test_q_and_kv(
     out_torch = in_0_torch @ in_1_torch
 
     passing, output = comp_pcc(mm_out_torch, out_torch)
-
     print(output)
     assert passing
