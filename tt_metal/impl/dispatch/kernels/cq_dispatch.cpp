@@ -762,6 +762,8 @@ static inline bool process_cmd_h(uint32_t& cmd_ptr) {
 }
 
 void kernel_main() {
+
+
     DPRINT << "dispatch_" << is_d_variant << is_h_variant << ": start" << ENDL();
 
     for (uint32_t i = 0; i < dispatch_cb_blocks; i++) {
@@ -818,6 +820,11 @@ void kernel_main() {
                            dispatch_cb_pages_per_block>(block_noc_writes_to_clear,
                                                         wr_block_idx);
     noc_async_write_barrier();
+
+#if defined(COMPILE_FOR_IDLE_ERISC)
+    uint32_t heartbeat = 0;
+    RISC_POST_HEARTBEAT(heartbeat);
+#endif
 
     DPRINT << "dispatch_" << is_d_variant << is_h_variant << ": out" << ENDL();
 }

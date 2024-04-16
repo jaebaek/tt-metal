@@ -39,6 +39,10 @@ class DeviceCommand {
 
     void add_prefetch_exec_buf(uint32_t base_addr, uint32_t log_page_size, uint32_t pages);
 
+    void add_dispatch_terminate();
+
+    void add_prefetch_terminate();
+
     template<typename PackedSubCmd>
     void add_dispatch_write_packed(
         uint16_t num_sub_cmds,
