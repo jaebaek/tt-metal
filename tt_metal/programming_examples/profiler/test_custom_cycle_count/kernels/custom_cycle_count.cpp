@@ -4,6 +4,7 @@
 
 #include <cstdint>
 
+#include "debug/dprint.h"
 /**
  * LOOP_COUNT and LOOP_SIZE provide the ability to decide how many cycles this kernel takes.
  * With a large enough LOOP_COUNT and a LOOP_SIZEs within icache size, cycle count will be
