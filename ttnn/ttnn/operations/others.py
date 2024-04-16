@@ -135,7 +135,10 @@ def _softmax_validate_input_tensors(operation_name, input_tensor, *args, **kwarg
     golden_function=_golden_function,
 )
 def softmax(
-    input_tensor: ttnn.Tensor, dim: int, memory_config: ttnn.MemoryConfig = ttnn.DRAM_MEMORY_CONFIG
+    input_tensor: ttnn.Tensor,
+    dim: int,
+    memory_config: ttnn.MemoryConfig = ttnn.DRAM_MEMORY_CONFIG,
+    compute_kernel_config: Optional[ttnn.DeviceComputeKernelConfig] = None,
 ) -> ttnn.Tensor:
     r"""
     softmax(input_tensor: ttnn.Tensor, dim: int, memory_config: ttnn.MemoryConfig = ttnn.DRAM_MEMORY_CONFIG) -> ttnn.Tensor
@@ -165,7 +168,9 @@ def softmax(
     is_tile_padded = list(input_tensor.shape)[-2:] != list(input_tensor.shape.with_tile_padding())[-2:]
     if not is_tile_padded and dim == rank - 1:
         # TODO: #4599 Research why softmax appears to not be stable when using a padded ttnn.TILE_LAYOUT
-        output_tensor = ttl.tensor.softmax(input_tensor, output_mem_config=memory_config)
+        output_tensor = ttl.tensor.softmax(
+            input_tensor, output_mem_config=memory_config, compute_kernel_config=compute_kernel_config
+        )
     else:
         dim_4D = dim + 4 - rank
         output_tensor = ttl.operations.primary.moreh_softmax(input_tensor, dim=dim_4D)

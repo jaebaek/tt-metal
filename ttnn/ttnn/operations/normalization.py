@@ -91,6 +91,7 @@ def layer_norm(
     residual_input_tensor: Optional[ttnn.Tensor] = None,
     memory_config: ttnn.MemoryConfig = ttnn.DRAM_MEMORY_CONFIG,
     program_config: Optional[ttnn.experimental.operations.primary.LayerNormShardedMultiCoreProgramConfig] = None,
+    compute_kernel_config: Optional[ttnn.DeviceComputeKernelConfig] = None,
 ) -> ttnn.Tensor:
     r"""
     layer_norm(input_tensor: ttnn.Tensor, *, epsilon: float = 1e-12, weight: Optional[ttnn.Tensor] = None, bias: Optional[ttnn.Tensor] = None, residual_input_tensor: Optional[ttnn.Tensor] = None, memory_config: ttnn.MemoryConfig = ttnn.DRAM_MEMORY_CONFIG) -> ttnn.Tensor
@@ -111,7 +112,13 @@ def layer_norm(
     if program_config is None:
         if residual_input_tensor is not None:
             output_tensor = ttnn.experimental.tensor.add_layernorm(
-                input_tensor, residual_input_tensor, epsilon, weight, bias, output_mem_config=memory_config
+                input_tensor,
+                residual_input_tensor,
+                epsilon,
+                weight,
+                bias,
+                output_mem_config=memory_config,
+                compute_kernel_config=compute_kernel_config,
             )
         else:
             output_tensor = ttnn.experimental.tensor.layernorm(
@@ -120,6 +127,7 @@ def layer_norm(
                 weight,
                 bias,
                 output_mem_config=memory_config,
+                compute_kernel_config=compute_kernel_config,
             )
     else:
         if residual_input_tensor is not None:
@@ -131,10 +139,17 @@ def layer_norm(
                 bias,
                 output_mem_config=memory_config,
                 program_config=program_config,
+                compute_kernel_config=compute_kernel_config,
             )
         else:
             output_tensor = ttnn.experimental.operations.primary.layernorm(
-                input_tensor, epsilon, weight, bias, output_mem_config=memory_config, program_config=program_config
+                input_tensor,
+                epsilon,
+                weight,
+                bias,
+                output_mem_config=memory_config,
+                program_config=program_config,
+                compute_kernel_config=compute_kernel_config,
             )
 
     output_tensor = ttnn.reshape(output_tensor, original_shape)

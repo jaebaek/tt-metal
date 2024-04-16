@@ -127,14 +127,21 @@ def compute_attention_scores(query_layer, key_layer, alibi):
     return scaled_attention_scores_plus_alibi
 
 
-def compute_attention_probs(attention_scores, causal_mask):
+def compute_attention_probs(attention_scores, causal_mask, device):
     if ASSUME_FUSED_SOFTMAX:
         attention_weights = attention_scores
     else:
         attention_weights = ttnn.add(attention_scores, causal_mask, memory_config=ttnn.DRAM_MEMORY_CONFIG)
         ttnn.deallocate(attention_scores)
 
-    attention_probs = ttnn.softmax(attention_weights, dim=-1, memory_config=ttnn.DRAM_MEMORY_CONFIG)
+    compute_kernel_config = ttnn.GrayskullComputeKernelConfig(
+        math_fidelity=ttnn.MathFidelity.HiFi4,
+        math_approx_mode=False,
+    )
+
+    attention_probs = ttnn.softmax(
+        attention_weights, dim=-1, memory_config=ttnn.DRAM_MEMORY_CONFIG, compute_kernel_config=compute_kernel_config
+    )
     if not ASSUME_FUSED_SOFTMAX:
         ttnn.deallocate(attention_weights)
 
@@ -180,10 +187,11 @@ def bloom_attention(
     attention_mask: ttnn.Tensor,
     *,
     parameters: ParameterDict,
+    device: ttnn.device,
 ):
     query_layer, key_layer, value_layer = create_query_key_value(config, hidden_states, parameters=parameters)
     attention_scores = compute_attention_scores(query_layer, key_layer, alibi)
-    attention_probs = compute_attention_probs(attention_scores, attention_mask)
+    attention_probs = compute_attention_probs(attention_scores, attention_mask, device)
     context_layer = compute_context_layer(attention_probs, value_layer)
     output_tensor = finalize_output(context_layer, parameters=parameters)
 
@@ -228,12 +236,19 @@ def bloom_block(
     attention_mask: ttnn.Tensor,
     *,
     parameters: ParameterDict,
+    device: ttnn.device,
 ) -> ttnn.Tensor:
+    compute_kernel_config = ttnn.GrayskullComputeKernelConfig(
+        math_fidelity=ttnn.MathFidelity.HiFi4,
+        math_approx_mode=False,
+    )
+
     normalized_hidden_states = ttnn.layer_norm(
         hidden_states,
         weight=parameters.input_layernorm.weight,
         bias=parameters.input_layernorm.bias,
         memory_config=BLOOM_MEMORY_CONFIG,
+        compute_kernel_config=compute_kernel_config,
     )
 
     attention_output = bloom_attention(
@@ -243,6 +258,7 @@ def bloom_block(
         alibi,
         attention_mask,
         parameters=parameters.self_attention,
+        device=device,
     )
     ttnn.deallocate(hidden_states)
 
@@ -251,6 +267,7 @@ def bloom_block(
         weight=parameters.post_attention_layernorm.weight,
         bias=parameters.post_attention_layernorm.bias,
         memory_config=BLOOM_MEMORY_CONFIG,
+        compute_kernel_config=compute_kernel_config,
     )
 
     mlp_output = bloom_mlp(
@@ -265,18 +282,16 @@ def bloom_block(
     return hidden_states
 
 
-def bloom(
-    config,
-    input_ids,
-    alibi,
-    causal_mask,
-    *,
-    parameters,
-):
+def bloom(config, input_ids, alibi, causal_mask, *, parameters, device):
     inputs_embeds = ttnn.embedding(
         input_ids,
         parameters.word_embeddings.weight,
         layout=ttnn.TILE_LAYOUT,
+    )
+
+    compute_kernel_config = ttnn.GrayskullComputeKernelConfig(
+        math_fidelity=ttnn.MathFidelity.HiFi4,
+        math_approx_mode=False,
     )
 
     hidden_states = ttnn.layer_norm(
@@ -284,23 +299,27 @@ def bloom(
         weight=parameters.word_embeddings_layernorm.weight,
         bias=parameters.word_embeddings_layernorm.bias,
         memory_config=BLOOM_MEMORY_CONFIG,
+        compute_kernel_config=compute_kernel_config,
     )
     ttnn.deallocate(inputs_embeds)
 
     for layer_parameters in parameters.h:
         hidden_states = bloom_block(
-            config,
-            hidden_states,
-            alibi,
-            causal_mask,
-            parameters=layer_parameters,
+            config, hidden_states, alibi, causal_mask, parameters=layer_parameters, device=device
         )
+
+    compute_kernel_config = ttnn.GrayskullComputeKernelConfig(
+        math_fidelity=ttnn.MathFidelity.HiFi4,
+        math_approx_mode=False,
+    )
 
     hidden_states = ttnn.layer_norm(
         hidden_states,
         weight=parameters.ln_f.weight,
         bias=parameters.ln_f.bias,
+        compute_kernel_config=compute_kernel_config,
     )
+
     return hidden_states
 
 
@@ -316,8 +335,8 @@ def bloom_for_causal_lm(config, input_ids, alibi, causal_mask, *, parameters):
     return output
 
 
-def bloom_for_question_answering(config, input_ids, alibi, casual_mask, *, parameters):
-    hidden_states = bloom(config, input_ids, alibi, casual_mask, parameters=parameters.transformer)
+def bloom_for_question_answering(config, input_ids, alibi, casual_mask, *, parameters, device):
+    hidden_states = bloom(config, input_ids, alibi, casual_mask, parameters=parameters.transformer, device=device)
     hidden_states = ttnn.linear(
         hidden_states,
         parameters.qa_outputs.weight,
