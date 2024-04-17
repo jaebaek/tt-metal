@@ -3,14 +3,14 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from abc import abstractmethod
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 import torch
 import tt_lib
 import ttnn
 from models.demos.falcon7b.tt.falcon_decoder import TtFalconDecoderLayer
 from models.demos.falcon7b.tt.model_utils import get_weights_cached
-from models.utility_functions import nearest_32, pad_by_zero, torch2tt_tensor
+from models.utility_functions import nearest_32, torch2tt_tensor
 from tqdm import tqdm
 
 
@@ -94,6 +94,48 @@ class TtFalconModelShared(torch.nn.Module):
 
         self.layernorm_eps = config.layer_norm_epsilon
 
+    def _create_prefill_attn_mask_for_sharded_softmax(
+        self,
+        attention_mask,
+        seq_len,
+        device,
+    ) -> List[tt_lib.tensor.Tensor]:
+        if seq_len == 2048:
+            num_slices = 16
+        elif seq_len == 128:
+            num_slices = 1
+        elif seq_len == 1024:
+            num_slices = 4
+        else:
+            raise ValueError("Unsupported seq_len for optimizations")
+
+        attn_masks_per_slice = []
+        attention_mask_starting_index_per_slice = 0
+        slice_length = (self.config.num_attention_heads * seq_len) // num_slices
+        number_of_attention_mask_elements_used_per_slice = slice_length - seq_len * (slice_length // seq_len)
+        for _ in range(num_slices):
+            torch_attn_mask_per_slice = torch.cat(
+                [
+                    attention_mask[:, :, attention_mask_starting_index_per_slice:, :],
+                    attention_mask[:, :, :attention_mask_starting_index_per_slice, :],
+                ],
+                dim=2,
+            )
+
+            tt_attention_slices = torch2tt_tensor(
+                torch_attn_mask_per_slice,
+                device,
+                tt_memory_config=self.model_config["ATTN_MASK_MEMCFG"],
+                tt_dtype=self.model_config["ATTN_MASK_DTYPE"],
+            )
+            attn_masks_per_slice.append(tt_attention_slices)
+
+            attention_mask_starting_index_per_slice = (
+                attention_mask_starting_index_per_slice + number_of_attention_mask_elements_used_per_slice
+            ) % seq_len
+
+        return attn_masks_per_slice
+
     def model_preprocessing(self, llm_mode, input_ids, kv_cache_len, num_input_tokens):
         assert input_ids.dim() == 2
         global_batch_size, sequence_size = input_ids.shape
@@ -128,14 +170,18 @@ class TtFalconModelShared(torch.nn.Module):
                     dim=-1,
                 )
 
-                tt_attention_mask.append(
-                    torch2tt_tensor(
+                if num_input_tokens in [128, 1024, 2048]:
+                    tt_attention_mask_ = self._create_prefill_attn_mask_for_sharded_softmax(
+                        (attention_mask_bool_padded * -1e3), num_input_tokens, device
+                    )
+                else:
+                    tt_attention_mask_ = torch2tt_tensor(
                         (attention_mask_bool_padded * -1e3).expand(-1, self.config.num_attention_heads, -1, -1),
                         device,
                         tt_memory_config=self.model_config["ATTN_MASK_MEMCFG"],
                         tt_dtype=self.model_config["ATTN_MASK_DTYPE"],
                     )
-                )
+                tt_attention_mask.append(tt_attention_mask_)
 
         elif llm_mode == "decode":
             assert batch_size % 32 == 0, "For decode, batch_size must be multiple of 32!"
