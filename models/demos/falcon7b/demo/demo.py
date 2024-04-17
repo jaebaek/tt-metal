@@ -59,7 +59,7 @@ def preprocess_and_validate_inputs(input_prompts, tokenizer, max_seq_len, perf_m
     prefill_ids = tokenized_inputs["input_ids"]
 
     tokenized_inputs_nopad = tokenizer(
-        input_prompts, padding=False, max_length=max_seq_len, add_special_tokens=False, return_tensors="pt"
+        input_prompts, padding=False, max_length=max_seq_len - 10, add_special_tokens=False, return_tensors="pt"
     )
 
     num_users = len(tokenized_inputs_nopad["input_ids"])
@@ -182,7 +182,6 @@ def run_falcon_demo_kv(
 
     tokenizer = AutoTokenizer.from_pretrained(model_version)
     prefill_ids, num_users, num_input_tokens = preprocess_and_validate_inputs(input_prompts, tokenizer, max_seq_len)
-
     profiler.end(f"tokenizing_inputs")
 
     # State dict is needed for embeddings
@@ -245,7 +244,7 @@ def run_falcon_demo_kv(
             tt_prefill_embeddings,
             tt_prefill_attention_mask,
         ) = tt_FalconCausalLM_singlelayer.model_preprocessing(
-            "prefill", prefill_ids[user_id::batch_size], 0, num_input_tokens=num_input_tokens
+            "prefill", prefill_ids[user_id : user_id + 1], 0, num_input_tokens=nearest_32(num_input_tokens)
         )
         assert tt_prefill_attention_mask is not None
 
@@ -262,10 +261,16 @@ def run_falcon_demo_kv(
         time_prefill_compile_end = time.time()
         time_prefill_compile += time_prefill_compile_end - time_prefill_compile_start
 
-        for i in range(num_devices):
-            tt_prefill_embeddings[i].deallocate()
-            if tt_prefill_attention_mask is not None:
-                tt_prefill_attention_mask[i].deallocate()
+        tt_prefill_embeddings[0].deallocate()
+        if tt_prefill_attention_mask is not None:
+            for tt_attention_mask in tt_prefill_attention_mask:
+                if isinstance(tt_attention_mask, tt_lib.tensor.Tensor):
+                    tt_attention_mask.deallocate()
+                elif isinstance(tt_attention_mask, list):
+                    for tt_attention_mask_element in tt_attention_mask:
+                        tt_attention_mask_element.deallocate()
+                else:
+                    raise ValueError("Invalid type for tt_attention_mask")
 
             tt_logits[i].deallocate()
 
@@ -357,7 +362,7 @@ def run_falcon_demo_kv(
             tt_prefill_embeddings,
             tt_prefill_attention_mask,
         ) = tt_FalconCausalLM.model_preprocessing(
-            "prefill", prefill_ids[user_id::batch_size], 0, num_input_tokens=num_input_tokens
+            "prefill", prefill_ids[user_id : user_id + 1], 0, num_input_tokens=nearest_32(num_input_tokens)
         )
         assert tt_prefill_attention_mask is not None
 
@@ -375,7 +380,16 @@ def run_falcon_demo_kv(
         if i >= N_warmup:
             time_prefill_inference += time_prefill_inference_end - time_prefill_inference_start
 
-        logits = torch.concat([tt2torch_tensor(tt_logits[j]).squeeze(1) for j in range(num_devices)], dim=-2)
+        tt_prefill_embeddings[0].deallocate()
+        if tt_prefill_attention_mask is not None:
+            for device_id in range(len(tt_prefill_attention_mask)):
+                if isinstance(tt_prefill_attention_mask, tt_lib.tensor.Tensor):
+                    tt_prefill_attention_mask[device_id].deallocate()
+                elif isinstance(tt_prefill_attention_mask, list):
+                    for tt_attention_mask_element in tt_prefill_attention_mask[device_id]:
+                        tt_attention_mask_element.deallocate()
+                else:
+                    raise ValueError("Invalid type for tt_attention_mask")
 
         for j in range(num_devices):
             tt_prefill_embeddings[j].deallocate()
@@ -537,12 +551,12 @@ def test_demo(
         model_version="tiiuae/falcon-7b-instruct",
         batch_size=32,
         num_layers=32,
-        max_seq_len=128,
+        max_seq_len=1024,
         model_config_strs_prefill_decode=["BFLOAT16-DRAM", "BFLOAT16-L1_SHARDED"]
         if is_wormhole_b0()
         else ["BFLOAT16-DRAM", "BFLOAT16-DRAM"],
         model_location_generator=model_location_generator,
         device=device,
         perf_mode=perf_mode,
-        greedy_sampling=greedy_sampling,
+        greedy_sampling=True,
     )
