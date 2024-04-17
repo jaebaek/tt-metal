@@ -26,6 +26,7 @@ jobs:
       ARCH_NAME: ${{ matrix.runner-info.arch }}
       CONFIG: ci
       LOGURU_LEVEL: INFO
+      WH_ARCH_YAML: wormhole_b0_80_arch_eth_dispatch.yaml
     environment: dev
     runs-on: ${{ matrix.runner-info.runs-on }}
     steps:
