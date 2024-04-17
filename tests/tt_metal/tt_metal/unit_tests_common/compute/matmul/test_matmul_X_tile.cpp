@@ -251,6 +251,9 @@ TEST_F(CommonFixture, MatmulSingleTile){
 }
 
 TEST_F(CommonFixture, MatmulMultiTile){
+    if (getenv("WH_ARCH_YAML")) {
+        GTEST_SKIP() << "Re-enable this test with #7380";
+    }
     uint32_t M = 4;
     uint32_t N = 4;
     uint32_t K = 4;

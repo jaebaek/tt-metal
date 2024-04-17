@@ -110,10 +110,6 @@ void EnqueueReadBufferCommand::process() {
 
     uint32_t fetch_size_bytes = command_sequence.size_bytes();
 
-    // move this into the command queue interface
-    TT_ASSERT(fetch_size_bytes <= MAX_PREFETCH_COMMAND_SIZE, "Generated prefetcher command exceeds max command size");
-    TT_ASSERT((fetch_size_bytes >> PREFETCH_Q_LOG_MINSIZE) < 0xFFFF, "FetchQ command too large to represent");
-
     this->manager.fetch_queue_reserve_back(this->command_queue_id);
 
     uint32_t write_ptr = this->manager.get_issue_queue_write_ptr(this->command_queue_id);
@@ -219,10 +215,6 @@ void EnqueueWriteBufferCommand::process() {
     DeviceCommand command_sequence = this->assemble_device_commands();
 
     uint32_t fetch_size_bytes = command_sequence.size_bytes();
-
-    // TODO: move this into the command queue interface
-    TT_ASSERT(fetch_size_bytes <= MAX_PREFETCH_COMMAND_SIZE, "Generated prefetcher command exceeds max command size");
-    TT_ASSERT((fetch_size_bytes >> PREFETCH_Q_LOG_MINSIZE) < 0xFFFF, "FetchQ command too large to represent");
 
     this->manager.fetch_queue_reserve_back(this->command_queue_id);
 
@@ -578,13 +570,8 @@ void EnqueueProgramCommand::process() {
     uint32_t total_fetch_size_bytes =
         preamble_fetch_size_bytes + runtime_args_fetch_size_bytes + program_fetch_size_bytes;
 
-    if (total_fetch_size_bytes <= MAX_PREFETCH_COMMAND_SIZE) {
-        // move this into the command queue interface
-        TT_ASSERT(
-            total_fetch_size_bytes <= MAX_PREFETCH_COMMAND_SIZE,
-            "Generated prefetcher command exceeds max command size");
-        TT_ASSERT((total_fetch_size_bytes >> PREFETCH_Q_LOG_MINSIZE) < 0xFFFF, "FetchQ command too large to represent");
-
+    CoreType dispatch_core_type = dispatch_core_manager::get(this->device->num_hw_cqs()).get_dispatch_core_type(this->device->id());
+    if (total_fetch_size_bytes <= dispatch_constants::get(dispatch_core_type).max_prefetch_command_size()) {
         this->manager.fetch_queue_reserve_back(this->command_queue_id);
 
         uint32_t write_ptr = this->manager.get_issue_queue_write_ptr(this->command_queue_id);
@@ -610,13 +597,6 @@ void EnqueueProgramCommand::process() {
         // One fetch queue entry for entire program
         this->manager.fetch_queue_write(total_fetch_size_bytes, this->command_queue_id);
     } else {
-        // move this into the command queue interface
-        TT_ASSERT(
-            preamble_fetch_size_bytes <= MAX_PREFETCH_COMMAND_SIZE,
-            "Generated prefetcher command exceeds max command size");
-        TT_ASSERT(
-            (preamble_fetch_size_bytes >> PREFETCH_Q_LOG_MINSIZE) < 0xFFFF, "FetchQ command too large to represent");
-
         this->manager.fetch_queue_reserve_back(this->command_queue_id);
 
         uint32_t write_ptr = this->manager.get_issue_queue_write_ptr(this->command_queue_id);
@@ -634,10 +614,6 @@ void EnqueueProgramCommand::process() {
 
         for (const auto& cmds : runtime_args_command_sequences) {
             uint32_t fetch_size_bytes = cmds.size_bytes();
-            // move this into the command queue interface
-            TT_ASSERT(
-                fetch_size_bytes <= MAX_PREFETCH_COMMAND_SIZE, "Generated prefetcher command exceeds max command size");
-            TT_ASSERT((fetch_size_bytes >> PREFETCH_Q_LOG_MINSIZE) < 0xFFFF, "FetchQ command too large to represent");
 
             this->manager.fetch_queue_reserve_back(this->command_queue_id);
 
@@ -654,14 +630,6 @@ void EnqueueProgramCommand::process() {
             // One fetch queue entry for each runtime args write location, e.g. BRISC/NCRISC/TRISC/ERISC
             this->manager.fetch_queue_write(fetch_size_bytes, this->command_queue_id);
         }
-
-        // move this into the command queue interface
-        TT_ASSERT(
-            program_fetch_size_bytes <= MAX_PREFETCH_COMMAND_SIZE,
-            "Generated prefetcher command exceeds max command size");
-        TT_ASSERT(
-            (program_fetch_size_bytes >> PREFETCH_Q_LOG_MINSIZE) < 0xFFFF, "FetchQ command too large to represent");
-
         this->manager.fetch_queue_reserve_back(this->command_queue_id);
 
         write_ptr = this->manager.get_issue_queue_write_ptr(this->command_queue_id);
@@ -694,17 +662,17 @@ EnqueueRecordEventCommand::EnqueueRecordEventCommand(
     clear_count(clear_count) {}
 
 const DeviceCommand EnqueueRecordEventCommand::assemble_device_commands() {
-    std::vector<uint32_t> event_payload(EVENT_PADDED_SIZE / sizeof(uint32_t), 0);
+    std::vector<uint32_t> event_payload(dispatch_constants::EVENT_PADDED_SIZE / sizeof(uint32_t), 0);
     event_payload[0] = this->event_id;
 
     uint8_t num_hw_cqs = this->device->num_hw_cqs(); // Device initialize asserts that there can only be a maximum of 2 HW CQs
     uint32_t packed_event_payload_sizeB = align(sizeof(CQDispatchCmd) + num_hw_cqs * sizeof(CQDispatchWritePackedUnicastSubCmd), L1_ALIGNMENT)
-        + (align(EVENT_PADDED_SIZE, L1_ALIGNMENT) * num_hw_cqs);
+        + (align(dispatch_constants::EVENT_PADDED_SIZE, L1_ALIGNMENT) * num_hw_cqs);
     uint32_t packed_write_sizeB = align(sizeof(CQPrefetchCmd) + packed_event_payload_sizeB, PCIE_ALIGNMENT);
 
     uint32_t cmd_sequence_sizeB = CQ_PREFETCH_CMD_BARE_MIN_SIZE + // CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_CMD_WAIT
         packed_write_sizeB + // CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_CMD_WRITE_PACKED + unicast subcmds + event payload
-        align(CQ_PREFETCH_CMD_BARE_MIN_SIZE + EVENT_PADDED_SIZE, PCIE_ALIGNMENT); // CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_CMD_WRITE_LINEAR_HOST + event ID
+        align(CQ_PREFETCH_CMD_BARE_MIN_SIZE + dispatch_constants::EVENT_PADDED_SIZE, PCIE_ALIGNMENT); // CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_CMD_WRITE_LINEAR_HOST + event ID
 
     DeviceCommand command_sequence(cmd_sequence_sizeB);
 
@@ -727,14 +695,14 @@ const DeviceCommand EnqueueRecordEventCommand::assemble_device_commands() {
     command_sequence.add_dispatch_write_packed<CQDispatchWritePackedUnicastSubCmd>(
         num_hw_cqs,
         address,
-        EVENT_PADDED_SIZE,
+        dispatch_constants::EVENT_PADDED_SIZE,
         packed_event_payload_sizeB,
         unicast_sub_cmds,
         event_payloads
     );
 
     bool flush_prefetch = true;
-    command_sequence.add_dispatch_write_host(flush_prefetch, EVENT_PADDED_SIZE, event_payload.data());
+    command_sequence.add_dispatch_write_host(flush_prefetch, dispatch_constants::EVENT_PADDED_SIZE, event_payload.data());
 
     return command_sequence;
 }
@@ -743,10 +711,6 @@ void EnqueueRecordEventCommand::process() {
     DeviceCommand command_sequence = this->assemble_device_commands();
 
     uint32_t fetch_size_bytes = command_sequence.size_bytes();
-
-    // move this into the command queue interface
-    TT_ASSERT(fetch_size_bytes <= MAX_PREFETCH_COMMAND_SIZE, "Generated prefetcher command exceeds max command size");
-    TT_ASSERT((fetch_size_bytes >> PREFETCH_Q_LOG_MINSIZE) < 0xFFFF, "FetchQ command too large to represent");
 
     this->manager.fetch_queue_reserve_back(this->command_queue_id);
 
@@ -790,10 +754,6 @@ void EnqueueWaitForEventCommand::process() {
     DeviceCommand command_sequence = this->assemble_device_commands();
 
     uint32_t fetch_size_bytes = command_sequence.size_bytes();
-
-    // move this into the command queue interface
-    TT_ASSERT(fetch_size_bytes <= MAX_PREFETCH_COMMAND_SIZE, "Generated prefetcher command exceeds max command size");
-    TT_ASSERT((fetch_size_bytes >> PREFETCH_Q_LOG_MINSIZE) < 0xFFFF, "FetchQ command too large to represent");
 
     this->manager.fetch_queue_reserve_back(this->command_queue_id);
 
@@ -844,10 +804,6 @@ void EnqueueTraceCommand::process() {
 
     uint32_t fetch_size_bytes = command_sequence.size_bytes();
 
-    // move this into the command queue interface
-    TT_ASSERT(fetch_size_bytes <= MAX_PREFETCH_COMMAND_SIZE, "Generated prefetcher command exceeds max command size");
-    TT_ASSERT((fetch_size_bytes >> PREFETCH_Q_LOG_MINSIZE) < 0xFFFF, "FetchQ command too large to represent");
-
     this->manager.fetch_queue_reserve_back(this->command_queue_id);
 
     uint32_t write_ptr = this->manager.get_issue_queue_write_ptr(this->command_queue_id);
@@ -879,10 +835,6 @@ void EnqueueTerminateCommand::process() {
     DeviceCommand command_sequence = this->assemble_device_commands();
 
     uint32_t fetch_size_bytes = command_sequence.size_bytes();
-
-    // move this into the command queue interface
-    TT_ASSERT(fetch_size_bytes <= MAX_PREFETCH_COMMAND_SIZE, "Generated prefetcher command exceeds max command size");
-    TT_ASSERT((fetch_size_bytes >> PREFETCH_Q_LOG_MINSIZE) < 0xFFFF, "FetchQ command too large to represent");
 
     this->manager.fetch_queue_reserve_back(this->command_queue_id);
 
@@ -976,6 +928,7 @@ void HWCommandQueue::enqueue_read_buffer(Buffer& buffer, void* dst, bool blockin
 
     chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->device->id());
     uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(this->device->id());
+    CoreType dispatch_core_type = dispatch_core_manager::get(this->device->num_hw_cqs()).get_dispatch_core_type(this->device->id());
 
     uint32_t padded_page_size = align(buffer.page_size(), 32);
     uint32_t pages_to_read = buffer.num_pages();
@@ -983,7 +936,7 @@ void HWCommandQueue::enqueue_read_buffer(Buffer& buffer, void* dst, bool blockin
     uint32_t src_page_index = 0;
 
     if (is_sharded(buffer.buffer_layout())) {
-        constexpr uint32_t half_scratch_space = SCRATCH_DB_SIZE / 2;
+        const uint32_t half_scratch_space = dispatch_constants::get(dispatch_core_type).scratch_db_size() / 2;
         // Note that the src_page_index is the device page idx, not the host page idx
         // Since we read core by core we are reading the device pages sequentially
         for (uint32_t core_id = 0; core_id < buffer.num_cores(); ++core_id) {
@@ -1071,7 +1024,9 @@ void HWCommandQueue::enqueue_write_buffer(const Buffer& buffer, const void* src,
     const uint32_t num_banks = this->device->num_banks(buffer.buffer_type());
 
     const uint32_t command_issue_limit = this->manager.get_issue_queue_limit(this->id);
-    TT_ASSERT(int32_t(MAX_PREFETCH_COMMAND_SIZE) - int32_t(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd)) >= padded_page_size);
+    CoreType dispatch_core_type = dispatch_core_manager::get(this->device->num_hw_cqs()).get_dispatch_core_type(this->device->id());
+    const uint32_t max_prefetch_command_size = dispatch_constants::get(dispatch_core_type).max_prefetch_command_size();
+    TT_ASSERT(int32_t(max_prefetch_command_size) - int32_t(sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd)) >= padded_page_size);
 
     uint32_t dst_page_index = 0;
 
@@ -1092,7 +1047,7 @@ void HWCommandQueue::enqueue_write_buffer(const Buffer& buffer, const void* src,
                 if (issue_wait) {
                     data_offset_bytes *= 2; // commands prefixed with CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_CMD_WAIT
                 }
-                uint32_t space_available_bytes = std::min(command_issue_limit - this->manager.get_issue_queue_write_ptr(this->id), MAX_PREFETCH_COMMAND_SIZE);
+                uint32_t space_available_bytes = std::min(command_issue_limit - this->manager.get_issue_queue_write_ptr(this->id), max_prefetch_command_size);
                 int32_t num_pages_available =
                     (int32_t(space_available_bytes) - int32_t(data_offset_bytes)) / int32_t(padded_page_size);
 
@@ -1126,7 +1081,7 @@ void HWCommandQueue::enqueue_write_buffer(const Buffer& buffer, const void* src,
             if (issue_wait) {
                 data_offset_bytes *= 2; // commands prefixed with CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_CMD_WAIT
             }
-            uint32_t space_available_bytes = std::min(command_issue_limit - this->manager.get_issue_queue_write_ptr(this->id), MAX_PREFETCH_COMMAND_SIZE);
+            uint32_t space_available_bytes = std::min(command_issue_limit - this->manager.get_issue_queue_write_ptr(this->id), max_prefetch_command_size);
             int32_t num_pages_available = (int32_t(space_available_bytes) - int32_t(data_offset_bytes)) / int32_t(padded_page_size);
             if (num_pages_available != 0) {
                 uint32_t pages_to_write = std::min(total_pages_to_write, (uint32_t)num_pages_available);
@@ -1314,7 +1269,7 @@ void HWCommandQueue::copy_into_user_space(const detail::ReadBufferDescriptor &re
 
         // completion queue write ptr on device could have wrapped but our read ptr is lagging behind
         uint32_t bytes_xfered = std::min(remaining_bytes_to_read, bytes_avail_in_completion_queue);
-        uint32_t num_pages_xfered = (bytes_xfered + TRANSFER_PAGE_SIZE - 1) / TRANSFER_PAGE_SIZE;
+        uint32_t num_pages_xfered = (bytes_xfered + dispatch_constants::TRANSFER_PAGE_SIZE - 1) / dispatch_constants::TRANSFER_PAGE_SIZE;
 
         completion_q_data.resize(bytes_xfered / sizeof(uint32_t));
 
@@ -1478,9 +1433,9 @@ void HWCommandQueue::read_completion_queue() {
                             this->copy_into_user_space(read_descriptor, read_ptr, mmio_device_id, channel);
                         }
                         else if constexpr (std::is_same_v<T, detail::ReadEventDescriptor>) {
-                            static std::vector<uint32_t> dispatch_cmd_and_event((sizeof(CQDispatchCmd) + EVENT_PADDED_SIZE) / sizeof(uint32_t));
+                            static std::vector<uint32_t> dispatch_cmd_and_event((sizeof(CQDispatchCmd) + dispatch_constants::EVENT_PADDED_SIZE) / sizeof(uint32_t));
                             tt::Cluster::instance().read_sysmem(
-                                dispatch_cmd_and_event.data(), sizeof(CQDispatchCmd) + EVENT_PADDED_SIZE, read_ptr, mmio_device_id, channel);
+                                dispatch_cmd_and_event.data(), sizeof(CQDispatchCmd) + dispatch_constants::EVENT_PADDED_SIZE, read_ptr, mmio_device_id, channel);
                             uint32_t event_completed = dispatch_cmd_and_event.at(sizeof(CQDispatchCmd) / sizeof(uint32_t));
                             TT_ASSERT(event_completed == read_descriptor.event_id, "Event Order Issue: expected to read back completion signal for event {} but got {}!", read_descriptor.event_id, event_completed);
                             this->manager.completion_queue_pop_front(1, this->id);
@@ -1535,7 +1490,6 @@ volatile bool HWCommandQueue::is_noc_hung() {
 void HWCommandQueue::terminate() {
     ZoneScopedN("HWCommandQueue_terminate");
     tt::log_debug(tt::LogDispatch, "Terminating dispatch kernels for command queue {}", this->id);
-    std::cout << "Sent terminate command!" << std::endl;
     auto command = EnqueueTerminateCommand(this->id, this->device, this->manager);
     this->enqueue_command(command, false);
 }

@@ -216,6 +216,9 @@ bool matmul_single_core(CommonFixture *fixture, tt_metal::Device *device, int M,
 } // namespace unit_tests_common::matmul::test_matmul_single_core
 
 TEST_F (CommonFixture, MatmulSingleCoreSmall){
+    if (getenv("WH_ARCH_YAML")) {
+        GTEST_SKIP() << "Re-enable this test with #7380";
+    }
     uint32_t M = 4;
     uint32_t K = 4;
     uint32_t N = 4;

@@ -358,7 +358,7 @@ TEST_F(CommandQueueSingleCardFixture, TestPageLargerThanAndUnalignedToTransferPa
     for (Device *device : devices_) {
         TestBufferConfig config = {
             .num_pages = num_round_robins * (device->num_banks(BufferType::DRAM)),
-            .page_size = TRANSFER_PAGE_SIZE + 32,
+            .page_size = dispatch_constants::TRANSFER_PAGE_SIZE + 32,
             .buftype = BufferType::DRAM
         };
         local_test_functions::test_EnqueueWriteBuffer_and_EnqueueReadBuffer(device, device->command_queue(), config);
