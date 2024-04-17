@@ -358,13 +358,9 @@ void Device::compile_command_queue_programs() {
                 CoreCoord completion_q_physical_core = get_physical_core_coordinate(completion_q_writer_location, dispatch_core_type);
                 CoreCoord dispatch_physical_core = get_physical_core_coordinate(dispatch_location, dispatch_core_type);
 
-                if (dispatch_core_type == CoreType::WORKER) {
-                    std::cout << "Dispatching on tenix:\t";
-                } else {
-                    std::cout << "Dispatching on ethernet:\t";
-                }
-                std::cout << "Prefetch " << prefetch_location.str() << " physical " << prefetch_physical_core.str()
-                          << " Dispatch " << dispatch_location.str() << " physical " << dispatch_physical_core.str() << std::endl;
+                log_debug(LogDevice, "Dispatching out of {} cores",  magic_enum::enum_name(dispatch_core_type));
+                log_debug(LogDevice, "Prefetch HD logical location: {} physical core: {}", prefetch_location.str(), prefetch_physical_core.str());
+                log_debug(LogDevice, "Dispatch HD logical location: {} physical core {}", dispatch_location.str(), dispatch_physical_core.str());
 
                 uint32_t command_queue_start_addr = get_absolute_cq_offset(channel, cq_id, cq_size);
                 uint32_t issue_queue_start_addr = command_queue_start_addr + CQ_START;
@@ -666,9 +662,9 @@ bool Device::close() {
 
     tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
 
-    // if (llrt::OptionsG.get_clear_l1()) {
-    //     this->clear_l1_state();
-    // }
+    if (llrt::OptionsG.get_clear_l1()) {
+        this->clear_l1_state();
+    }
     tt::Cluster::instance().l1_barrier(id_);
     allocator::clear(*this->allocator_);
 

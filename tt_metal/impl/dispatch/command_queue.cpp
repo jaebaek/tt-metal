@@ -1094,6 +1094,7 @@ void HWCommandQueue::enqueue_write_buffer(const Buffer& buffer, const void* src,
     const uint32_t command_issue_limit = this->manager.get_issue_queue_limit(this->id);
     CoreType dispatch_core_type = dispatch_core_manager::get(this->device->num_hw_cqs()).get_dispatch_core_type(this->device->id());
     const uint32_t max_prefetch_command_size = dispatch_constants::get(dispatch_core_type).max_prefetch_command_size();
+    uint32_t max_data_sizeB = max_prefetch_command_size - ((sizeof(CQPrefetchCmd) + sizeof(CQDispatchCmd)) * 2); // * 2 to account for issue
 
     uint32_t dst_page_index = 0;
 

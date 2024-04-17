@@ -70,6 +70,7 @@ struct dispatch_constants {
    private:
     dispatch_constants(const CoreType &core_type) {
         TT_ASSERT(core_type == CoreType::WORKER or core_type == CoreType::ETH);
+        // make this 2^N as required by the packetized stages
         uint32_t dispatch_buffer_block_size;
         if (core_type == CoreType::WORKER) {
             max_prefetch_command_size_ = 64 * 1024;
@@ -80,15 +81,18 @@ struct dispatch_constants {
             max_prefetch_command_size_ = 32 * 1024;
             cmddat_q_size_ = 64 * 1024;
             scratch_db_size_ = 64 * 1024;
-            dispatch_buffer_block_size = 144 * 1024;
+            dispatch_buffer_block_size = 128 * 1024;
         }
         TT_ASSERT(cmddat_q_size_ >= 2 * max_prefetch_command_size_);
         TT_ASSERT(scratch_db_size_ % 2 == 0);
+        TT_ASSERT((dispatch_buffer_block_size & (dispatch_buffer_block_size - 1)) == 0);
         scratch_db_base_ = CMDDAT_Q_BASE + ((cmddat_q_size_ + PCIE_ALIGNMENT - 1) / PCIE_ALIGNMENT * PCIE_ALIGNMENT);
         uint32_t l1_size = core_type == CoreType::WORKER ? MEM_L1_SIZE : MEM_ETH_SIZE;
         TT_ASSERT(scratch_db_base_ + scratch_db_size_ < l1_size);
         dispatch_buffer_block_size_pages_ = dispatch_buffer_block_size / (1 << DISPATCH_BUFFER_LOG_PAGE_SIZE) / DISPATCH_BUFFER_SIZE_BLOCKS;
         dispatch_buffer_pages_ = dispatch_buffer_block_size_pages_ * DISPATCH_BUFFER_SIZE_BLOCKS;
+        uint32_t dispatch_cb_end = DISPATCH_BUFFER_BASE + (1 << DISPATCH_BUFFER_LOG_PAGE_SIZE) * dispatch_buffer_pages_;
+        TT_ASSERT(dispatch_cb_end < l1_size);
     }
 
     uint32_t max_prefetch_command_size_;

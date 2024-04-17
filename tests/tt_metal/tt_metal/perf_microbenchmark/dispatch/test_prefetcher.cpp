@@ -1809,7 +1809,7 @@ int main(int argc, char **argv) {
                     0x0,// 18: output_depacketize info
                     // 19: input 0 packetize info:
                     packet_switch_4B_pack(0x1,
-                                          DISPATCH_BUFFER_LOG_PAGE_SIZE,
+                                          dispatch_constants::DISPATCH_BUFFER_LOG_PAGE_SIZE,
                                           dispatch_downstream_cb_sem, // upstream sem
                                           dispatch_h_cb_sem), // local sem
                     packet_switch_4B_pack(0, 0, 0, 0), // 20: input 1 packetize info
@@ -1875,7 +1875,7 @@ int main(int argc, char **argv) {
                         timeout_mcycles * 1000 * 1000, // 24: timeout_cycles
                         0x1, // 25: output_depacketize_mask
                         // 26: output 0 packetize info:
-                        packet_switch_4B_pack(DISPATCH_BUFFER_LOG_PAGE_SIZE,
+                        packet_switch_4B_pack(dispatch_constants::DISPATCH_BUFFER_LOG_PAGE_SIZE,
                                               dispatch_h_cb_sem, // downstream sem
                                               dispatch_downstream_cb_sem, // local sem
                                               1), // remove header

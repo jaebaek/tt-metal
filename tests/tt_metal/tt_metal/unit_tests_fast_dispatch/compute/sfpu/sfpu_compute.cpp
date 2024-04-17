@@ -331,10 +331,6 @@ class MultiCoreSingleCardSfpuParameterizedApproxFixture
       public testing::WithParamInterface<std::tuple<size_t, string>> {};
 
 TEST_P(MultiCoreSingleCardSfpuParameterizedApproxFixture, AllCoreMultiTileSfpuApproxCompute) {
-    if (getenv("WH_ARCH_YAML")) {
-        GTEST_SKIP() << "Re-enable this test with #7380";
-    }
-
     for (Device* device_: devices_) {
 
         size_t num_tiles = std::get<0>(GetParam());
