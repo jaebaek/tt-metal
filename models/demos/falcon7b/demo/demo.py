@@ -13,17 +13,19 @@ import torch
 import torch.nn.functional as F
 import tt_lib
 from loguru import logger
-from models.demos.falcon7b.reference.hf_modeling_falcon import (
-    FalconConfig, FalconForCausalLM)
+from models.demos.falcon7b.reference.hf_modeling_falcon import FalconConfig, FalconForCausalLM
 from models.demos.falcon7b.tt.falcon_causallm import TtFalconCausalLM
-from models.demos.falcon7b.tt.model_config import (get_model_config,
-                                                   get_tt_cache_path,
-                                                   model_config_entries)
-from models.utility_functions import (disable_compilation_reports,
-                                      disable_persistent_kernel_cache,
-                                      enable_persistent_kernel_cache,
-                                      is_wormhole_b0, nearest_32, profiler,
-                                      torch2tt_tensor, tt2torch_tensor)
+from models.demos.falcon7b.tt.model_config import get_model_config, get_tt_cache_path, model_config_entries
+from models.utility_functions import (
+    disable_compilation_reports,
+    disable_persistent_kernel_cache,
+    enable_persistent_kernel_cache,
+    is_wormhole_b0,
+    nearest_32,
+    profiler,
+    torch2tt_tensor,
+    tt2torch_tensor,
+)
 from tqdm import tqdm
 from transformers import AutoTokenizer
 from transformers.generation.utils import top_k_top_p_filtering
@@ -59,7 +61,7 @@ def preprocess_and_validate_inputs(input_prompts, tokenizer, max_seq_len, perf_m
     prefill_ids = tokenized_inputs["input_ids"]
 
     tokenized_inputs_nopad = tokenizer(
-        input_prompts, padding=False, max_length=max_seq_len, add_special_tokens=False, return_tensors="pt"
+        input_prompts, padding=False, max_length=max_seq_len - 10, add_special_tokens=False, return_tensors="pt"
     )
 
     num_users = len(tokenized_inputs_nopad["input_ids"])
@@ -156,7 +158,6 @@ def run_falcon_demo_kv(
 
     tokenizer = AutoTokenizer.from_pretrained(model_version)
     prefill_ids, num_users, num_input_tokens = preprocess_and_validate_inputs(input_prompts, tokenizer, max_seq_len)
-
     profiler.end(f"tokenizing_inputs")
 
     # State dict is needed for embeddings
@@ -220,7 +221,7 @@ def run_falcon_demo_kv(
             tt_prefill_embeddings,
             tt_prefill_attention_mask,
         ) = tt_FalconCausalLM_singlelayer.model_preprocessing(
-            "prefill", prefill_ids[user_id : user_id + 1], 0, num_input_tokens=num_input_tokens
+            "prefill", prefill_ids[user_id : user_id + 1], 0, num_input_tokens=nearest_32(num_input_tokens)
         )
         assert tt_prefill_attention_mask is not None
 
@@ -239,7 +240,14 @@ def run_falcon_demo_kv(
 
         tt_prefill_embeddings[0].deallocate()
         if tt_prefill_attention_mask is not None:
-            tt_prefill_attention_mask[0].deallocate()
+            for tt_attention_mask in tt_prefill_attention_mask:
+                if isinstance(tt_attention_mask, tt_lib.tensor.Tensor):
+                    tt_attention_mask.deallocate()
+                elif isinstance(tt_attention_mask, list):
+                    for tt_attention_mask_element in tt_attention_mask:
+                        tt_attention_mask_element.deallocate()
+                else:
+                    raise ValueError("Invalid type for tt_attention_mask")
 
         tt_logits[0].deallocate()
 
@@ -332,7 +340,7 @@ def run_falcon_demo_kv(
             tt_prefill_embeddings,
             tt_prefill_attention_mask,
         ) = tt_FalconCausalLM.model_preprocessing(
-            "prefill", prefill_ids[user_id : user_id + 1], 0, num_input_tokens=num_input_tokens
+            "prefill", prefill_ids[user_id : user_id + 1], 0, num_input_tokens=nearest_32(num_input_tokens)
         )
         assert tt_prefill_attention_mask is not None
 
@@ -352,7 +360,14 @@ def run_falcon_demo_kv(
 
         tt_prefill_embeddings[0].deallocate()
         if tt_prefill_attention_mask is not None:
-            tt_prefill_attention_mask[0].deallocate()
+            for device_id in range(len(tt_prefill_attention_mask)):
+                if isinstance(tt_prefill_attention_mask, tt_lib.tensor.Tensor):
+                    tt_prefill_attention_mask[device_id].deallocate()
+                elif isinstance(tt_prefill_attention_mask, list):
+                    for tt_attention_mask_element in tt_prefill_attention_mask[device_id]:
+                        tt_attention_mask_element.deallocate()
+                else:
+                    raise ValueError("Invalid type for tt_attention_mask")
 
         logits = tt2torch_tensor(tt_logits[0]).squeeze(1)
         tt_logits[0].deallocate()
@@ -509,12 +524,12 @@ def test_demo(
         model_version="tiiuae/falcon-7b-instruct",
         batch_size=32,
         num_layers=32,
-        max_seq_len=128,
+        max_seq_len=1024,
         model_config_strs_prefill_decode=["BFLOAT16-DRAM", "BFLOAT16-L1_SHARDED"]
         if is_wormhole_b0()
         else ["BFLOAT16-DRAM", "BFLOAT16-DRAM"],
         model_location_generator=model_location_generator,
         device=device,
         perf_mode=perf_mode,
-        greedy_sampling=greedy_sampling,
+        greedy_sampling=True,
     )

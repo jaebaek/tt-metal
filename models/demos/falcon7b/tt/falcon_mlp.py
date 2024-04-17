@@ -345,7 +345,7 @@ class TtFalconMLPDecode(nn.Module):
         hidden_states = []
         for device_id in range(len(x)):
             # pad inputs with padding tensor if not already padded
-            if x[device_id].shape[-2] < self.padding_value and self.prefill_seq_len in [1024, 2048]:
+            if x[device_id].shape[-1] < self.padding_value and self.prefill_seq_len in [1024, 2048]:
                 x[device_id] = ttnn.concat(
                     [x[device_id], self.model_config["MLP_DECODE_PADDING_TENSORS"][device_id]], dim=3
                 )
