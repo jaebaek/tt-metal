@@ -28,6 +28,7 @@ jobs:
       CONFIG: ci
       LOGURU_LEVEL: INFO
       LD_LIBRARY_PATH: ${{ github.workspace }}/build/lib
+      WH_ARCH_YAML: wormhole_b0_80_arch_eth_dispatch.yaml
     runs-on: ${{ matrix.runner-info.runs-on }}
     steps:
       - uses: tenstorrent-metal/metal-workflows/.github/actions/checkout-with-submodule-lfs@v2.0.0
