@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include "dataflow_api.h"
 #include "hostdevcommon/common_values.hpp"
+#include "debug/dprint.h"
+auto sr = SliceRange{.h0 = 0, .h1 = 32, .hs = 8, .w0 = 0, .w1 = 32, .ws = 8};
 
 void kernel_main() {
     // READER
@@ -307,6 +309,12 @@ void kernel_main() {
     }
 
     #if OUT_SHARDED
-    cb_wait_front(cb_id_out0, batch * out_num_nonzero_subblocks_h * out_num_nonzero_subblocks_w * out_subblock_w * out_subblock_h);
+    //cb_wait_front(cb_id_out0, batch * out_num_nonzero_subblocks_h * out_num_nonzero_subblocks_w * out_subblock_w * out_subblock_h);
+    cb_wait_front(cb_id_out0, 4);
+    DPRINT << batch * out_num_nonzero_subblocks_h * out_num_nonzero_subblocks_w * out_subblock_w * out_subblock_h << ENDL();
+    DPRINT << TileSlice(cb_id_out0, 0, sr, true, true) << ENDL();
+    DPRINT << TileSlice(cb_id_out0, 1, sr, true, true) << ENDL();
+    DPRINT << TileSlice(cb_id_out0, 2, sr, true, true) << ENDL();
+    DPRINT << TileSlice(cb_id_out0, 3, sr, true, true) << ENDL();
     #endif
 }
