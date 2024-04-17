@@ -228,6 +228,74 @@ def set_prefill_config(model_config, seq_len, dram_memcfg):
     model_config["DENSE_4H_TO_H_MM_PROGCFG"] = mm_4h_to_h_prog_cfg
     model_config["MLP_INTERLEAVED_TO_SHARDED_MEM_CFG"] = dram_memcfg
 
+    model_config["FUSED_QKV_MM_OPTIMIZED_MEMCFG"] = dram_memcfg
+    model_config["FUSED_QKV_MM_OPTIMIZED_PROGCFG"] = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+        compute_with_storage_grid_size=(8, 8),
+        in0_block_w=2,
+        per_core_M=8,
+        per_core_N=21,
+        out_subblock_h=1,
+        out_subblock_w=7,
+        transpose_mcast=False,
+        fused_activation=None,
+    )
+    compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
+        math_fidelity=ttl.tensor.MathFidelity.LoFi,
+        math_approx_mode=True,
+        fp32_dest_acc_en=False,
+        packer_l1_acc=True,
+    )
+    model_config["FUSED_QKV_MM_OPTIMIZED_KERNEL_CONFIG"] = compute_kernel_config
+    model_config["ATTN_OPTIMIZED_GRID_SIZE"] = (8, 8)
+    model_config["ATTN_OPTIMIZED_MEMCFG"] = dram_memcfg
+
+    model_config[
+        "QKT_OPTIMIZED_PROGCFG"
+    ] = lambda tiles_per_shard, seq_len, subblock_h, subblock_w: ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+        compute_with_storage_grid_size=model_config["ATTN_OPTIMIZED_GRID_SIZE"],
+        in0_block_w=2,
+        per_core_M=tiles_per_shard,
+        per_core_N=seq_len // 32,
+        out_subblock_h=subblock_h,
+        out_subblock_w=subblock_w,
+        fuse_batch=True,
+        fused_activation=None,
+        mcast_in0=False,
+    )
+    model_config["QKTV_MM_OPTIMIZED_MEMCFG"] = ttl.tensor.MemoryConfig(
+        memory_layout=ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED, buffer_type=ttl.tensor.BufferType.L1
+    )
+
+    model_config["QKTV_AND_SOFTMAX_OPTIMIZED_KERNEL_CONFIG"] = ttl.tensor.WormholeComputeKernelConfig(
+        math_fidelity=ttl.tensor.MathFidelity.HiFi4,
+        math_approx_mode=True,
+        fp32_dest_acc_en=False,
+        packer_l1_acc=True,
+    )
+
+    model_config[
+        "SOFTMAX_OPTIMIZED_PROGCFG"
+    ] = lambda grid_size, subblock_w, block_h, block_w: ttl.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
+        compute_with_storage_grid_size=grid_size,
+        subblock_w=subblock_w,
+        block_h=block_h,
+        block_w=block_w,
+    )
+
+    model_config[
+        "QKTV_MM_OPTIMIZED_PROGCFG"
+    ] = lambda tiles_per_shard, seq_len, subblock_h: ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+        compute_with_storage_grid_size=model_config["ATTN_OPTIMIZED_GRID_SIZE"],
+        in0_block_w=seq_len // 32,
+        per_core_M=tiles_per_shard,
+        per_core_N=2,
+        out_subblock_h=subblock_h,
+        out_subblock_w=2,
+        fuse_batch=True,
+        fused_activation=None,
+        mcast_in0=False,
+    )
+
 
 # TODO: Generalize TT tensor caching
 def get_tt_cache_path(model_version):
