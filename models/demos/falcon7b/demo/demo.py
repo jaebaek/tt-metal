@@ -13,17 +13,19 @@ import torch
 import torch.nn.functional as F
 import tt_lib
 from loguru import logger
-from models.demos.falcon7b.reference.hf_modeling_falcon import (
-    FalconConfig, FalconForCausalLM)
+from models.demos.falcon7b.reference.hf_modeling_falcon import FalconConfig, FalconForCausalLM
 from models.demos.falcon7b.tt.falcon_causallm import TtFalconCausalLM
-from models.demos.falcon7b.tt.model_config import (get_model_config,
-                                                   get_tt_cache_path,
-                                                   model_config_entries)
-from models.utility_functions import (disable_compilation_reports,
-                                      disable_persistent_kernel_cache,
-                                      enable_persistent_kernel_cache,
-                                      is_wormhole_b0, nearest_32, profiler,
-                                      torch2tt_tensor, tt2torch_tensor)
+from models.demos.falcon7b.tt.model_config import get_model_config, get_tt_cache_path, model_config_entries
+from models.utility_functions import (
+    disable_compilation_reports,
+    disable_persistent_kernel_cache,
+    enable_persistent_kernel_cache,
+    is_wormhole_b0,
+    nearest_32,
+    profiler,
+    torch2tt_tensor,
+    tt2torch_tensor,
+)
 from tqdm import tqdm
 from transformers import AutoTokenizer
 from transformers.generation.utils import top_k_top_p_filtering
@@ -381,7 +383,18 @@ def run_falcon_demo_kv(
             time_prefill_inference += time_prefill_inference_end - time_prefill_inference_start
 
         logits = torch.concat([tt2torch_tensor(tt_logits[j]).squeeze(1) for j in range(num_devices)], dim=-2)
-        
+
+        tt_prefill_embeddings[0].deallocate()
+        if tt_prefill_attention_mask is not None:
+            for device_id in range(len(tt_prefill_attention_mask)):
+                if isinstance(tt_prefill_attention_mask, tt_lib.tensor.Tensor):
+                    tt_prefill_attention_mask[device_id].deallocate()
+                elif isinstance(tt_prefill_attention_mask, list):
+                    for tt_attention_mask_element in tt_prefill_attention_mask[device_id]:
+                        tt_attention_mask_element.deallocate()
+                else:
+                    raise ValueError("Invalid type for tt_attention_mask")
+
         tt_prefill_embeddings[0].deallocate()
         if tt_prefill_attention_mask is not None:
             for device_id in range(len(tt_prefill_attention_mask)):
@@ -540,7 +553,7 @@ def test_demo(
     user_input,
     model_location_generator,
     device,
-    #use_program_cache,
+    # use_program_cache,
 ):
     disable_persistent_kernel_cache()
     disable_compilation_reports()
