@@ -15,6 +15,14 @@ from models.utility_functions import is_wormhole_b0, skip_for_wormhole_b0
 from loguru import logger
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor, pad_by_zero, roundup32
 
+import ttnn
+from ttnn.operations.matmul import (
+    MatmulMultiCoreReuseMultiCast1DProgramConfig,
+    MatmulMultiCoreReuseMultiCastProgramConfig,
+)
+from ttnn.types import L1_BLOCK_SHARDED_MEMORY_CONFIG, CoreGrid
+from tt_lib.tensor import WormholeComputeKernelConfig
+
 
 # TODO (7735): Switch to new interleaved_to_sharded with sharded_mem_config input and re-enable BLOCK sharded tests
 @pytest.mark.parametrize(
@@ -2355,3 +2363,66 @@ def test_interleaved_2_sharded_DRAM(device, dtype, y):
     yt = ttl.tensor.interleaved_to_sharded(
         xt, shard_grid, (y // 8, 18 * 32), shard_scheme, ttl.tensor.ShardOrientation.ROW_MAJOR
     )
+
+
+def test_sharded_matmul_1d_mlp_falcon_40b_h_4h_128_sharded(device, function_level_defaults):
+    grid_size = (4, 1)
+    num_cores = grid_size[0] * grid_size[1]
+    compute_grid_size = device.compute_with_storage_grid_size()
+    dtype = ttnn.DataType.BFLOAT16
+    if grid_size[0] > compute_grid_size.x or grid_size[1] > compute_grid_size.y:
+        pytest.skip(f"Need {grid_size} grid size to run this test but core grid is {compute_grid_size}")
+    M = 4 * 32
+    N = 8 * 32
+    K = 16 * 32
+    in0_shape = [1, 1, M, K]
+    in1_shape = [1, 1, K, N]
+
+    in0 = torch.randn(in0_shape).bfloat16().float()
+    in1 = torch.randn(in1_shape).bfloat16().float()
+    mem_cfg = ttnn.create_sharded_memory_config(
+        [M, K // num_cores],
+        CoreGrid(x=grid_size[0], y=grid_size[1]),
+        ttnn.ShardStrategy.WIDTH,
+        ttnn.ShardOrientation.ROW_MAJOR,
+        False,
+        True,
+    )
+    in0_t = ttnn.from_torch(in0, dtype, device=device, layout=ttnn.TILE_LAYOUT, memory_config=mem_cfg)
+    interleaved_mem_config = ttl.tensor.MemoryConfig(
+        memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
+        buffer_type=ttl.tensor.BufferType.DRAM,
+        shard_spec=ttl.tensor.ShardSpec([1, 2]),
+    )
+    in1_t = ttnn.from_torch(
+        in1, ttnn.DataType.BFLOAT8_B, device=device, layout=ttnn.TILE_LAYOUT, memory_config=interleaved_mem_config
+    )
+
+    program_config = MatmulMultiCoreReuseMultiCast1DProgramConfig(
+        compute_with_storage_grid_size=grid_size,
+        in0_block_w=K // (num_cores * 32),  # 2
+        out_subblock_h=1,
+        out_subblock_w=1,
+        per_core_M=M // (32),  # 4
+        per_core_N=N // (num_cores * 32),  # 2
+        fuse_batch=True,
+        fused_activation=None,
+        mcast_in0=True,
+    )
+    kernel_config = WormholeComputeKernelConfig(
+        math_fidelity=ttl.tensor.MathFidelity.LoFi,
+        math_approx_mode=False,
+        fp32_dest_acc_en=False,
+        packer_l1_acc=True,
+    )
+    output_t = ttnn.matmul(
+        in0_t,
+        in1_t,
+        program_config=program_config,
+        dtype=dtype,
+        memory_config=ttnn.L1_WIDTH_SHARDED_MEMORY_CONFIG,
+        compute_kernel_config=kernel_config,
+    )
+    passing, output = comp_pcc(in0 @ in1, ttnn.to_torch(output_t), 0.98)
+    logger.info(output)
+    assert passing

@@ -3,8 +3,19 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <stdint.h>
+#include <cstdint>
 #include "dataflow_api.h"
 #include "hostdevcommon/common_values.hpp"
+#include "debug/dprint.h"
+
+inline void print_full_tile(uint32_t cb_id, uint32_t tile_id = 0, bool untilize = false) {
+    DPRINT << "======" << ENDL();
+    for (uint16_t r = 0; r < 1; ++ r) {
+        SliceRange sr = SliceRange{.h0 = r, .h1 = (uint16_t)(r+1), .hs = 1, .w0 = 0, .w1 = 32, .ws = 1};
+        DPRINT << TileSlice(cb_id, tile_id, sr, true, untilize) << ENDL();
+    }
+    DPRINT << "++++++" << ENDL();
+}
 
 void kernel_main() {
     // READER
@@ -45,8 +56,10 @@ void kernel_main() {
     constexpr uint32_t in1_tensor_next_block_stride       = get_compile_time_arg_val(4);
     // in1 block args
     constexpr uint32_t in1_block_w                        = get_compile_time_arg_val(5);
+
     constexpr uint32_t in1_block_h                        = get_compile_time_arg_val(6);
     constexpr uint32_t in1_block_num_tiles                = get_compile_time_arg_val(7);
+
     // in0/in1 common args
     constexpr uint32_t num_blocks                         = get_compile_time_arg_val(8);
     // in1 mcast args
@@ -73,13 +86,16 @@ void kernel_main() {
     constexpr uint32_t MtNt                               = get_compile_time_arg_val(23); // if 0
     // Don't need batch; same as batch from READER args
 
+    constexpr uint32_t num_pages_in_in1_block_w = get_compile_time_arg_val(24);
+    constexpr uint32_t in1_num_tiles_per_page             = get_compile_time_arg_val(25);
+
     #ifdef FUSE_BIAS
     // in3 mcast args
     const uint32_t in3_tensor_addr                    = get_arg_val<uint32_t>(16);
     const uint32_t in3_tensor_start_tile_id           = get_arg_val<uint32_t>(17);
 
-    constexpr bool in3_is_dram                            = get_compile_time_arg_val(24) == 1;
-    constexpr uint32_t in3_tensor_stride_w                = get_compile_time_arg_val(25);
+    constexpr bool in3_is_dram                            = get_compile_time_arg_val(26) == 1;
+    constexpr uint32_t in3_tensor_stride_w                = get_compile_time_arg_val(27);
 
     constexpr uint32_t cb_id_in3 = 3;
     constexpr uint32_t bias_single_tile_size_bytes = get_tile_size(cb_id_in3);
@@ -96,19 +112,20 @@ void kernel_main() {
 
     constexpr uint32_t cb_id_in1 = 1;
     constexpr uint32_t in1_single_tile_size_bytes = get_tile_size(cb_id_in1);
+    constexpr uint32_t in1_single_page_size_bytes = in1_single_tile_size_bytes * in1_num_tiles_per_page;
     constexpr uint32_t in1_block_size_bytes = in1_block_num_tiles * in1_single_tile_size_bytes;
 
     //  READER
     #ifdef IN1_SHARDED
     cb_reserve_back(cb_id_in1, in1_block_num_tiles);
     cb_push_back(cb_id_in1, in1_block_num_tiles);
-    #else
+#else
     uint32_t l1_write_addr_in1;
 
     constexpr DataFormat in1_data_format = get_dataformat(cb_id_in1);
     const InterleavedAddrGenFast<in1_is_dram> s1 = {
         .bank_base_address = in1_tensor_addr,
-        .page_size = in1_single_tile_size_bytes,
+        .page_size = in1_single_page_size_bytes,
         .data_format = in1_data_format
     };
     #endif
@@ -149,6 +166,15 @@ void kernel_main() {
     #endif
     #endif
 
+    in1_tensor_start_tile_id = in1_tensor_start_tile_id / in1_num_tiles_per_page;
+    // DPRINT << "IN1 in1_block_h: " << in1_block_h << " in1_block_w: " << in1_block_w << ENDL();
+    // DPRINT << "IN1 num blocks: " << num_blocks << ENDL();
+    // DPRINT << "IN1 in1_tensor_start_tile_id: " << in1_tensor_start_tile_id << ENDL();
+    // DPRINT << "IN1 num tiles per page : " << in1_num_tiles_per_page << ENDL();
+    // DPRINT << "IN1 num_pages_in_in1_block_w : " << num_pages_in_in1_block_w << ENDL();
+    // DPRINT << "IN1 in1_tensor_stride_h : " << in1_tensor_stride_h << ENDL();
+    // DPRINT << "IN1 in1_tensor_next_block_stride : " << in1_tensor_next_block_stride << ENDL();
+    // DPRINT << "IN1 in1_single_page_size_bytes : " << in1_single_page_size_bytes << ENDL();
     for (uint32_t b = 0; b < batch; ++b) {
         uint32_t in1_tensor_current_block_start_tile_id = in1_tensor_start_tile_id;
         for (uint32_t block = 0; block < num_blocks; ++block) {
@@ -163,11 +189,12 @@ void kernel_main() {
             uint32_t in1_tensor_row_start_tile_id = in1_tensor_current_block_start_tile_id;
             for(uint32_t h = 0; h < in1_block_h; ++h) {
                 uint32_t in1_tensor_tile_id = in1_tensor_row_start_tile_id;
-                for(uint32_t w = 0; w < in1_block_w; ++w) {
-                    if (w < last_block_w) {
-                        noc_async_read_tile(in1_tensor_tile_id, s1, l1_write_addr_in1);
+                for(uint32_t w = 0; w < num_pages_in_in1_block_w; ++w) {
+                    if (w < (last_block_w / in1_num_tiles_per_page)) {
+                        // DPRINT << "Reading in1 tensor tile id: " << in1_tensor_tile_id << HEX() << " l1_write_addr_in1: 0x"<< l1_write_addr_in1 << DEC() << ENDL();
+                        noc_async_read_tile(in1_tensor_tile_id, s1, l1_write_addr_in1, 0, in1_num_tiles_per_page);
                     }
-                    l1_write_addr_in1 += in1_single_tile_size_bytes;
+                    l1_write_addr_in1 += in1_single_page_size_bytes;
                     in1_tensor_tile_id += in1_tensor_stride_w;
                 }
                 in1_tensor_row_start_tile_id += in1_tensor_stride_h;
@@ -176,6 +203,10 @@ void kernel_main() {
 
             // Barrier! make sure the reads are done
             noc_async_read_barrier();
+            // for (uint32_t i = 0; i < in1_block_num_tiles; i++) {
+            //     DPRINT << "--- Print tile idx " << i << "---" << ENDL();
+            //     print_full_tile(cb_id_in1, i);
+            // }
             #endif
 
             #ifndef SKIP_MCAST

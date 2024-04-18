@@ -244,32 +244,74 @@ void CloseDevices(std::map<chip_id_t, Device *> devices) {
 
         static constexpr uint32_t bytes_per_page_entry = sizeof(uint32_t);
         TT_FATAL(page_size % bytes_per_page_entry == 0);
-        uint32_t num_entries_per_page = page_size / bytes_per_page_entry;
+
 
         auto device = buffer.device();
         auto num_banks = device->num_banks(buffer.buffer_type());
         uint32_t bank_index = 0;
         int data_index = 0;
-        for (int page_index = 0; page_index < num_pages; page_index++) {
-            auto absolute_address = buffer.page_address(bank_index, page_index);
-            std::vector<uint32_t> page;
-            page.insert(
-                page.end(), host_buffer.begin() + data_index, host_buffer.begin() + data_index + num_entries_per_page);
-            switch (buffer.buffer_type()) {
-                case BufferType::DRAM: {
-                    auto dram_channel = buffer.dram_channel_from_bank_id(bank_index);
-                    tt::Cluster::instance().write_dram_vec(page, tt_target_dram{device->id(), dram_channel, 0}, absolute_address);
-                } break;
-                case BufferType::L1: // fallthrough
-                case BufferType::L1_SMALL: {
-                    auto noc_coordinates = buffer.noc_coordinates(bank_index);
-                    llrt::write_hex_vec_to_core(device->id(), noc_coordinates, page, absolute_address);
-                } break;
-                default: TT_FATAL(false && "Unsupported buffer type to write to device!");
-            }
+        if (buffer.num_tiles_per_page() > 1) {
+            ShardSpecBuffer shard_spec = buffer.shard_spec();
+            const uint32_t shard_width = shard_spec.tensor_shard_spec.shape[1];
+            const uint32_t shard_height = shard_spec.tensor_shard_spec.shape[0];
+            const uint32_t num_entries_per_shard_row = page_size / shard_height;
+            const uint32_t height = shard_spec.tensor2d_shape[0] / shard_height;
+            const uint32_t width = shard_spec.tensor2d_shape[1] / shard_width;
+            const uint32_t row_stride = num_entries_per_shard_row * width;
+            log_info(LogType::LogMetal, "height: {}, width: {}, row_stride: {}, shard_width: {}, shard_height: {}", height, width, row_stride, shard_width, shard_height);
+            for (uint32_t ph = 0; ph < height; ph++) {
+                for (uint32_t pw = 0; pw < width; pw++) {
+                    int page_index = ph * width + pw;
+                    uint64_t absolute_address = buffer.page_address(bank_index, page_index);
+                    std::vector<uint32_t> page;
+                    uint32_t data_index_local = data_index + pw * num_entries_per_shard_row;
+                    for (uint32_t shard_h = 0; shard_h < shard_height; shard_h++) {
+                        page.insert(
+                            page.end(), host_buffer.begin() + data_index_local, host_buffer.begin() + data_index_local + num_entries_per_shard_row);
+                        data_index_local += row_stride;
+                    }
 
-            bank_index = (bank_index + 1) % num_banks;
-            data_index += num_entries_per_page;
+                    switch (buffer.buffer_type()) {
+                        case BufferType::DRAM: {
+                            auto dram_channel = buffer.dram_channel_from_bank_id(bank_index);
+                            tt::Cluster::instance().write_dram_vec(
+                                page, tt_target_dram{device->id(), dram_channel, 0}, absolute_address);
+                        } break;
+                        case BufferType::L1:
+                        case BufferType::L1_SMALL: {
+                            auto noc_coordinates = buffer.noc_coordinates(bank_index);
+                            llrt::write_hex_vec_to_core(device->id(), noc_coordinates, page, absolute_address);
+                        } break;
+                        default: TT_FATAL(false && "Unsupported buffer type to write to device!");
+                    }
+
+                    bank_index = (bank_index + 1) % num_banks;
+                }
+                data_index += page_size * width;
+            }
+        } else {
+            uint32_t num_entries_per_page = page_size / bytes_per_page_entry;
+            for (int page_index = 0; page_index < num_pages; page_index++) {
+                auto absolute_address = buffer.page_address(bank_index, page_index);
+                std::vector<uint32_t> page;
+                page.insert(
+                    page.end(), host_buffer.begin() + data_index, host_buffer.begin() + data_index + num_entries_per_page);
+                switch (buffer.buffer_type()) {
+                    case BufferType::DRAM: {
+                        auto dram_channel = buffer.dram_channel_from_bank_id(bank_index);
+                        tt::Cluster::instance().write_dram_vec(page, tt_target_dram{device->id(), dram_channel, 0}, absolute_address);
+                    } break;
+                    case BufferType::L1:
+                    case BufferType::L1_SMALL: {
+                        auto noc_coordinates = buffer.noc_coordinates(bank_index);
+                        llrt::write_hex_vec_to_core(device->id(), noc_coordinates, page, absolute_address);
+                    } break;
+                    default: TT_FATAL(false && "Unsupported buffer type to write to device!");
+                }
+
+                bank_index = (bank_index + 1) % num_banks;
+                data_index += num_entries_per_page;
+            }
         }
     }
 

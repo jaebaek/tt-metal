@@ -869,7 +869,7 @@ struct InterleavedAddrGenFast {
     }
 
     FORCE_INLINE
-    void noc_async_read_tile(const uint32_t id, uint32_t dest_addr, const uint32_t offset = 0) const {
+    void noc_async_read_tile(const uint32_t id, uint32_t dest_addr, const uint32_t offset = 0, const uint32_t num_tiles_per_read = 1) const {
         uint32_t bank_id;
         uint32_t src_addr;
         uint32_t src_noc_xy;
@@ -877,11 +877,11 @@ struct InterleavedAddrGenFast {
         if constexpr (DRAM) {
 #ifdef IS_NOT_POW2_NUM_DRAM_BANKS
             bank_id = umodsi3_const_divisor<NUM_DRAM_BANKS>(id);
-            src_addr = MUL_WITH_TILE_SIZE((uint)this->data_format, udivsi3_const_divisor<NUM_DRAM_BANKS>(id)) +
+            src_addr = MUL_WITH_TILE_SIZE((uint)this->data_format, num_tiles_per_read * udivsi3_const_divisor<NUM_DRAM_BANKS>(id)) +
                        this->bank_base_address + offset;
 #else
             bank_id = id & (NUM_DRAM_BANKS - 1);
-            src_addr = MUL_WITH_TILE_SIZE((uint)this->data_format, id >> LOG_BASE_2_OF_NUM_DRAM_BANKS) +
+            src_addr = num_tiles_per_read * MUL_WITH_TILE_SIZE((uint)this->data_format, id >> LOG_BASE_2_OF_NUM_DRAM_BANKS) +
                        this->bank_base_address + offset;
 #endif
             src_addr += bank_to_dram_offset[bank_id];
@@ -889,28 +889,32 @@ struct InterleavedAddrGenFast {
         } else {
 #ifdef IS_NOT_POW2_NUM_L1_BANKS
             bank_id = umodsi3_const_divisor<NUM_L1_BANKS>(id);
-            src_addr = MUL_WITH_TILE_SIZE((uint)this->data_format, udivsi3_const_divisor<NUM_L1_BANKS>(id)) +
+            src_addr = MUL_WITH_TILE_SIZE((uint)this->data_format, num_tiles_per_read * udivsi3_const_divisor<NUM_L1_BANKS>(id)) +
                        this->bank_base_address + offset;
 #else
             uint32_t bank_id = id & (NUM_L1_BANKS - 1);
-            src_addr = MUL_WITH_TILE_SIZE((uint)this->data_format, id >> LOG_BASE_2_OF_NUM_L1_BANKS) +
+            src_addr = num_tiles_per_read *  MUL_WITH_TILE_SIZE((uint)this->data_format, id >> LOG_BASE_2_OF_NUM_L1_BANKS) +
                        this->bank_base_address + offset;
 #endif
             src_addr += bank_to_l1_offset[bank_id];
             src_noc_xy = l1_bank_to_noc_xy[noc_index][bank_id];
         }
 
-        DEBUG_STATUS('N', 'R', 'T', 'W');
-        DEBUG_SANITIZE_NOC_READ_TRANSACTION(get_noc_addr_helper(src_noc_xy, src_addr), dest_addr, this->page_size);
-        while (!noc_cmd_buf_ready(noc_index, NCRISC_RD_CMD_BUF));
-        DEBUG_STATUS('N', 'R', 'T', 'D');
+        if (this->page_size <= 8192) {
+            DEBUG_STATUS('N', 'R', 'T', 'W');
+            DEBUG_SANITIZE_NOC_READ_TRANSACTION(get_noc_addr_helper(src_noc_xy, src_addr), dest_addr, this->page_size);
+            while (!noc_cmd_buf_ready(noc_index, NCRISC_RD_CMD_BUF));
+            DEBUG_STATUS('N', 'R', 'T', 'D');
 
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_RET_ADDR_LO, dest_addr);
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_LO, src_addr);      // (uint32_t)src_addr
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_MID, src_noc_xy);   // src_addr >> 32
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_AT_LEN_BE, this->page_size);  // len_bytes
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
-        noc_reads_num_issued[noc_index] += 1;
+            NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_RET_ADDR_LO, dest_addr);
+            NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_LO, src_addr);      // (uint32_t)src_addr
+            NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_MID, src_noc_xy);   // src_addr >> 32
+            NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_AT_LEN_BE, this->page_size);  // len_bytes
+            NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
+            noc_reads_num_issued[noc_index] += 1;
+        } else {
+            noc_async_read(get_noc_addr_helper(src_noc_xy, src_addr), dest_addr, this->page_size);
+        }
     }
 
 
@@ -1165,12 +1169,12 @@ FORCE_INLINE void noc_async_read_page(
 
 template <bool DRAM>
 FORCE_INLINE void noc_async_read_tile(
-    const uint32_t id, const InterleavedAddrGenFast<DRAM>& s, std::uint32_t dst_local_l1_addr, uint32_t offset = 0) {
+    const uint32_t id, const InterleavedAddrGenFast<DRAM>& s, std::uint32_t dst_local_l1_addr, uint32_t offset = 0, uint32_t num_reads_per_tile = 1) {
     /*
         Read requests - use static VC
         Read responses - assigned VCs dynamically
     */
-    s.noc_async_read_tile(id, dst_local_l1_addr, offset);
+    s.noc_async_read_tile(id, dst_local_l1_addr, offset, num_reads_per_tile);
 }
 
 /**

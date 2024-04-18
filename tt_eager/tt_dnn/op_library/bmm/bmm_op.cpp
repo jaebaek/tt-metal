@@ -707,6 +707,14 @@ void Matmul::validate(
 
                         TT_FATAL(program_config.out_subblock_w == per_core_N || program_config.out_subblock_h == 1);
                     }
+                    const uint32_t num_tiles_per_page_b = input_tensor_b.buffer()->num_tiles_per_page();
+                    log_info(tt::LogOp, "num_tiles_per_page_b: {}, per core n: {}", num_tiles_per_page_b, program_config.per_core_N);
+                    // TT_FATAL(
+                    //     program_config.per_core_N >= num_tiles_per_page_b,
+                    //     "per_core_N must be greater than or equal to num_tiles_per_page_b");
+                    // TT_FATAL(
+                    //     program_config.per_core_N % num_tiles_per_page_b == 0,
+                    //     "per_core_N must be divisible with num_tiles_per_page_b");
                 } else {
                     if (input_tensor_a.memory_config().is_sharded()) {
                         TT_FATAL(program_config.fuse_batch);

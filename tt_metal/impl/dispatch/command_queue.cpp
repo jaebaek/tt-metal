@@ -1307,6 +1307,40 @@ void HWCommandQueue::enqueue_write_buffer(const Buffer& buffer, const void* src,
             }
         }
     } else {
+        void* final_src = (void*)src;
+        if (buffer.buffer_layout() == TensorMemoryLayout::INTERLEAVED && buffer.num_tiles_per_page() > 1) {
+            // Convert interleaved layout to block interleaved layout on host.
+            final_src = malloc(buffer.num_dev_pages() * buffer.page_size());
+            ShardSpecBuffer shard_spec = buffer.shard_spec();
+            const uint32_t shard_width = shard_spec.tensor_shard_spec.shape[1];
+            const uint32_t shard_height = shard_spec.tensor_shard_spec.shape[0];
+            const uint32_t num_entries_per_shard_row = buffer.page_size() / shard_height;
+            const uint32_t height = shard_spec.tensor2d_shape[0] / shard_height;
+            const uint32_t width = shard_spec.tensor2d_shape[1] / shard_width;
+            const uint32_t row_stride = num_entries_per_shard_row * width;
+            int data_index = 0;
+            log_info(
+                LogType::LogMetal,
+                "height: {}, width: {}, row_stride: {}, shard_width: {}, shard_height: {}",
+                height,
+                width,
+                row_stride,
+                shard_width,
+                shard_height);
+            char* local_dest_ptr = (char*)final_src;
+            for (uint32_t ph = 0; ph < height; ph++) {
+                for (uint32_t pw = 0; pw < width; pw++) {
+                    uint32_t data_index_local = data_index + pw * num_entries_per_shard_row;
+                    for (uint32_t shard_h = 0; shard_h < shard_height; shard_h++) {
+                        memcpy(local_dest_ptr, (char*)src + data_index_local, num_entries_per_shard_row);
+                        local_dest_ptr += num_entries_per_shard_row;
+                        data_index_local += row_stride;
+                    }
+                }
+                data_index += buffer.page_size() * width;
+            }
+        }
+
         uint32_t total_pages_to_write = buffer.num_pages();
         bool write_partial_pages = padded_page_size > max_data_sizeB;
         uint32_t page_size_to_write = padded_page_size;
@@ -1363,11 +1397,15 @@ void HWCommandQueue::enqueue_write_buffer(const Buffer& buffer, const void* src,
             tt::log_debug(tt::LogDispatch, "EnqueueWriteBuffer for command queue {}", this->id);
 
             auto command = EnqueueWriteInterleavedBufferCommand(
-                this->id, this->device, buffer, src, this->manager, issue_wait, this->expected_num_workers_completed, bank_base_address, page_size_to_write, dst_page_index, num_pages_to_write);
+                this->id, this->device, buffer, final_src, this->manager, issue_wait, this->expected_num_workers_completed, bank_base_address, page_size_to_write, dst_page_index, num_pages_to_write);
             this->enqueue_command(command, false); // don't block until the entire src data is enqueued in the issue queue
 
             total_pages_to_write -= num_pages_to_write;
             dst_page_index += num_pages_to_write;
+        }
+
+        if ((buffer.buffer_layout() == TensorMemoryLayout::INTERLEAVED && buffer.num_tiles_per_page() > 1)) {
+            free(final_src);
         }
     }
 

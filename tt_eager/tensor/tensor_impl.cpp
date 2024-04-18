@@ -105,13 +105,27 @@ namespace detail {
 
 DeviceBuffer allocate_interleaved_buffer_on_device(uint32_t buffer_size_bytes, Device *device, const Shape& shape, DataType data_type, Layout layout, const MemoryConfig& memory_config) {
     uint32_t page_size = get_page_size(data_type, layout, buffer_size_bytes, shape);
-    return std::make_shared<Buffer>(device, buffer_size_bytes, page_size, memory_config.buffer_type);
+    if (memory_config.shard_spec.has_value()) {
+        auto shard_spec = memory_config.shard_spec.value();
+        auto width = shape[-1];
+        auto other_dims = 1;
+        for (int i = 0; i < shape.rank() - 1; i++) {
+            other_dims *= shape[i];
+        }
+
+        auto page_shape = tensor_impl::get_sharded_page_shape(layout, data_type, shard_spec.shape);
+        std::array<uint32_t,2> tensor2d_size = {other_dims/page_shape[0], width/page_shape[1]};
+        ShardSpecBuffer shard_spec_buffer(shard_spec, page_shape, tensor2d_size);
+        page_size *= shard_spec.numel();
+        return std::make_shared<Buffer>(device, buffer_size_bytes, page_size, memory_config.buffer_type, TensorMemoryLayout::INTERLEAVED, shard_spec_buffer);
+    } else {
+        return std::make_shared<Buffer>(device, buffer_size_bytes, page_size, memory_config.buffer_type, TensorMemoryLayout::INTERLEAVED);
+    }
 }
 
 DeviceBuffer allocate_contiguous_buffer_on_device(uint32_t buffer_size_bytes, Device *device, const MemoryConfig& memory_config) {
-    return std::make_shared<Buffer>(device, buffer_size_bytes, buffer_size_bytes, memory_config.buffer_type);
+    return std::make_shared<Buffer>(device, buffer_size_bytes, buffer_size_bytes, memory_config.buffer_type, TensorMemoryLayout::INTERLEAVED);
 }
-
 
 DeviceBuffer allocate_sharded_buffer_on_device(uint32_t buffer_size_bytes, Device *device,
                                             const Shape& shape, DataType data_type, Layout layout,

@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include "tensor/types.hpp"
 #include "tt_metal/host_api.hpp"
 #include "tensor/tensor.hpp"
 #include "tensor/owned_buffer.hpp"
@@ -38,7 +39,9 @@ bool test_multi_tile_multi_dram_bank_loopback(Device *device) {
     Shape multi_tile_shape = {1, 1, 4*TILE_HEIGHT, 3*TILE_WIDTH};
 
     Tensor host_a = tt::numpy::random::random(multi_tile_shape).to(Layout::TILE);
-    Tensor device_a = host_a.to(device);
+    ShardSpec shard_spec({1, 3});
+    MemoryConfig mem_config = {.memory_layout = tt::tt_metal::TensorMemoryLayout::INTERLEAVED, .shard_spec = shard_spec};
+    Tensor device_a = host_a.to(device, mem_config);
     Tensor loopbacked_a = device_a.cpu();
     auto host_a_data = owned_buffer::get_as<bfloat16>(host_a);
     auto loopbacked_a_data = owned_buffer::get_as<bfloat16>(loopbacked_a);
@@ -56,8 +59,6 @@ int main(int argc, char **argv) {
         ////////////////////////////////////////////////////////////////////////////
         int device_id = 0;
         tt_metal::Device *device = tt_metal::CreateDevice(device_id);
-
-
 
         pass &= test_single_tile_single_dram_bank_loopback(device);
 

@@ -290,6 +290,7 @@ void TensorModule(py::module &m_tensor) {
     )doc");
 
     pyShardSpec
+        .def(py::init<>([](const std::array<uint32_t, 2>& shard_shape) { return ShardSpec(shard_shape); }))
         .def(py::init<>([](const CoreRangeSet& core_sets,
                            const std::array<uint32_t, 2>& shard_shape,
                            const ShardOrientation& shard_orientation,
