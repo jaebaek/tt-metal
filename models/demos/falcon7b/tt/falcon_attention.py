@@ -8,8 +8,7 @@ from typing import List, Optional, Tuple
 import torch
 import tt_lib
 from models.demos.falcon7b.tt.model_utils import get_weights_cached
-from models.utility_functions import (is_wormhole_b0, nearest_32, pad_by_zero,
-                                      torch2tt_tensor, tt2torch_tensor)
+from models.utility_functions import is_wormhole_b0, nearest_32, pad_by_zero, torch2tt_tensor, tt2torch_tensor
 from torch import nn
 
 

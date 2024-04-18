@@ -6,16 +6,11 @@ import pytest
 import torch
 import tt_lib
 from loguru import logger
-from models.demos.falcon7b.reference.hf_modeling_falcon import \
-    FalconForCausalLM
-from models.demos.falcon7b.tt.falcon_mlp import (TtFalconMLPDecode,
-                                                 TtFalconMLPPrefill)
-from models.demos.falcon7b.tt.model_config import (get_model_config,
-                                                   get_tt_cache_path)
-from models.utility_functions import (get_devices_for_t3000, torch2tt_tensor,
-                                      tt2torch_tensor)
-from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
-    comp_allclose, comp_pcc)
+from models.demos.falcon7b.reference.hf_modeling_falcon import FalconForCausalLM
+from models.demos.falcon7b.tt.falcon_mlp import TtFalconMLPDecode, TtFalconMLPPrefill
+from models.demos.falcon7b.tt.model_config import get_model_config, get_tt_cache_path
+from models.utility_functions import get_devices_for_t3000, torch2tt_tensor, tt2torch_tensor
+from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import comp_allclose, comp_pcc
 
 
 class PytorchFalconMLPModel(torch.nn.Module):

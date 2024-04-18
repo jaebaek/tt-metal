@@ -59,14 +59,14 @@ def get_weights_cached(
                     custom_output_shape[-2] - weights_to_cache.shape[-2],
                 )
                 weights_to_cache = torch.nn.functional.pad(weights_to_cache, padding, "constant", 0.0)
-                
+
             weights_host = torch2tt_tensor(
                 weights_to_cache,
                 tt_device=None,
                 tt_memory_config=model_config[f"{weight_config_str}_MEMCFG"],
                 tt_dtype=model_config[f"{weight_config_str}_DTYPE"],
             )
-            
+
         tt_lib.tensor.dump_tensor(
             str(path),
             weights_host,
