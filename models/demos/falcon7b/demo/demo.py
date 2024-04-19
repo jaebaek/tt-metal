@@ -13,17 +13,19 @@ import torch
 import torch.nn.functional as F
 import tt_lib
 from loguru import logger
-from models.demos.falcon7b.reference.hf_modeling_falcon import (
-    FalconConfig, FalconForCausalLM)
+from models.demos.falcon7b.reference.hf_modeling_falcon import FalconConfig, FalconForCausalLM
 from models.demos.falcon7b.tt.falcon_causallm import TtFalconCausalLM
-from models.demos.falcon7b.tt.model_config import (get_model_config,
-                                                   get_tt_cache_path,
-                                                   model_config_entries)
-from models.utility_functions import (disable_compilation_reports,
-                                      disable_persistent_kernel_cache,
-                                      enable_persistent_kernel_cache,
-                                      is_wormhole_b0, nearest_32, profiler,
-                                      torch2tt_tensor, tt2torch_tensor)
+from models.demos.falcon7b.tt.model_config import get_model_config, get_tt_cache_path, model_config_entries
+from models.utility_functions import (
+    disable_compilation_reports,
+    disable_persistent_kernel_cache,
+    enable_persistent_kernel_cache,
+    is_wormhole_b0,
+    nearest_32,
+    profiler,
+    torch2tt_tensor,
+    tt2torch_tensor,
+)
 from tqdm import tqdm
 from transformers import AutoTokenizer
 from transformers.generation.utils import top_k_top_p_filtering
@@ -160,7 +162,7 @@ def run_falcon_demo_kv(
     if perf_mode:
         logger.info("Running in performance measurement mode (invalid outputs)!")
 
-    model_config = get_model_config(model_config_strs_prefill_decode[0])
+    model_config = get_model_config(model_config_strs_prefill_decode[0], max_seq_len)
     tt_cache_path = get_tt_cache_path(
         model_version, model_subdir="Falcon", default_dir=model_config["DEFAULT_CACHE_PATH"]
     )
@@ -187,8 +189,8 @@ def run_falcon_demo_kv(
     # State dict is needed for embeddings
     logger.info("Loading weights...")
     profiler.start(f"loading_weights")
-    if (tt_cache_path == Path(f"models/demos/falcon7b/datasets/{model_version}")) and (
-        len(os.listdir(f"models/demos/falcon7b/datasets/{model_version}")) < 330
+    if (tt_cache_path == Path(f"models/demos/falcon7b/datasets/tt_dnn-models/tt/Falcon/{model_version}")) and (
+        len(os.listdir(f"models/demos/falcon7b/datasets/{model_version}")) < 340
     ):
         logger.info("Weights not found on machine; downloading weights...")
         model_name = model_location_generator(model_version, model_subdir="Falcon")
@@ -536,6 +538,7 @@ def test_demo(
     model_location_generator,
     device,
     use_program_cache,
+    get_tt_cache_path,
 ):
     disable_persistent_kernel_cache()
     disable_compilation_reports()
@@ -553,7 +556,8 @@ def test_demo(
         if is_wormhole_b0()
         else ["BFLOAT16-DRAM", "BFLOAT16-DRAM"],
         model_location_generator=model_location_generator,
-        device=device,
+        get_tt_cache_path=get_tt_cache_path,
+        device=[device],
         perf_mode=perf_mode,
         greedy_sampling=True,
     )
