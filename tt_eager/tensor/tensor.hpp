@@ -317,6 +317,7 @@ void memcpy(void *dst, const Tensor &src, const std::optional<std::size_t> trans
 void memcpy(Tensor &dst, const void *src, const std::optional<std::size_t> transfer_size = std::nullopt);
 void memcpy(Tensor &dst, const Tensor &src, const std::optional<std::size_t> transfer_size = std::nullopt);
 
+
 }  // namespace tt_metal
 
 }  // namespace tt
