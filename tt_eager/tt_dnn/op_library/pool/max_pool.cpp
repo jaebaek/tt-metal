@@ -65,7 +65,7 @@ std::vector<Shape> MaxPool::compute_output_shapes(const std::vector<Tensor> &inp
     if (multicore) {
         uint32_t out_nhw = in_n_ * out_h * out_w;
         uint32_t out_nhw_padded =
-            this->out_mem_config_.shard_spec->shape[0] * this->out_mem_config_.shard_spec->num_cores();
+            this->out_mem_config_.shard_spec->shape[0] * this->out_mem_config_.shard_spec->num_max_cores();
 
         // {1, 1, N * H * W, C}
         const auto out_dims = std::vector<uint32_t>({1, 1, out_nhw_padded, out_c_padded});
@@ -99,7 +99,7 @@ std::vector<Tensor> MaxPool::create_output_tensors(const std::vector<Tensor> &in
             uint32_t out_nhw = output_shape[0] * output_shape[1] * output_shape[2];
             uint32_t ncores = 1;
             if (input.shard_spec().has_value() && input.shard_spec().value().halo) {
-                ncores = input.shard_spec().value().num_cores();
+                ncores = input.num_cores();
             } else {
                 ncores = max_pool_helpers::get_num_cores(input.device(), out_nhw, nbatch);
             }

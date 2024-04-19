@@ -181,7 +181,7 @@ std::vector<Tensor> UntilizeWithUnpadding::create_output_tensors(const std::vect
     if (input_tensor_a.memory_config().is_sharded() && this->output_mem_config.is_sharded()) {
         auto output_shape = this->compute_output_shapes(input_tensors).at(0);
         uint32_t fused_height = tt_metal::compute_volume(output_shape) / output_shape[-1];
-        uint32_t num_cores = input_tensor_a.shard_spec().value().num_cores();
+        uint32_t num_cores = input_tensor_a.num_cores();
         std::array<uint32_t, 2> shard_shape;
         ShardSpec shard_spec = input_tensor_a.shard_spec().value();
         if (input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::HEIGHT_SHARDED) {

@@ -111,7 +111,7 @@ void LayerNorm::validate(const std::vector<Tensor> &input_tensors, const std::ve
                 bool mcast_1d = M == block_h;
                 bool row_wise = shard_spec.orientation == ShardOrientation::ROW_MAJOR;
                 if (mcast_1d) {
-                    TT_FATAL(Kt / shard_spec.num_cores() == program_config.block_w, "block_w must equal to K / num_cores.");
+                    TT_FATAL(Kt / a.num_cores() == program_config.block_w, "block_w must equal to K / num_cores.");
                     TT_FATAL(Mt == program_config.block_h, "block_h must equal to M.");
                     TT_FATAL(a.memory_config().memory_layout != TensorMemoryLayout::HEIGHT_SHARDED);
                 } else {

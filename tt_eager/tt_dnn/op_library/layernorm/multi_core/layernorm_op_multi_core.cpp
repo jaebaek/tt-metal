@@ -478,7 +478,7 @@ operation::ProgramWithCallbacks layernorm_multi_core_sharded(
     auto bbox = shard_spec.grid.bounding_box();
     CoreCoord grid_size = {bbox.end.x + 1, bbox.end.y+1};
     if (mcast_1d) {
-        num_blocks = shard_spec.num_cores();
+        num_blocks = a.num_cores();
     } else if (row_wise) {
         num_blocks = grid_size.x;
     } else {

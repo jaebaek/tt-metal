@@ -127,7 +127,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
     const auto output_buffer = output_tensor.buffer();
 
     int32_t shard_size_in_bytes = is_sharded ?
-        (input_buffer->shard_spec().page_shape[0] * input_buffer->shard_spec().page_shape[1] * input_buffer->shard_spec().tensor2d_shape[0] * input_buffer->shard_spec().tensor2d_shape[1] * input_tensor.element_size()) / input_tensor.shard_spec()->num_cores() :
+        (input_buffer->shard_spec().page_shape[0] * input_buffer->shard_spec().page_shape[1] * input_buffer->shard_spec().tensor2d_shape[0] * input_buffer->shard_spec().tensor2d_shape[1] * input_tensor.element_size()) / input_buffer->num_cores() :
         -1;
     uint32_t input_page_size = is_sharded ? shard_size_in_bytes : input_buffer->page_size();
     uint32_t output_page_size = is_sharded ? shard_size_in_bytes : output_buffer->page_size();

@@ -283,6 +283,19 @@ struct Tensor {
             std::cref(this->get_storage()), std::cref(this->get_shape()), std::cref(this->get_dtype()), std::cref(this->get_layout()));
     }
 
+    uint32_t num_cores() const {
+        if (this->shard_spec().has_value()) {
+            uint32_t total_height = 1;
+            for (int i = 0; i < this->get_legacy_shape().rank() - 1; i++) {
+                total_height *= this->get_legacy_shape()[i];
+            }
+            uint32_t total_width = this->get_legacy_shape()[-1];
+            return get_num_cores_from_shape(this->memory_config().memory_layout, total_height, total_width, this->shard_spec().value().shape);
+        }
+        return 1;
+    }
+
+
     std::vector<uint32_t> host_page_ordering();
 };
 
@@ -304,6 +317,7 @@ void memcpy(
 void memcpy(void *dst, const Tensor &src, const std::optional<std::size_t> transfer_size = std::nullopt);
 void memcpy(Tensor &dst, const void *src, const std::optional<std::size_t> transfer_size = std::nullopt);
 void memcpy(Tensor &dst, const Tensor &src, const std::optional<std::size_t> transfer_size = std::nullopt);
+
 
 }  // namespace tt_metal
 

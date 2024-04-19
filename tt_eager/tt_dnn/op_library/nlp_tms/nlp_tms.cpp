@@ -85,14 +85,14 @@ void NlpCreateHeads::validate(const std::vector<Tensor>& input_tensors, const st
         TT_FATAL(this->num_q_heads <= num_cores);
         TT_FATAL(this->num_kv_heads <= num_cores);
         TT_FATAL(this->num_q_heads >= this->num_kv_heads);
-        TT_FATAL(this->num_q_heads % input_tensor.shard_spec().value().num_cores() == 0);
+        TT_FATAL(this->num_q_heads % input_tensor.num_cores() == 0);
         if (optional_input_tensors.at(0).has_value()) {
             TT_FATAL(optional_input_tensors.at(0).value().is_sharded());
             TT_FATAL(input_tensor.shard_spec().value().grid == optional_input_tensors.at(0).value().shard_spec().value().grid);
             TT_FATAL(input_tensor.shard_spec().value().orientation == optional_input_tensors.at(0).value().shard_spec().value().orientation);
             TT_FATAL(input_tensor.shard_spec().value().shape[1] == (this->num_q_heads / this->num_kv_heads) * this->head_dim);
         } else {
-            TT_FATAL(this->num_kv_heads % input_tensor.shard_spec().value().num_cores() == 0);
+            TT_FATAL(this->num_kv_heads % input_tensor.num_cores() == 0);
             TT_FATAL(input_tensor.shard_spec().value().shape[1] == (this->num_q_heads / this->num_kv_heads + 2) * this->head_dim);
         }
         TT_FATAL(!this->transpose_k_heads);
@@ -117,7 +117,7 @@ void NlpCreateHeads::validate(const std::vector<Tensor>& input_tensors, const st
             TT_FATAL(input_tensor_kv.shard_spec().value().shape[0] == input_tensor_kv.volume() / input_tensor_kv.get_legacy_shape()[-1]);
             TT_FATAL(input_tensor_kv.shard_spec().value().orientation == ShardOrientation::ROW_MAJOR);
             TT_FATAL(input_tensor_kv.shard_spec().value().shape[1] == 2 * this->head_dim);
-            TT_FATAL(this->num_kv_heads % input_tensor_kv.shard_spec().value().num_cores() == 0);
+            TT_FATAL(this->num_kv_heads % input_tensor_kv.num_cores() == 0);
         }
     }
 }
@@ -235,7 +235,7 @@ std::vector<Tensor> NlpConcatHeads::create_output_tensors(const std::vector<Tens
     const auto& input_tensor = input_tensors.at(0);
     if (this->output_mem_config.is_sharded()) {
         ShardSpec shard_spec = input_tensor.shard_spec().value();
-        uint32_t num_cores = shard_spec.num_cores();
+        uint32_t num_cores = input_tensor.num_cores();
         uint32_t heads_per_shard = shard_spec.shape[0] / input_tensor.get_legacy_shape()[-2];
         shard_spec.shape = {shard_spec.shape[0] / heads_per_shard, shard_spec.shape[1] * heads_per_shard};
         auto mem_config = this->output_mem_config;

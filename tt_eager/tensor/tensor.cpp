@@ -549,7 +549,9 @@ std::vector<uint32_t> Tensor::host_page_ordering(){
     std::vector<uint32_t> ret_vec;
     ret_vec.reserve(num_pages);
     for(int page_id = 0; page_id <num_pages ; page_id++){
-        ret_vec.push_back(buffer_page_mapping.dev_page_to_host_page_mapping_[page_id]);
+        if(buffer_page_mapping.dev_page_to_host_page_mapping_[page_id].has_value()) {
+            ret_vec.push_back(buffer_page_mapping.dev_page_to_host_page_mapping_[page_id].value());
+        }
     }
     return ret_vec;
 }
@@ -607,6 +609,8 @@ Tensor create_device_tensor(const Shape& shape, DataType data_type, Layout layou
     return Tensor(DeviceStorage{device_buffer}, shape, data_type, layout);
 }
 
+
+
 Tensor create_sharded_device_tensor(const Shape& shape, DataType data_type, Layout layout, Device *device, const MemoryConfig& memory_config) {
     ZoneScoped;
     TT_ASSERT(memory_config.is_sharded());
@@ -614,25 +618,6 @@ Tensor create_sharded_device_tensor(const Shape& shape, DataType data_type, Layo
     TT_ASSERT(memory_config.buffer_type == BufferType::L1);
     auto shard_spec = memory_config.shard_spec.value();
     auto& shard_shape = shard_spec.shape;
-
-    uint32_t num_cores = shard_spec.num_cores();
-
-    uint32_t num_shards;
-    uint32_t total_height = tt_metal::compute_volume(shape) / shape[-1];
-    uint32_t total_width = shape[-1];
-    if (memory_config.memory_layout == TensorMemoryLayout::HEIGHT_SHARDED) {
-        TT_ASSERT(total_width == shard_shape[1], "Shard shape {} does not divide tensor shape {} correctly according to sharding scheme", shard_shape[1], total_width);
-        num_shards = div_up(total_height, shard_shape[0]);
-    } else if (memory_config.memory_layout == TensorMemoryLayout::WIDTH_SHARDED) {
-        TT_ASSERT(total_height == shard_shape[0], "Shard shape does not divide tensor shape correctly according to sharding scheme");
-        num_shards = div_up(total_width, shard_shape[1]);
-    } else if (memory_config.memory_layout == TensorMemoryLayout::BLOCK_SHARDED) {
-        num_shards = div_up(total_height, shard_shape[0]) * div_up(total_width, shard_shape[1]);
-    } else {
-        TT_FATAL(false, "Unsupported sharding scheme");
-    }
-
-    TT_ASSERT(num_shards == num_cores, "Number of shards {} must match number of cores {}", num_shards, num_cores);
 
     if (layout == Layout::TILE) {
         TT_ASSERT((shard_shape[0] % TILE_HEIGHT == 0 && shard_shape[1] % TILE_WIDTH == 0), "Shard shape must be tile sized");

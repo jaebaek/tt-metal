@@ -299,7 +299,7 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_sharded(const Te
     uint32_t per_core_out_q_heads = num_q_heads / q_cores.num_cores();
     uint32_t per_risc0_out_q_heads = div_up(per_core_out_q_heads, 2);
     uint32_t per_risc1_out_q_heads = per_core_out_q_heads / 2;
-    uint32_t per_core_in_q_heads = num_q_heads / input_tensor.shard_spec().value().num_cores();
+    uint32_t per_core_in_q_heads = num_q_heads / input_tensor.num_cores();
 
     uint32_t q_output_cb_index = CB::c_out0;
     tt_metal::CircularBufferConfig cb_q_output_config =
@@ -331,7 +331,7 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_sharded(const Te
     auto cb_v_output = tt_metal::CreateCircularBuffer(program, v_cores, cb_v_output_config);
 
     uint32_t per_core_out_kv_heads = num_kv_heads / k_cores.num_cores();
-    uint32_t per_core_in_kv_heads = num_kv_heads / (read_from_input_tensor_kv ? input_tensor_kv.value().shard_spec().value().num_cores() : input_tensor.shard_spec().value().num_cores());
+    uint32_t per_core_in_kv_heads = num_kv_heads / (read_from_input_tensor_kv ? input_tensor_kv.value().num_cores() : input_tensor.num_cores());
 
     uint32_t q_base_addr = input_tensor.buffer()->address();
     uint32_t k_base_addr = 0;

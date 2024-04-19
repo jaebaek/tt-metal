@@ -23,10 +23,10 @@ operation::ProgramWithCallbacks eltwise_unary_sharded(const Tensor &input, Tenso
 
     auto shard_spec = input.shard_spec().value();
     auto all_cores = shard_spec.grid;
-    uint32_t ncores = shard_spec.num_cores();
+    uint32_t ncores = input.buffer()->num_cores();
 
     auto out_shard_spec = output.shard_spec().value();
-    TT_FATAL(out_shard_spec.num_cores() == ncores, "Output tensor should have same number of cores {} as input tensor {}", out_shard_spec.num_cores(), ncores);
+    TT_FATAL(output.buffer()->num_cores() == ncores, "Output tensor should have same number of cores {} as input tensor {}", output.buffer()->num_cores(), ncores);
 
     DataFormat act_df = tt_metal::datatype_to_dataformat_converter(input.get_dtype());
     DataFormat out_df = tt_metal::datatype_to_dataformat_converter(output.get_dtype());

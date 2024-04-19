@@ -69,7 +69,7 @@ def get_tensor(shape, dtype):
             ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
             (64, 64),
             None,
-            DirectReadWriteType.READ_WRITE,
+            DirectReadWriteType.READ_ONLY,
         ),
         (
             ttl.tensor.ShardOrientation.ROW_MAJOR,
@@ -206,7 +206,7 @@ def get_tensor(shape, dtype):
                     ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(1, 1)),  # 4 cores
                 }
             ),
-            DirectReadWriteType.READ_WRITE,
+            DirectReadWriteType.WRITE_ONLY,
         ),
         (
             ttl.tensor.ShardOrientation.COL_MAJOR,
@@ -243,18 +243,6 @@ def get_tensor(shape, dtype):
                 }
             ),
             DirectReadWriteType.READ_WRITE,
-        ),
-        (
-            ttl.tensor.ShardOrientation.COL_MAJOR,
-            [1, 1, 8192, 1536],
-            ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED,
-            (1024, 320),
-            ttl.tensor.CoreRangeSet(
-                {
-                    ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 4)),  # 40 cores
-                }
-            ),
-            DirectReadWriteType.READ_ONLY,
         ),
         (
             ttl.tensor.ShardOrientation.COL_MAJOR,

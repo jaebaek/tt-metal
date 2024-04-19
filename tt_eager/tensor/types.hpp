@@ -220,6 +220,7 @@ struct MemoryConfig {
         return std::make_tuple(
             std::cref(this->memory_layout), std::cref(this->buffer_type), std::cref(this->shard_spec));
     }
+
 };
 
 bool operator==(const MemoryConfig &config_a, const MemoryConfig &config_b);
