@@ -190,7 +190,9 @@ def run_falcon_demo_kv(
     logger.info("Loading weights...")
     profiler.start(f"loading_weights")
     if (tt_cache_path == Path(f"models/demos/falcon7b/datasets/tt_dnn-models/tt/Falcon/{model_version}")) and (
-        len(os.listdir(f"models/demos/falcon7b/datasets/{model_version}")) < 340
+        # len(os.listdir(f"models/demos/falcon7b/datasets/{model_version}")) < 340
+        len(os.listdir(f"models/demos/falcon7b/datasets/tt_dnn-models/tt/Falcon/{model_version}"))
+        < 340
     ):
         logger.info("Weights not found on machine; downloading weights...")
         model_name = model_location_generator(model_version, model_subdir="Falcon")
@@ -387,10 +389,10 @@ def run_falcon_demo_kv(
                 else:
                     raise ValueError("Invalid type for tt_attention_mask")
 
+        logits = torch.concat([tt2torch_tensor(tt_logits[i]).squeeze(1) for i in range(num_devices)], dim=-2)
+
         for j in range(num_devices):
             tt_prefill_input_ids[j].deallocate()
-            if tt_prefill_attention_mask is not None:
-                tt_prefill_attention_mask[j].deallocate()
             tt_logits[j].deallocate()
 
         user_output_ids = post_processor(logits=logits, index=num_input_tokens - 1)
@@ -557,7 +559,7 @@ def test_demo(
         else ["BFLOAT16-DRAM", "BFLOAT16-DRAM"],
         model_location_generator=model_location_generator,
         get_tt_cache_path=get_tt_cache_path,
-        device=[device],
+        devices=[device],
         perf_mode=perf_mode,
         greedy_sampling=True,
     )
