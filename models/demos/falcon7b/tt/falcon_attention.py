@@ -8,8 +8,7 @@ from typing import List, Optional, Tuple
 import torch
 import tt_lib
 from models.demos.falcon7b.tt.model_utils import get_weights_cached
-from models.utility_functions import (is_wormhole_b0, nearest_32, pad_by_zero,
-                                      torch2tt_tensor, tt2torch_tensor)
+from models.utility_functions import is_wormhole_b0, nearest_32, pad_by_zero, torch2tt_tensor, tt2torch_tensor
 from torch import nn
 
 
@@ -164,7 +163,14 @@ class TtFalconAttentionPrefill(nn.Module):
             model_config=model_config,
             tt_cache_path=tt_cache_path,
         )
-        self.scalar = 1 / math.sqrt(self.head_dim)
+        if not model_config["OPTIMIZED_MODE"]:
+            scale = 1 / math.sqrt(self.head_dim)
+            self.scalar = []
+            for device in self.devices:
+                self.scalar.append(pad_by_zero(torch.Tensor([scale]), device)[0])
+        else:
+            # optimized version can utilize single float value for softmax
+            self.scalar = 1 / math.sqrt(self.head_dim)
 
         # self.scale = 1 / math.sqrt(self.head_dim)
         # self.scalar = []
@@ -190,7 +196,7 @@ class TtFalconAttentionPrefill(nn.Module):
 
         seq_len = hidden_states[0].get_legacy_shape()[2]
 
-        if seq_len in [128, 1024, 2048]:
+        if seq_len in [128, 1024, 2048] and self.model_config["OPTIMIZED_MODE"]:
             attn_output, layer_present = self._optimized_forward(
                 hidden_states,
                 attention_mask,

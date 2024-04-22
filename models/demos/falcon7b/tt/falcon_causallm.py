@@ -24,9 +24,11 @@ class TtFalconCausalLM(TtFalconModelShared):
         model_config,
         tt_cache_path,
         seq_len,
+        optimized=False,
     ):
         assert base_url == "", "base_url should be empty at the root of the model!"
-
+        assert not optimized, "CausalLM does not support optimized mode at the moment"
+        model_config["OPTIMIZED_MODE"] = optimized
         super().__init__(
             devices=devices,
             state_dict=state_dict,
