@@ -61,7 +61,7 @@ def preprocess_and_validate_inputs(input_prompts, tokenizer, max_seq_len, perf_m
     prefill_ids = tokenized_inputs["input_ids"]
 
     tokenized_inputs_nopad = tokenizer(
-        input_prompts, padding=False, max_length=max_seq_len - 10, add_special_tokens=False, return_tensors="pt"
+        input_prompts, padding=False, max_length=max_seq_len, add_special_tokens=False, return_tensors="pt"
     )
 
     num_users = len(tokenized_inputs_nopad["input_ids"])
@@ -381,9 +381,9 @@ def run_falcon_demo_kv(
 
         if tt_prefill_attention_mask is not None:
             for device_id in range(len(tt_prefill_attention_mask)):
-                if isinstance(tt_prefill_attention_mask, tt_lib.tensor.Tensor):
+                if isinstance(tt_prefill_attention_mask[device_id], tt_lib.tensor.Tensor):
                     tt_prefill_attention_mask[device_id].deallocate()
-                elif isinstance(tt_prefill_attention_mask, list):
+                elif isinstance(tt_prefill_attention_mask[device_id], list):
                     for tt_attention_mask_element in tt_prefill_attention_mask[device_id]:
                         tt_attention_mask_element.deallocate()
                 else:

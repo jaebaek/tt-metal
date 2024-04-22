@@ -136,7 +136,7 @@ class TtFalconModelShared(torch.nn.Module):
 
         return attn_masks_per_slice
 
-    def model_preprocessing(self, llm_mode, input_ids, kv_cache_len, num_input_tokens):
+    def model_preprocessing(self, llm_mode, input_ids, kv_cache_len, num_input_tokens, optimized_mode=False):
         assert input_ids.dim() == 2
         global_batch_size, sequence_size = input_ids.shape
         batch_size = global_batch_size // self.num_devices
@@ -170,7 +170,7 @@ class TtFalconModelShared(torch.nn.Module):
                     dim=-1,
                 )
 
-                if num_input_tokens in [128, 1024, 2048]:
+                if num_input_tokens in [128, 1024, 2048] and optimized_mode:
                     tt_attention_mask_ = self._create_prefill_attn_mask_for_sharded_softmax(
                         (attention_mask_bool_padded * -1e3), num_input_tokens, device
                     )
