@@ -647,6 +647,15 @@ bool Device::close() {
         hw_command_queue->terminate();
     }
 
+    std::unordered_set<CoreCoord> dispatch_core_set;
+    for (const CoreCoord& core : tt::get_logical_dispatch_cores(id_, num_hw_cqs_)) {
+        CoreType dispatch_core_type = tt::get_dispatch_core_type(id_, num_hw_cqs_);
+        const CoreCoord noc_coord = this->physical_core_from_logical_core(core, dispatch_core_type);
+        dispatch_core_set.insert(noc_coord);
+    }
+
+    llrt::internal_::wait_until_cores_done(id_, RUN_MSG_GO, dispatch_core_set);
+
     // Assert worker cores
     CoreCoord grid_size = this->logical_grid_size();
     for (uint32_t y = 0; y < grid_size.y; y++) {

@@ -982,12 +982,24 @@ void EnqueueTerminateCommand::process() {
 
     uint32_t fetch_size_bytes = command_sequence.size_bytes();
 
-    this->manager.fetch_queue_reserve_back(this->command_queue_id);
-
     uint32_t write_ptr = this->manager.get_issue_queue_write_ptr(this->command_queue_id);
+    // Wrap issue queue
+    const uint32_t command_issue_limit = this->manager.get_issue_queue_limit(this->command_queue_id);
+    if (write_ptr + align(fetch_size_bytes, 32) > command_issue_limit) {
+        this->manager.wrap_issue_queue_wr_ptr(this->command_queue_id);
+        write_ptr = this->manager.get_issue_queue_write_ptr(this->command_queue_id);
+    }
+
     this->manager.cq_write(command_sequence.data(), fetch_size_bytes, write_ptr);
     this->manager.issue_queue_push_back(fetch_size_bytes, this->command_queue_id);
-    this->manager.fetch_queue_write(fetch_size_bytes, this->command_queue_id);
+
+    // Command sequence has dispatch and prefetch terminate commands but each needs to be a separate fetch queue entry
+    TT_ASSERT(fetch_size_bytes % CQ_PREFETCH_CMD_BARE_MIN_SIZE == 0);
+    uint32_t num_terminate_cmds = fetch_size_bytes / CQ_PREFETCH_CMD_BARE_MIN_SIZE;
+    for (int terminate_cmd_idx = 0; terminate_cmd_idx < num_terminate_cmds; terminate_cmd_idx++) {
+        this->manager.fetch_queue_reserve_back(this->command_queue_id);
+        this->manager.fetch_queue_write(CQ_PREFETCH_CMD_BARE_MIN_SIZE, this->command_queue_id);
+    }
 }
 
 
