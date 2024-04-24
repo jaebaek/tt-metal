@@ -80,14 +80,14 @@ void MAIN {
 
         // Only this for loop should affect the result.
         for (uint32_t h = 0; h < Ht; ++h) {
-            constexpr auto cb_exp = tt::CB::c_intermed0;
+            constexpr auto cb_tmp0 = tt::CB::c_intermed0;
             ACQ();
-            copy_tile_to_cb(cb_y, cb_exp);
+            copy_tile_to_cb(cb_y, cb_tmp0);
             REL();
 
             // dy - y
             ACQ();
-            sub_tiles_to_cb(cb_dy, cb_exp, cb_dx);
+            sub_tiles_to_cb(cb_dy, cb_tmp0, cb_dx);
             REL();
         }
 
