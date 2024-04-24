@@ -19,9 +19,8 @@ void MAIN {
     constexpr auto cb_mask = tt::CB::c_in3;
     constexpr auto cb_dx = tt::CB::c_out0;
 
-    constexpr auto cb_ydy = tt::CB::c_intermed0;  // y * dy
+    constexpr auto cb_inter0 = tt::CB::c_intermed0;
     constexpr auto cb_sum = tt::CB::c_intermed1;
-    constexpr auto cb_inter2 = tt::CB::c_intermed2;
     constexpr auto cb_add = tt::CB::c_intermed3;
 
     binary_op_init_common(cb_y, cb_bcast_scaler);
@@ -31,110 +30,68 @@ void MAIN {
 
     for (uint32_t n = 0; n < N; ++n) {
 
-        #ifdef LOG
-            // sum(dy)
-            for (uint32_t h = 0; h < Ht; ++h) {
-                if (h == Ht - 1) {
-                    if (h == 0){
-                        ACQ();
-                        mask_tile_to_cb(cb_dy, cb_mask, cb_add, /*itile=*/0, /*mtile=*/0, /*pop=*/1, /*popm=*/0);
-                        REL();
-                    } else {
-                        constexpr auto cb_inter0 = tt::CB::c_intermed0;
-                        ACQ();
-                        mask_tile_to_cb(cb_dy, cb_mask, cb_inter0, /*itile=*/0, /*mtile=*/0, /*pop=*/1, /*popm=*/0);
-                        REL();
-
-                        ACQ();
-                        add_tiles_to_cb(cb_add, cb_inter0, cb_add);
-                        REL();
-                    }
-                } else {
-                    if (h == 0) {
-                        ACQ();
-                        copy_tile_to_cb(cb_dy, cb_add);
-                        REL();
-                    }
-                    else {
-                        ACQ();
-                        add_tiles_to_cb(cb_add, cb_dy, cb_add);
-                        REL();
-                    }
-                }
-            }
-
-            ACQ();
-            reduce_tile_to_cb(REDUCE_OP, REDUCE_DIM, cb_add, cb_bcast_scaler, cb_sum, 1, /*pop0=*/1, /*pop1=*/0);
-            REL();
-
-            for (uint32_t h = 0; h < Ht; ++h) {
-                // exp(y)
-                constexpr auto cb_exp = tt::CB::c_intermed0;
+        // This for loop should not affect the result.
+        for (uint32_t h = 0; h < Ht; ++h) {
+            if (h == 0) {
                 ACQ();
-                exp_tile_to_cb(cb_y, cb_exp, 0);
-                REL();
-
-                // sum * exp(y)
-                ACQ();
-                mul_tiles_bcast_rows_to_cb(cb_exp, cb_sum, cb_inter2, 0, 0, /*pop0=*/1, /*pop1=*/0);
-                REL();
-
-                // dy - sum * exp(y)
-                ACQ();
-                sub_tiles_to_cb(cb_dy, cb_inter2, cb_dx);
+                copy_tile_to_cb(cb_dy, cb_add);
                 REL();
             }
-
-            cb_pop_front(cb_sum, onetile);
-        #else
-
-            // step 1, compute y * dy
-            for (uint32_t h = 0; h < Ht; ++h) {
-                ACQ();
+            else {
                 if (h == Ht - 1) {
-                    mul_tiles_and_mask_tile_to_cb(
-                        cb_y, cb_dy, cb_mask, cb_ydy, 0, 0, 0, /*pop0=*/1, /*pop1=*/1, /*popm=*/0);
-                } else {
-                    mul_tiles_to_cb(cb_y, cb_dy, cb_ydy);
-                }
-                REL();
-
-                if (h == 0) {
                     ACQ();
-                    copy_tile_to_cb(cb_ydy, cb_add);
+                    constexpr uint32_t onetile = 1;
+                    constexpr int dst0 = 0;
+                    constexpr int dst_mask = 1;
+
+                    cb_reserve_back(cb_inter0, onetile);
+                    cb_wait_front(cb_dy, onetile);
+                    cb_wait_front(cb_mask, onetile);
+
+                    copy_tile_init();
+                    copy_tile(cb_dy, 0, dst0);
+
+                    copy_tile_init();
+                    copy_tile(cb_mask, 0, dst_mask);
+
+                    pack_tile(dst0, cb_inter0);
+
+                    cb_pop_front(cb_dy, onetile);
+
+                    cb_push_back(cb_inter0, onetile);
+
+                    REL();
+
+                    ACQ();
+                    add_tiles_to_cb(cb_add, cb_inter0, cb_add);
                     REL();
                 } else {
                     ACQ();
-                    add_tiles_to_cb(cb_add, cb_ydy, cb_add);
+                    copy_tile_to_cb(cb_dy, cb_add);
                     REL();
                 }
             }
+        }
 
-            // step 2, compute sum(y * dy)
+        // This reduce should not affect the result.
+        ACQ();
+        reduce_tile_to_cb(REDUCE_OP, REDUCE_DIM, cb_add, cb_bcast_scaler, cb_sum, 1, /*pop0=*/1, /*pop1=*/0);
+        REL();
+
+        // Only this for loop should affect the result.
+        for (uint32_t h = 0; h < Ht; ++h) {
+            constexpr auto cb_exp = tt::CB::c_intermed0;
             ACQ();
-            reduce_tile_to_cb(REDUCE_OP, REDUCE_DIM, cb_add, cb_bcast_scaler, cb_sum, /*size=*/1, /*pop0=*/1, /*pop1=*/0);
+            copy_tile_to_cb(cb_y, cb_exp);
             REL();
 
-            // step 3, compute final result
-            for (uint32_t h = 0; h < Ht; ++h) {
-                // dy - sum
-                ACQ();
-                sub_tiles_bcast_rows_to_cb(cb_dy, cb_sum, cb_inter2, 0, 0, /*pop0=*/1, /*pop1=*/0);
-                REL();
+            // dy - y
+            ACQ();
+            sub_tiles_to_cb(cb_dy, cb_exp, cb_dx);
+            REL();
+        }
 
-                ACQ();
-                #ifdef SOFTMAX
-                    // (dy - sum) * y
-                    mul_tiles_to_cb(cb_y, cb_inter2, cb_dx);
-                #else
-                    // -(dy - sum) * y
-                    mul_tiles_and_negative_to_cb(cb_y, cb_inter2, cb_dx);
-                #endif
-                REL();
-            }
-
-            cb_pop_front(cb_sum, onetile);
-        #endif
+        cb_pop_front(cb_sum, onetile);
     }
 }
 }  // namespace NAMESPACE

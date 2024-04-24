@@ -130,58 +130,8 @@ FORCE_INLINE void generate_mask_h(uint32_t cb_mask, uint32_t mask_h) {
     cb_reserve_back(cb_mask, 1);
     auto ptr = reinterpret_cast<uint16_t *>(get_write_ptr(cb_mask));
 
-    for (uint32_t w = 0; w < 16; w++) {
-        // sub tile 0
-        {
-            uint32_t mask_h_0 = mask_h;
-            if (mask_h_0 >= 16)
-                mask_h_0 = 16;
-            uint32_t h = 0;
-            for (; h < mask_h_0; h++) {
-                ptr[h * 16 + w] = uint16_t(one.u >> 16);
-            }
-            for (; h < 16; h++) {
-                ptr[h * 16 + w] = uint16_t(zero.u >> 16);
-            }
-        }
-
-        // sub tile 1
-        {
-            uint32_t mask_h_0 = mask_h;
-            if (mask_h_0 >= 16)
-                mask_h_0 = 16;
-            uint32_t h = 0;
-            for (; h < mask_h_0; h++) {
-                ptr[h * 16 + w + 256] = uint16_t(one.u >> 16);
-            }
-            for (; h < 16; h++) {
-                ptr[h * 16 + w + 256] = uint16_t(zero.u >> 16);
-            }
-        }
-
-        // sub tile 2
-        {
-            uint32_t mask_h_1 = (mask_h < 16) ? 0 : mask_h - 16;
-            uint32_t h = 0;
-            for (; h < mask_h_1; h++) {
-                ptr[h * 16 + w + 512] = uint16_t(one.u >> 16);
-            }
-            for (; h < 16; h++) {
-                ptr[h * 16 + w + 512] = uint16_t(zero.u >> 16);
-            }
-        }
-
-        // sub tile 3
-        {
-            uint32_t mask_h_1 = (mask_h < 16) ? 0 : mask_h - 16;
-            uint32_t h = 0;
-            for (; h < mask_h_1; h++) {
-                ptr[h * 16 + w + 768] = uint16_t(one.u >> 16);
-            }
-            for (; h < 16; h++) {
-                ptr[h * 16 + w + 768] = uint16_t(zero.u >> 16);
-            }
-        }
+    for(uint32_t w = 0; w < 1024; w++) {
+        ptr[w] = uint16_t(one.u >> 16);
     }
 
     cb_push_back(cb_mask, 1);
