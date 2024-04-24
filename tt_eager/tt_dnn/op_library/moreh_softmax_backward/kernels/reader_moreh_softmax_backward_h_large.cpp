@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "tt_eager/tt_dnn/kernels/dataflow/moreh_common.hpp"
+#include "dataflow_api.h"
 
 void kernel_main() {
     uint32_t y_addr = get_arg_val<uint32_t>(0);
@@ -41,8 +41,11 @@ void kernel_main() {
         .bank_base_address = dy_addr, .page_size = dy_tile_bytes, .data_format = dy_data_format};
 
     // TODO(AP): cleanup, probably with named args/param pack/reflection.
-    generate_bcast_scaler(cb_scaler, scaler);
-    generate_mask_h(cb_mask, mask_h);
+
+    cb_reserve_back(cb_scaler, 1);
+    cb_push_back(cb_scaler, 1);
+    cb_reserve_back(cb_mask, 1);
+    cb_push_back(cb_mask, 1);
 
     // read ublocks from src0 to CB0, then push ublocks to compute (unpacker)
     uint32_t curr_tile = tile_offset;
