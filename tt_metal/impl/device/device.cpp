@@ -396,9 +396,9 @@ void Device::compile_command_queue_programs() {
                     issue_queue_start_addr,
                     issue_queue_size,
                     dispatch_constants::PREFETCH_Q_BASE,
-                    dispatch_constants::PREFETCH_Q_SIZE,
+                    dispatch_constants::get(dispatch_core_type).prefetch_q_size(),
                     CQ_PREFETCH_Q_RD_PTR,
-                    dispatch_constants::CMDDAT_Q_BASE,
+                    dispatch_constants::get(dispatch_core_type).cmddat_q_base(),
                     dispatch_constants::get(dispatch_core_type).cmddat_q_size(),
                     dispatch_constants::get(dispatch_core_type).scratch_db_base(),
                     dispatch_constants::get(dispatch_core_type).scratch_db_size(),
@@ -541,9 +541,9 @@ void Device::configure_command_queue_programs() {
                     "Issue queue interface is on device {} and completion queue interface is on device {} but they are expected to be on device {}", prefetch_location.chip, completion_q_writer_location.chip, this->id());
 
                 // Initialize the FetchQ
-                std::vector<uint32_t> prefetch_q(dispatch_constants::PREFETCH_Q_ENTRIES, 0);
+                std::vector<uint32_t> prefetch_q(dispatch_constants::get(dispatch_core_type).prefetch_q_entries(), 0);
                 std::vector<uint32_t> prefetch_q_rd_ptr_addr_data = {
-                    (uint32_t)(dispatch_constants::PREFETCH_Q_BASE + dispatch_constants::PREFETCH_Q_SIZE)
+                    (uint32_t)(dispatch_constants::PREFETCH_Q_BASE + dispatch_constants::get(dispatch_core_type).prefetch_q_size())
                 };
                 detail::WriteToDeviceL1(this, prefetch_location, CQ_PREFETCH_Q_RD_PTR, prefetch_q_rd_ptr_addr_data, dispatch_core_type);
                 detail::WriteToDeviceL1(this, prefetch_location, dispatch_constants::PREFETCH_Q_BASE, prefetch_q, dispatch_core_type);
