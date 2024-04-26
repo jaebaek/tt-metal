@@ -253,16 +253,38 @@ namespace detail {
 using PageAddress = uint32_t;
 using Deviceid = uint32_t;
 
+enum class AllocationState {
+    Allocating,
+    Deallocating,
+};
+
+struct AllocationRecord {
+    Deviceid device_id;
+    PageAddress page_address;
+    uint32_t size;
+    AllocationState allocation_state;
+    BufferType buffer_type;
+};
+
 class buffer_map {
     public:
         void insert(std::tuple<Deviceid, PageAddress> buf_attr,  Buffer * buffer) {
             std::scoped_lock<std::mutex> lock(this->map_mutex);
             this->map.insert({buf_attr, buffer});
+            #ifdef DEBUG
+            // this->history.push_back({std::get<0>(buf_attr), std::get<1>(buf_attr), buffer->size(), AllocationState::Allocating, buffer->buffer_type()});
+            #endif
         }
 
         void erase(std::tuple<Deviceid, PageAddress> buf_attr) {
             std::scoped_lock<std::mutex> lock(this->map_mutex);
+            auto buffer = this->map.at(buf_attr);
+            auto size = buffer->size();
+            auto buffer_type = buffer->buffer_type();
             this->map.erase(buf_attr);
+            #ifdef DEBUG
+            // this->history.push_back({std::get<0>(buf_attr), std::get<1>(buf_attr), size, AllocationState::Deallocating, buffer_type});
+            #endif
         }
 
         void clear() {
@@ -275,9 +297,32 @@ class buffer_map {
             return this->map;
         }
 
+        std::vector<AllocationRecord> get_history() {
+            std::scoped_lock<std::mutex> lock(this->map_mutex);
+            return this->history;
+        }
+
+        ~buffer_map() {
+            /*
+            tt::log_warning(tt::LogOp, "Device 0");
+            for (auto &allocation_record : this->get_history()) {
+                if (allocation_record.buffer_type == BufferType::DRAM and allocation_record.device_id == 0)  {
+                    tt::log_warning(tt::LogOp, "Device: {}; Address: {}; Size: {}; Allocation State: {}", allocation_record.device_id, allocation_record.page_address, allocation_record.size, allocation_record.allocation_state);
+                }
+            }
+            tt::log_warning(tt::LogOp, "Device 1");
+            for (auto &allocation_record : this->get_history()) {
+                if (allocation_record.buffer_type == BufferType::DRAM and allocation_record.device_id == 1)  {
+                    tt::log_warning(tt::LogOp, "Device: {}; Address: {}; Size: {}; Allocation State: {}", allocation_record.device_id, allocation_record.page_address, allocation_record.size, allocation_record.allocation_state);
+                }
+            }
+            */
+        }
+
     private:
         std::mutex map_mutex;
         std::map<std::tuple<Deviceid, PageAddress>, Buffer *> map = {};
+        std::vector<AllocationRecord> history;
 };
 
 inline buffer_map BUFFER_MAP;
