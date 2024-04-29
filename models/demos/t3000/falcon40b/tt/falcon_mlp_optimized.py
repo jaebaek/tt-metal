@@ -4,6 +4,7 @@
 
 import torch
 import tt_lib
+import ttnn
 
 from typing import List
 from models.utility_functions import torch2tt_tensor
@@ -27,6 +28,7 @@ class TtFalconMLP:
         self.devices = devices
         self.hidden_size = hidden_size
         self.model_config = model_config
+        self.output = None
 
         layer_name = f"{base_url}.{layer_num}"
 
@@ -110,9 +112,12 @@ class TtFalconMLP:
                     tt_dtype=self.model_config["BFP4_DTYPE"],
                 )
             )
+        self._allocate_output_mlp_tensors()
 
     def set_model_config(self, model_config):
         self.model_config = model_config
+
+        self._allocate_output_mlp_tensors()
 
     def __call__(self, x: List[tt_lib.tensor.Tensor], llm_mode: str) -> List[tt_lib.tensor.Tensor]:
         if llm_mode == "prefill":
@@ -163,36 +168,90 @@ class TtFalconMLP:
         # return TT Tensor
         return hidden_states
 
+    def _allocate_output_mlp_tensors(self):
+        if self.model_config["LLM_MODE"] == "prefill":
+            if self.output is not None:
+                for i in range(len(self.devices)):
+                    self.output[i].deallocate()
+
+            seq_len = self.model_config["row_height"]
+
+            # prepare output tensor on device
+            out_shape = [(1, 1, seq_len, self.dense_4h_to_h_weights[i].shape[-1]) for i in range(len(self.devices))]
+            out_tensors = [torch.zeros(out_shape[i]).bfloat16() for i in range(len(self.devices))]
+
+            self.output = [
+                ttnn.from_torch(
+                    out_tensors[i],
+                    ttnn.bfloat8_b,
+                    device=self.devices[i],
+                    layout=ttnn.TILE_LAYOUT,
+                    memory_config=self.model_config["DEFAULT_MEMCFG"],
+                )
+                for i in range(len(self.devices))
+            ]
+
     def fwd_prefill(self, x: List[tt_lib.tensor.Tensor]) -> List[tt_lib.tensor.Tensor]:
-        hidden_states = []
-        for i in range(len(x)):
-            hidden_states.append(
-                falcon_prefill_matmul(
-                    x[i],
-                    self.dense_h_to_4h_weights[i],
+        seq_len = x[0].get_legacy_shape()[2]
+        hidden_size = x[0].get_legacy_shape()[3]
+        num_slices = self.model_config["MLP_NUM_SLICES"]
+        for slice_idx in range(num_slices):
+            x_slices = []
+            for i in range(len(x)):
+                x_slices.append(
+                    tt_lib.tensor.interleaved_to_sharded_partial(
+                        x[i],
+                        (8, 8),
+                        [seq_len // num_slices // 8, hidden_size // 8],
+                        num_slices,
+                        slice_idx,
+                        tt_lib.tensor.TensorMemoryLayout.BLOCK_SHARDED,
+                        tt_lib.tensor.ShardOrientation.ROW_MAJOR,
+                    )
+                )
+            hidden_states_slice = []
+            for i in range(len(x)):
+                hidden_states_slice.append(
+                    falcon_prefill_matmul(
+                        x_slices[i],
+                        self.dense_h_to_4h_weights[i],
+                        self.model_config["COMPUTE_KERNEL_CONFIG"],
+                        output_mem_config=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_MEMCFG"],
+                        output_dtype=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_DTYPE"],
+                        act=[tt_lib.tensor.FusibleActivation.GELU, True],
+                        overwrite_subblock_w=1,  # Workaround for non deterministic output/hang; issue: 7066
+                        overwrite_subblock_h=1,
+                    )
+                )
+                x_slices[i].deallocate(True)
+            for i in range(len(hidden_states_slice)):
+                hidden_states_slice[i] = falcon_prefill_matmul(
+                    hidden_states_slice[i],
+                    self.dense_4h_to_h_weights[i],
                     self.model_config["COMPUTE_KERNEL_CONFIG"],
-                    output_mem_config=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_MEMCFG"],
-                    output_dtype=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_DTYPE"],
-                    act=[tt_lib.tensor.FusibleActivation.GELU, True],
+                    output_mem_config=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_MEMCFG"],
+                    output_dtype=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_DTYPE"],
                     overwrite_subblock_w=1,  # Workaround for non deterministic output/hang; issue: 7066
                     overwrite_subblock_h=1,
                 )
-            )
-            x[i].deallocate(True)
-        for i in range(len(hidden_states)):
-            hidden_states[i] = falcon_prefill_matmul(
-                hidden_states[i],
-                self.dense_4h_to_h_weights[i],
-                self.model_config["COMPUTE_KERNEL_FP16_ACC_CONFIG"],
-                output_mem_config=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_MEMCFG"],
-                output_dtype=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_DTYPE"],
-                overwrite_subblock_w=1,  # Workaround for non deterministic output/hang; issue: 7066
-                overwrite_subblock_h=1,
-            )
+
+            for i in range(len(hidden_states_slice)):
+                tt_lib.tensor.sharded_to_interleaved_partial(
+                    hidden_states_slice[i],
+                    self.output[i],
+                    num_slices,
+                    slice_idx,
+                    self.model_config["DEFAULT_MEMCFG"],
+                )
+                hidden_states_slice[i].deallocate()
+
+        # Deallocate input
+        for i in range(len(self.devices)):
+            x[i].deallocate()
 
         # Manual reduce scatter by AllGather and matmul reduce
         hidden_states = tt_lib.tensor.all_gather(
-            hidden_states,
+            self.output,
             dim=3,
             num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
             output_mem_config=self.model_config["DEFAULT_MEMCFG"],

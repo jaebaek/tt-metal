@@ -174,6 +174,7 @@ def get_decode_model_config(model_config_str, input_shape, num_devices):
 
     # Set defaults for dtype and mem_config for all ops
     model_config = {
+        "LLM_MODE": "decode",
         "DEFAULT_DTYPE": dtype,
         "DEFAULT_MEMCFG": mem_config,
         "MOVE_DECODER_OUTPUT_BOOL": False,
@@ -785,6 +786,7 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
 
     # Set defaults for dtype and mem_config for all ops
     model_config = {
+        "LLM_MODE": "prefill",
         "DEFAULT_DTYPE": dtype,
         "DEFAULT_MEMCFG": mem_config,
         "MOVE_DECODER_OUTPUT_BOOL": False,
@@ -880,6 +882,15 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
             }
         )
 
+    full_core_range_set = ttl.tensor.CoreRangeSet(
+        {
+            ttl.tensor.CoreRange(
+                ttl.tensor.CoreCoord(0, 0),
+                ttl.tensor.CoreCoord(7, 7),
+            ),
+        }
+    )
+
     (
         layernorm_block_sharded_mem_config,
         layernorm_block_sharded_prg_config,
@@ -970,6 +981,35 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
         ttl.tensor.ShardSpec(
             attn_shard_spec,
             [16 * attention_slice_size // attention_num_cores, head_dim],
+            ttl.tensor.ShardOrientation.ROW_MAJOR,
+            False,
+        ),
+    )
+
+    num_slices = 2 if row_height == 2048 else 1
+    model_config["MLP_NUM_SLICES"] = num_slices
+    model_config["DENSE_H_TO_4H_MM_OUTPUT_MEMCFG"] = ttl.tensor.MemoryConfig(
+        ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED,
+        ttl.tensor.BufferType.L1,
+        ttl.tensor.ShardSpec(
+            full_core_range_set,
+            [
+                row_height // num_slices // 8,
+                hidden_size // 8 // 8,
+            ],
+            ttl.tensor.ShardOrientation.ROW_MAJOR,
+            False,
+        ),
+    )
+    model_config["DENSE_4H_TO_H_MM_OUTPUT_MEMCFG"] = ttl.tensor.MemoryConfig(
+        ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED,
+        ttl.tensor.BufferType.L1,
+        ttl.tensor.ShardSpec(
+            full_core_range_set,
+            [
+                row_height // num_slices // 8,
+                hidden_size // 8,
+            ],
             ttl.tensor.ShardOrientation.ROW_MAJOR,
             False,
         ),
