@@ -34,18 +34,8 @@ void kernel_main() {
 
     Scalar one;
     one.f = 1.0f;
-    fill_cb_with_value(cb_id_one, one.u);
-    fill_cb_with_value(cb_id_decimal, decimal);
-    fill_cb_with_value(cb_id_recip_p_decimal, recip_p_decimal);
 
     constexpr uint32_t TILE_H = 32;
-    const bool do_mask_h = (origin_h % TILE_H) != 0;
-    const auto mask_h = do_mask_h ? (origin_h % TILE_H) : TILE_H;
-
-    if (do_mask_h) {
-        generate_mask_h(cb_id_mask_h, mask_h);
-    }
-
     const auto input_l1_write_ptr = get_write_ptr(cb_id_input);
 
     auto start_output_tile_idx = tile_offset;

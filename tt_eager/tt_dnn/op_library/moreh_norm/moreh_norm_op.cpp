@@ -38,21 +38,7 @@ inline void check_tensor(const Tensor &tensor, const std::string &op_name) {
 }
 
 inline Shape compute_output_shape(const Shape &input_shape, int64_t dim) {
-    const auto input_rank = static_cast<decltype(dim)>(input_shape.rank());
-    auto output_shape = input_shape;
-    auto output_padding = input_shape.padding();
-
-    if (dim == input_rank - 1) {
-        output_shape[input_rank - 1] = TILE_WIDTH;
-        output_padding[input_rank - 1] = Padding::PadDimension{0, TILE_WIDTH - 1};
-    } else if (dim == input_rank - 2) {
-        output_shape[input_rank - 2] = TILE_HEIGHT;
-        output_padding[input_rank - 2] = Padding::PadDimension{0, TILE_HEIGHT - 1};
-    } else {
-        output_shape[dim] = 1;
-    }
-
-    return Shape(output_shape, output_padding);
+    return input_shape;
 }
 
 inline Tensor create_output_tensor(const Tensor &input, int64_t dim, const MemoryConfig &output_mem_config) {
