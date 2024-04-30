@@ -216,7 +216,7 @@ class TtFalconMLP:
                         x_slices[i],
                         self.dense_h_to_4h_weights[i],
                         self.model_config["COMPUTE_KERNEL_CONFIG"],
-                        output_mem_config=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_MEMCFG"],
+                        output_mem_config=self.model_config["DENSE_H_TO_4H_MM_OPTIMIZED_OUTPUT_MEMCFG"],
                         output_dtype=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_DTYPE"],
                         act=[tt_lib.tensor.FusibleActivation.GELU, True],
                         overwrite_subblock_w=1,  # Workaround for non deterministic output/hang; issue: 7066
@@ -229,7 +229,7 @@ class TtFalconMLP:
                     hidden_states_slice[i],
                     self.dense_4h_to_h_weights[i],
                     self.model_config["COMPUTE_KERNEL_CONFIG"],
-                    output_mem_config=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_MEMCFG"],
+                    output_mem_config=self.model_config["DENSE_4H_TO_H_MM_OPTIMIZED_OUTPUT_MEMCFG"],
                     output_dtype=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_DTYPE"],
                     overwrite_subblock_w=1,  # Workaround for non deterministic output/hang; issue: 7066
                     overwrite_subblock_h=1,

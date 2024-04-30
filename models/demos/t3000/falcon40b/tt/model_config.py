@@ -988,7 +988,7 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
 
     num_slices = 2 if row_height == 2048 else 1
     model_config["MLP_NUM_SLICES"] = num_slices
-    model_config["DENSE_H_TO_4H_MM_OUTPUT_MEMCFG"] = ttl.tensor.MemoryConfig(
+    model_config["DENSE_H_TO_4H_MM_OPTIMIZED_OUTPUT_MEMCFG"] = ttl.tensor.MemoryConfig(
         ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED,
         ttl.tensor.BufferType.L1,
         ttl.tensor.ShardSpec(
@@ -1001,7 +1001,7 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
             False,
         ),
     )
-    model_config["DENSE_4H_TO_H_MM_OUTPUT_MEMCFG"] = ttl.tensor.MemoryConfig(
+    model_config["DENSE_4H_TO_H_MM_OPTIMIZED_OUTPUT_MEMCFG"] = ttl.tensor.MemoryConfig(
         ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED,
         ttl.tensor.BufferType.L1,
         ttl.tensor.ShardSpec(

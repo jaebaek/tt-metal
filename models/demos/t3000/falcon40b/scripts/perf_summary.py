@@ -38,7 +38,7 @@ def group_by_op_all_devices(df):
 def analyze_perf_csv(csv_file, layers, show_all, out_file=None, num_chips=1, seq=32, group=False):
     df = pd.read_csv(csv_file)
     df = df[df["DEVICE FW DURATION [ns]"] != "-"]
-    df["DEVICE FW DURATION [ns]"] = df["DEVICE FW DURATION [ns]"].astype(int)
+    df["DEVICE FW DURATION [ns]"] = df["DEVICE FW DURATION [ns]"].fillna(0).astype(int)
 
     df = assign_op_id_cross_device(df, num_chips)
     sorted_df = df
@@ -71,7 +71,7 @@ def analyze_perf_csv(csv_file, layers, show_all, out_file=None, num_chips=1, seq
     )
 
     sorted_df.loc[:, "TOTAL_BYTES"] = (
-        (sorted_df["INPUT_0_MEMORY"].str.contains(DRAM_INTERLEAVED, na=False)).astype(int)
+        (sorted_df["INPUT_0_MEMORY"].str.contains(DRAM_INTERLEAVED, na=False)).fillna(0).astype(int)
         * (
             sorted_df["INPUT_0_W"]
             * sorted_df["INPUT_0_Z"]
@@ -79,7 +79,7 @@ def analyze_perf_csv(csv_file, layers, show_all, out_file=None, num_chips=1, seq
             * sorted_df["INPUT_0_X"]
             * sorted_df["INPUT_0_DATATYPE"]
         )
-        + (sorted_df["INPUT_1_MEMORY"].str.contains(DRAM_INTERLEAVED, na=False)).astype(int)
+        + (sorted_df["INPUT_1_MEMORY"].str.contains(DRAM_INTERLEAVED, na=False)).fillna(0).astype(int)
         * (
             sorted_df["INPUT_1_W"]
             * sorted_df["INPUT_1_Z"]
@@ -87,7 +87,7 @@ def analyze_perf_csv(csv_file, layers, show_all, out_file=None, num_chips=1, seq
             * sorted_df["INPUT_1_X"]
             * sorted_df["INPUT_1_DATATYPE"]
         )
-        + (sorted_df["OUTPUT_0_MEMORY"].str.contains(DRAM_INTERLEAVED, na=False)).astype(int)
+        + (sorted_df["OUTPUT_0_MEMORY"].str.contains(DRAM_INTERLEAVED, na=False)).fillna(0).astype(int)
         * (
             sorted_df["OUTPUT_0_W"]
             * sorted_df["OUTPUT_0_Z"]
@@ -147,7 +147,7 @@ def analyze_perf_csv(csv_file, layers, show_all, out_file=None, num_chips=1, seq
         ]
         sorted_df["% TIME"] = 100 * sorted_df["DURATION [ns]"] / sum_duration
         sorted_df["% DEV CB WAIT"] = (
-            100 * sorted_df["DEVICE COMPUTE CB WAIT FRONT [ns]"].astype(int) / sorted_df["DURATION [ns]"]
+            100 * sorted_df["DEVICE COMPUTE CB WAIT FRONT [ns]"].fillna(0).astype(int) / sorted_df["DURATION [ns]"]
         )
 
         # trim all floats to 6 decimal places
@@ -164,7 +164,9 @@ def analyze_perf_csv(csv_file, layers, show_all, out_file=None, num_chips=1, seq
             sum_duration = grouped_df["DURATION [ns]"].sum()
             grouped_df["% TIME"] = 100 * grouped_df["DURATION [ns]"] / sum_duration
             grouped_df["% DEV CB WAIT"] = (
-                100 * grouped_df["DEVICE COMPUTE CB WAIT FRONT [ns]"].astype(int) / grouped_df["DURATION [ns]"]
+                100
+                * grouped_df["DEVICE COMPUTE CB WAIT FRONT [ns]"].fillna(0).astype(int)
+                / grouped_df["DURATION [ns]"]
             )
 
             grouped_matmul_rows = group_by_op_all_devices(matmul_rows)
