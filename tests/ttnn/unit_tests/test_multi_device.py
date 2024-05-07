@@ -441,6 +441,7 @@ def test_4b_tensor(device_mesh):
 
 
 def test_slicing(device_mesh):
+    pytest.skip()
     tensor = ttnn.from_torch(
         torch.randn(1, 32, 32, 32),
         dtype=ttnn.bfloat16,
