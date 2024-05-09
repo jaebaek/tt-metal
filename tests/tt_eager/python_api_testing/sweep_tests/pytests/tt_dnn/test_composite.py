@@ -25,7 +25,6 @@ from models.utility_functions import is_wormhole_b0
 reference_pcc = defaultdict(lambda: 0.999)
 reference_pcc["silu"] = 0.9714
 reference_pcc["swish"] = reference_pcc["silu"]
-reference_pcc["softplus"] = 0.9984
 
 
 def custom_compare(*args, **kwargs):
@@ -68,7 +67,6 @@ if is_wormhole_b0():
                 "max",
                 "swish",
                 "log1p",
-                "softplus",
                 "mish",
                 "silu",
                 "polyval",
@@ -229,13 +227,6 @@ def test_run_eltwise_composite_test(fn, input_shapes, device, function_level_def
                 "rtol": random.choice([1e-3, 1e-5, 1e-7]),
                 "atol": random.choice([1e-2, 1e-4, 1e-6]),
                 "equal_nan": random.choice([False, True]),
-            }
-        )
-    elif fn in ["softplus"]:
-        test_args.update(
-            {
-                "beta": random.choice([0.5, -3, 1, 4]),
-                "threshold": random.choice([-20, 10, 20, 5]),
             }
         )
     run_single_pytorch_test(

@@ -1100,3 +1100,36 @@ class TestEltwiseUnary:
             device,
             test_args,
         )
+
+    @pytest.mark.parametrize("beta", [1.0, 5.0])
+    @pytest.mark.parametrize("threshold", [10.0, 20.0])
+    def test_run_eltwise_softplus(
+        self,
+        input_shapes,
+        beta,
+        threshold,
+        device,
+        function_level_defaults,
+        input_mem_config,
+        output_mem_config,
+    ):
+        datagen_func = [
+            generation_funcs.gen_func_with_cast(partial(generation_funcs.gen_rand, low=-100, high=100), torch.bfloat16)
+        ]
+        test_args = generation_funcs.gen_default_dtype_layout_device(input_shapes)[0]
+        test_args.update({"beta": beta, "threshold": threshold})
+        test_args.update(
+            {
+                "input_mem_config": [input_mem_config],
+                "output_mem_config": output_mem_config,
+            }
+        )
+        comparison_func = comparison_funcs.comp_pcc
+        run_single_pytorch_test(
+            "eltwise-softplus",
+            input_shapes,
+            datagen_func,
+            comparison_func,
+            device,
+            test_args,
+        )

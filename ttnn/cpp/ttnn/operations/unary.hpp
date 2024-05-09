@@ -115,16 +115,9 @@ struct Softplus {
         const Tensor& input,
         const float beta,
         const float threshold,
-        const std::optional<MemoryConfig>& memory_config_arg = std::nullopt) {
-        auto original_input_shape = input.get_shape();
-        auto input_4D = ttnn::unsqueeze_to_4D(input);
-
-        auto memory_config = memory_config_arg.value_or(input_4D.memory_config());
-        auto result = tt::tt_metal::softplus(input_4D, beta, threshold, memory_config);
-
-        result = ttnn::reshape(result, original_input_shape);
-
-        return result;
+        const std::optional<MemoryConfig>& memory_config = std::nullopt) {
+        return detail::execute_on_worker_thread(
+            input, {UnaryWithParam{ttnn::operations::unary::UnaryOpType::SOFTPLUS, {beta, threshold}}}, memory_config);
     }
 };
 }  // namespace unary
