@@ -50,7 +50,6 @@ def get_rand_falcon_inputs(
     configuration,
     num_layers=1,
     generate_attention_inputs=True,
-    optimized=False,
 ):
     # Generate input, attention_mask, and kv_cache --------------------------------------
     # TODO: Generate attention_mask on device
@@ -76,7 +75,7 @@ def get_rand_falcon_inputs(
                     attention_input_i = attention_input[batch * i : batch * (i + 1)]
                     attention_mask_bool_i = attention_mask_bool[batch * i : batch * (i + 1)]
                     tt_attention_input.append(torch2tt_tensor(attention_input_i.unsqueeze(1), device))
-                    if seq_len in [2048, 128, 1024] and optimized:
+                    if seq_len in [2048, 128, 1024]:
                         attn_masks = create_prefill_attn_mask_for_sharded_softmax(
                             (attention_mask_bool_i * -1e5),
                             configuration.num_attention_heads,

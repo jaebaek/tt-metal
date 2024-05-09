@@ -92,7 +92,7 @@ def pretty_print_model_config(model_config):
     return "\n".join(print_str)
 
 
-def get_model_config(model_config_str, prefill_seq_len=0, optimized=False):
+def get_model_config(model_config_str, prefill_seq_len=0):
     assert model_config_str in ACCEPTABLE_MODEL_CONFIG_STRS
     DRAM_MEMCFG = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
     L1_MEMCFG = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1)
@@ -193,8 +193,7 @@ def get_model_config(model_config_str, prefill_seq_len=0, optimized=False):
     return model_config
 
 
-def set_prefill_config(model_config, seq_len, dram_memcfg, optimized=False):
-    model_config["OPTIMIZED_MODE"] = optimized
+def set_prefill_config(model_config, seq_len, dram_memcfg):
     model_config["MLP_SEQ_LEN"] = seq_len
     model_config["MLP_PADDING_VALUE"] = 4608
     model_config["MLP_GRID_SIZE"] = (8, 8)
@@ -210,7 +209,7 @@ def set_prefill_config(model_config, seq_len, dram_memcfg, optimized=False):
         compute_with_storage_grid_size=model_config["MLP_GRID_SIZE"],
         in0_block_w=3,
         out_subblock_h=1,
-        out_subblock_w=1,  # 8,
+        out_subblock_w=8,
         per_core_M=4,
         per_core_N=72,
         transpose_mcast=False,
@@ -222,7 +221,7 @@ def set_prefill_config(model_config, seq_len, dram_memcfg, optimized=False):
         compute_with_storage_grid_size=model_config["MLP_GRID_SIZE"],
         in0_block_w=8,
         out_subblock_h=1,
-        out_subblock_w=1,  # 6,
+        out_subblock_w=6,
         per_core_M=4,
         per_core_N=18,
         transpose_mcast=False,
@@ -238,7 +237,7 @@ def set_prefill_config(model_config, seq_len, dram_memcfg, optimized=False):
         per_core_M=8,
         per_core_N=21,
         out_subblock_h=1,
-        out_subblock_w=1,  # 7,
+        out_subblock_w=7,
         transpose_mcast=False,
         fused_activation=None,
     )
@@ -259,8 +258,8 @@ def set_prefill_config(model_config, seq_len, dram_memcfg, optimized=False):
         in0_block_w=2,
         per_core_M=tiles_per_shard,
         per_core_N=seq_len // 32,
-        out_subblock_h=1,  # subblock_h,
-        out_subblock_w=1,  # subblock_w,
+        out_subblock_h=subblock_h,
+        out_subblock_w=subblock_w,
         fuse_batch=True,
         fused_activation=None,
         mcast_in0=False,
@@ -292,8 +291,8 @@ def set_prefill_config(model_config, seq_len, dram_memcfg, optimized=False):
         in0_block_w=seq_len // 32,
         per_core_M=tiles_per_shard,
         per_core_N=2,
-        out_subblock_h=1,  # subblock_h,
-        out_subblock_w=1,  # 2,
+        out_subblock_h=subblock_h,
+        out_subblock_w=2,
         fuse_batch=True,
         fused_activation=None,
         mcast_in0=False,

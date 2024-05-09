@@ -40,14 +40,10 @@ class TtFalconMLPPrefill(nn.Module):
         dense_4h_to_h_str = f"{layer_name}.mlp.dense_4h_to_h.weight"
 
         custom_output_shape_h_to_4h = (
-            (1, 1, self.padding_value, 4 * self.padding_value)
-            if (self.seq_len in [1024, 2048]) and model_config["OPTIMIZED_MODE"]
-            else None
+            (1, 1, self.padding_value, 4 * self.padding_value) if self.seq_len in [1024, 2048] else None
         )
         custom_output_shape_4h_to_h = (
-            (1, 1, 4 * self.padding_value, self.padding_value)
-            if (self.seq_len in [1024, 2048]) and model_config["OPTIMIZED_MODE"]
-            else None
+            (1, 1, 4 * self.padding_value, self.padding_value) if self.seq_len in [1024, 2048] else None
         )
 
         self.dense_h_to_4h_weights = get_weights_cached(
@@ -71,9 +67,9 @@ class TtFalconMLPPrefill(nn.Module):
             custom_output_shape=custom_output_shape_4h_to_h,
         )
 
-        if "MLP_PREFILL_PADDING_TENSORS" not in self.model_config and model_config["OPTIMIZED_MODE"]:
+        if "MLP_PREFILL_PADDING_TENSORS" not in self.model_config:
             self._load_mlp_padded_tensors()
-        if "MLP_OUTPUT_TENSORS" not in self.model_config and model_config["OPTIMIZED_MODE"]:
+        if "MLP_OUTPUT_TENSORS" not in self.model_config:
             self._allocate_output_mlp_tensors()
 
     def _load_mlp_padded_tensors(self):
@@ -116,7 +112,7 @@ class TtFalconMLPPrefill(nn.Module):
         self.model_config["MLP_OUTPUT_TENSORS"] = out_tt
 
     def forward(self, x: tt_lib.tensor.Tensor) -> tt_lib.tensor.Tensor:
-        if self.model_config["OPTIMIZED_MODE"] and self.seq_len in [1024, 2048]:
+        if self.seq_len in [1024, 2048]:
             for device_id in range(self.num_devices):
                 tt_padding = self.model_config["MLP_PREFILL_PADDING_TENSORS"][device_id][self.seq_len]
 
@@ -239,14 +235,10 @@ class TtFalconMLPDecode(nn.Module):
         dense_4h_to_h_str = f"{layer_name}.mlp.dense_4h_to_h.weight"
 
         custom_output_shape_h_to_4h = (
-            (1, 1, self.padding_value, 4 * self.padding_value)
-            if self.prefill_seq_len in [1024, 2048] and model_config["OPTIMIZED_MODE"]
-            else None
+            (1, 1, self.padding_value, 4 * self.padding_value) if self.prefill_seq_len in [1024, 2048] else None
         )
         custom_output_shape_4h_to_h = (
-            (1, 1, 4 * self.padding_value, self.padding_value)
-            if self.prefill_seq_len in [1024, 2048] and model_config["OPTIMIZED_MODE"]
-            else None
+            (1, 1, 4 * self.padding_value, self.padding_value) if self.prefill_seq_len in [1024, 2048] else None
         )
 
         self.dense_h_to_4h_weights = get_weights_cached(
@@ -269,7 +261,7 @@ class TtFalconMLPDecode(nn.Module):
             weights_dict=weights_dict,
             custom_output_shape=custom_output_shape_4h_to_h,
         )
-        if "MLP_DECODE_PADDING_TENSORS" not in self.model_config and model_config["OPTIMIZED_MODE"]:
+        if "MLP_DECODE_PADDING_TENSORS" not in self.model_config:
             self._load_mlp_padded_tensors()
 
     def _load_mlp_padded_tensors(self):
@@ -291,11 +283,7 @@ class TtFalconMLPDecode(nn.Module):
         hidden_states = []
         for device_id in range(len(x)):
             # pad inputs with padding tensor if not already padded
-            if (
-                x[device_id].shape[-1] < self.padding_value
-                and self.prefill_seq_len in [1024, 2048]
-                and self.model_config["OPTIMIZED_MODE"]
-            ):
+            if x[device_id].shape[-1] < self.padding_value and self.prefill_seq_len in [1024, 2048]:
                 x[device_id] = ttnn.concat(
                     [x[device_id], self.model_config["MLP_DECODE_PADDING_TENSORS"][device_id]], dim=3
                 )
@@ -318,7 +306,7 @@ class TtFalconMLPDecode(nn.Module):
                 packer_l1_acc=True,
             )
         # remove padding from output
-        if self.prefill_seq_len in [1024, 2048] and self.model_config["OPTIMIZED_MODE"]:
+        if self.prefill_seq_len in [1024, 2048]:
             hidden_states = [hidden_states[i][:, :, :, : self.hidden_size] for i in range(len(self.devices))]
 
         # return TT Tensor

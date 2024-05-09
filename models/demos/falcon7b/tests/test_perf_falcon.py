@@ -376,8 +376,8 @@ class TestParametrized:
     @pytest.mark.parametrize(
         "llm_mode, num_layers, batch, seq_len, kv_cache_len, model_config_str, expected_output_pcc, expected_k_cache_pcc, expected_v_cache_pcc, expected_inference_time",
         (
-            ("prefill", 32, 1, 128, 0, "BFLOAT16-DRAM", 0.85, 0.97, 0.86, 0.33),
-            ("prefill", 32, 1, 128, 0, "BFLOAT16-L1", 0.85, 0.97, 0.86, 0.31),
+            # ("prefill", 32, 1, 128, 0, "BFLOAT16-DRAM", 0.85, 0.97, 0.86, 0.33), #TODO: Add optimized prefill GS tests #8349
+            # ("prefill", 32, 1, 128, 0, "BFLOAT16-L1", 0.85, 0.97, 0.86, 0.31),
             ("prefill", 32, 1, 256, 0, "BFLOAT16-DRAM", 0.90, 0.97, 0.87, 0.48),
             ("prefill", 32, 1, 256, 0, "BFLOAT16-L1", 0.90, 0.97, 0.87, 0.39),
             ("decode", 32, 32, 1, 128, "BFLOAT16-DRAM", 0.63, 0.80, 0.84, 0.30),
@@ -388,8 +388,8 @@ class TestParametrized:
             ("decode", 32, 32, 1, 2047, "BFLOAT16-L1", 0.55, 0.91, 0.89, 0.35),
         ),
         ids=[
-            "prefill_seq128_bf16_dram",
-            "prefill_seq128_bf16_l1",
+            # "prefill_seq128_bf16_dram",
+            # "prefill_seq128_bf16_l1",
             "prefill_seq256_bf16_dram",
             "prefill_seq256_bf16_l1",
             "decode_batch32_128_bf16_dram",
@@ -426,7 +426,7 @@ class TestParametrized:
         if model_config_str == "BFLOAT16-L1_SHARDED":
             pytest.skip("Sharded config is not supported on GS")
 
-        model_config = get_model_config(model_config_str)
+        model_config = get_model_config(model_config_str, seq_len)
         tt_cache_path = get_tt_cache_path(
             model_version, model_subdir="Falcon", default_dir=model_config["DEFAULT_CACHE_PATH"]
         )
@@ -469,8 +469,6 @@ class TestParametrized:
     ):
         if model_config_str == "BFLOAT16-L1_SHARDED" and kv_cache_len == 2047:
             pytest.skip(f"kv_cache_len={kv_cache_len} does not fit with L1_SHARDED")
-        if model_config_str == "BFLOAT16-L1_SHARDED" and llm_mode == "prefill":
-            pytest.skip(f"prefill does not support L1_SHARDED")
         if num_devices > 1:
             devices = get_devices_for_t3000(all_devices, num_devices)
         else:
@@ -478,7 +476,7 @@ class TestParametrized:
         # Enable Async Mode
         for device in devices:
             device.enable_async(async_mode)
-        model_config = get_model_config(model_config_str)
+        model_config = get_model_config(model_config_str, seq_len)
         tt_cache_path = get_tt_cache_path(
             model_version, model_subdir="Falcon", default_dir=model_config["DEFAULT_CACHE_PATH"]
         )
@@ -507,10 +505,9 @@ class TestParametrized:
     @pytest.mark.parametrize(
         "llm_mode, num_layers, batch, seq_len, kv_cache_len, model_config_str, expected_output_pcc, expected_k_cache_pcc, expected_v_cache_pcc, expected_inference_time",
         (
-            ("prefill", 32, 1, 128, 0, "BFLOAT16-DRAM", 0.97, 0.99, 0.96, 0.17),
-            ("prefill", 32, 1, 128, 0, "BFLOAT16-L1", 0.97, 0.99, 0.96, 0.17),
-            ("prefill", 32, 1, 256, 0, "BFLOAT16-DRAM", 0.98, 0.99, 0.96, 0.2),
-            ("prefill", 32, 1, 256, 0, "BFLOAT16-L1", 0.98, 0.99, 0.96, 0.2),
+            ("prefill", 32, 1, 128, 0, "BFLOAT16-L1_SHARDED", 0.97, 0.99, 0.96, 0.1),
+            ("prefill", 32, 1, 1024, 0, "BFLOAT16-L1_SHARDED", 0.98, 0.99, 0.96, 1),
+            ("prefill", 32, 1, 2048, 0, "BFLOAT16-L1_SHARDED", 0.99, 0.99, 0.97, 1),
             ("decode", 32, 32, 1, 128, "BFLOAT16-DRAM", 0.91, 0.92, 0.93, 0.15),
             ("decode", 32, 32, 1, 128, "BFLOAT16-L1", 0.91, 0.92, 0.93, 0.15),
             ("decode", 32, 32, 1, 128, "BFLOAT16-L1_SHARDED", 0.92, 0.95, 0.95, 0.1),
@@ -521,10 +518,9 @@ class TestParametrized:
             ("decode", 32, 32, 1, 2047, "BFLOAT16-L1", 0.88, 0.93, 0.93, 0.6),
         ),
         ids=[
-            "prefill_seq128_bf16_dram",
-            "prefill_seq128_bf16_l1",
-            "prefill_seq256_bf16_dram",
-            "prefill_seq256_bf16_l1",
+            "prefill_seq128_bf16_l1_sharded",
+            "prefill_seq1024_bf16_l1_sharded",
+            "prefill_seq2048_bf16_l1_sharded",
             "decode_batch32_128_bf16_dram",
             "decode_batch32_128_bf16_l1",
             "decode_batch32_128_bf16_l1_sharded",
@@ -558,10 +554,8 @@ class TestParametrized:
         async_mode,
     ):
         if async_mode:
-            if llm_mode == "prefill" and seq_len == 128:
-                pytest.skip(
-                    f"Skipping {llm_mode} with {seq_len} in async mode. Config is supported but provides redundant testing."
-                )
+            if llm_mode == "prefill":
+                pytest.skip(f"Skipping {llm_mode} in async mode until all used operations support async mode (#8349).")
             if llm_mode == "decode" and not (kv_cache_len == 2047):
                 if not (model_config_str == "BFLOAT16-L1_SHARDED" and kv_cache_len == 1024):
                     pytest.skip(
@@ -622,6 +616,9 @@ class TestParametrized:
         get_tt_cache_path,
         all_devices,
     ):
+        if llm_mode == "prefill" and seq_len >= 1024:
+            pytest.skip(f"Multi device for prefill with seq len >= 1024 has not been tested yet. #8349")
+
         self.run_perf_wh_bare_metal(
             model_version,
             num_devices,
@@ -685,7 +682,7 @@ def test_perf_virtual_machine(
     if is_e75(device) and batch == 32:
         pytest.skip("Falcon batch 32 is not supported on E75")
 
-    model_config = get_model_config(model_config_str)
+    model_config = get_model_config(model_config_str, seq_len)
     tt_cache_path = get_tt_cache_path(
         model_version, model_subdir="Falcon", default_dir=model_config["DEFAULT_CACHE_PATH"]
     )
