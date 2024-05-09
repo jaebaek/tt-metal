@@ -86,7 +86,6 @@ static struct PrefetchExecBufState {
 
 // Feature to stall the prefetcher, mainly for ExecBuf impl which reuses CmdDataQ
 static enum StallState { STALL_NEXT = 2, STALLED = 1, NOT_STALLED = 0} stall_state = NOT_STALLED;
-
 static_assert((downstream_cb_base & (downstream_cb_page_size - 1)) == 0);
 
 template<bool cmddat_wrap_enable,
@@ -220,7 +219,7 @@ void fetch_q_get_cmds(uint32_t& fence, uint32_t& cmd_ptr, uint32_t& pcie_read_pt
     }
     if (!cmd_ready) {
         if (pending_read_size != 0) {
-            DPRINT << "fetch_q_get_cmds barrier" << ENDL();
+	    DPRINT << "fetch_q_get_cmds barrier" << ENDL();
             noc_async_read_barrier();
 
             // wrap the cmddat_q
@@ -249,7 +248,7 @@ void fetch_q_get_cmds(uint32_t& fence, uint32_t& cmd_ptr, uint32_t& pcie_read_pt
             // By here, prefetch_q_ready must be false
             // Nothing to fetch, nothing pending, nothing available, stall on host
             DEBUG_STATUS("HQW");
-            DPRINT << "fetch_q_get_cmds stall" << ENDL();
+	    DPRINT << "fetch_q_get_cmds stall" << ENDL();
             while ((fetch_size = *prefetch_q_rd_ptr) == 0);
             fetch_q_get_cmds<preamble_size>(fence, cmd_ptr, pcie_read_ptr);
             DEBUG_STATUS("HQD");
@@ -298,6 +297,7 @@ static uint32_t process_relay_inline_cmd(uint32_t cmd_ptr,
 
     // Assume the downstream buffer is big relative to cmddat command size that we can
     // grab what we need in one chunk
+
     cb_acquire_pages<my_noc_xy, my_downstream_cb_sem_id>(npages);
 
     uint32_t remaining = cmddat_q_end - data_ptr;
@@ -807,6 +807,7 @@ bool process_cmd(uint32_t& cmd_ptr,
                  uint32_t& downstream_data_ptr,
                  uint32_t& stride) {
 
+    DeviceZoneScopedND("PROCESS-CMD", block_noc_writes_to_clear, rd_block_idx );
     volatile CQPrefetchCmd tt_l1_ptr *cmd = (volatile CQPrefetchCmd tt_l1_ptr *)cmd_ptr;
     bool done = false;
 
@@ -833,7 +834,7 @@ bool process_cmd(uint32_t& cmd_ptr,
         break;
 
     case CQ_PREFETCH_CMD_RELAY_INLINE:
-        DPRINT << "relay inline" << ENDL();
+	DPRINT << "relay inline" << ENDL();
         if (exec_buf) {
             stride = process_relay_inline_exec_buf_cmd(cmd_ptr, downstream_data_ptr);
         } else {
@@ -863,7 +864,7 @@ bool process_cmd(uint32_t& cmd_ptr,
         break;
 
     case CQ_PREFETCH_CMD_STALL:
-        DPRINT << "stall" << ENDL();
+	DPRINT << "stall" << ENDL();
         stride = process_stall(cmd_ptr);
         break;
 
@@ -1096,9 +1097,9 @@ void kernel_main_hd() {
 
     uint32_t cmd_ptr = cmddat_q_base;
     uint32_t fence = cmddat_q_base;
-
     bool done = false;
     while (!done) {
+        DeviceZoneScopedND("KERNEL-MAIN-HD", block_noc_writes_to_clear, rd_block_idx );
         constexpr uint32_t preamble_size = 0;
         fetch_q_get_cmds<preamble_size>(fence, cmd_ptr, pcie_read_ptr);
 

@@ -106,7 +106,7 @@ void InitDeviceProfiler(Device *device){
 #endif
 }
 
-void DumpDeviceProfileResults(Device *device, bool free_buffers) {
+void DumpDeviceProfileResults(Device *device, bool lastDump) {
 #if defined(PROFILER)
     std::vector<CoreCoord> workerCores;
     auto device_id = device->id();
@@ -115,36 +115,47 @@ void DumpDeviceProfileResults(Device *device, bool free_buffers) {
         const CoreCoord curr_core = device->worker_core_from_logical_core(core);
         workerCores.push_back(curr_core);
     }
-    for (const CoreCoord& core : tt::get_logical_dispatch_cores(device_id, device_num_hw_cqs)) {
-        CoreType dispatch_core_type = tt::get_dispatch_core_type(device_id, device_num_hw_cqs);
-        const auto curr_core = device->physical_core_from_logical_core(core, dispatch_core_type);
-        workerCores.push_back(curr_core);
+    if (tt::llrt::OptionsG.get_profiler_do_dispatch_cores()) {
+        for (const CoreCoord& core : tt::get_logical_dispatch_cores(device_id, device_num_hw_cqs)) {
+            CoreType dispatch_core_type = tt::get_dispatch_core_type(device_id, device_num_hw_cqs);
+            const auto curr_core = device->physical_core_from_logical_core(core, dispatch_core_type);
+            workerCores.push_back(curr_core);
+        }
+        for (const CoreCoord& core : tt::Cluster::instance().get_soc_desc(device_id).physical_ethernet_cores){
+            workerCores.push_back(core);
+        }
     }
-    for (const CoreCoord& core : tt::Cluster::instance().get_soc_desc(device_id).physical_ethernet_cores)
+    else
     {
-        workerCores.push_back(core);
+        for (const CoreCoord& core : device->get_active_ethernet_cores(true)){
+            auto physicalCore = device->physical_core_from_logical_core(core, CoreType::ETH);
+            workerCores.push_back(physicalCore);
+        }
     }
-    DumpDeviceProfileResults(device, workerCores, free_buffers);
+    DumpDeviceProfileResults(device, workerCores, lastDump);
 #endif
 }
 
-void DumpDeviceProfileResults(Device *device, std::vector<CoreCoord> &worker_cores, bool free_buffers){
+void DumpDeviceProfileResults(Device *device, std::vector<CoreCoord> &worker_cores, bool lastDump){
 #if defined(PROFILER)
     ZoneScoped;
     if (getDeviceProfilerState())
     {
-        const auto USE_FAST_DISPATCH = std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr;
-        if (USE_FAST_DISPATCH)
-        {
-            Finish(device->command_queue());
-        }
-        TT_FATAL(DprintServerIsRunning() == false, "Debug print server is running, cannot dump device profiler data");
+	if (!lastDump)
+	{
+	    const auto USE_FAST_DISPATCH = std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr;
+	    if (USE_FAST_DISPATCH)
+	    {
+		Finish(device->command_queue());
+	    }
+	}
+	TT_FATAL(DprintServerIsRunning() == false, "Debug print server is running, cannot dump device profiler data");
         auto device_id = device->id();
         if (tt_metal_device_profiler_map.find(device_id) != tt_metal_device_profiler_map.end())
         {
             tt_metal_device_profiler_map.at(device_id).setDeviceArchitecture(device->arch());
             tt_metal_device_profiler_map.at(device_id).dumpResults(device, worker_cores);
-            if (free_buffers)
+            if (lastDump)
             {
                 // Process is ending, no more device dumps are coming, reset your ref on the buffer so deallocate is the last
                 // owner.

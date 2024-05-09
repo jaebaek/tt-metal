@@ -80,6 +80,7 @@ constexpr uint32_t l1_cache_size = ((max_write_packed_cores + l1_to_local_cache_
 
 static uint32_t l1_cache[l1_cache_size];
 
+
 // NOTE: CAREFUL USING THIS FUNCTION
 // It is call "careful_copy" because you need to be careful...
 // It copies beyond count by up to 5 elements make sure src and dst addresses are safe
@@ -885,6 +886,7 @@ void kernel_main() {
     }
     bool done = false;
     while (!done) {
+        DeviceZoneScopedND("CQ-DISPATCH", block_noc_writes_to_clear, rd_block_idx );
         if (cmd_ptr == cb_fence) {
             get_cb_page<
                 dispatch_cb_base,
@@ -892,10 +894,10 @@ void kernel_main() {
                 dispatch_cb_log_page_size,
                 my_noc_xy,
                 my_dispatch_cb_sem_id>(cmd_ptr,
-                                          cb_fence,
-                                          block_noc_writes_to_clear,
-                                          block_next_start_addr,
-                                          rd_block_idx);
+                        cb_fence,
+                        block_noc_writes_to_clear,
+                        block_next_start_addr,
+                        rd_block_idx);
         }
 
         done = is_d_variant ?
@@ -908,10 +910,10 @@ void kernel_main() {
         // XXXXX move this inside while loop waiting for get_dispatch_cb_page above
         // XXXXX can potentially clear a partial block when stalled w/ some more bookkeeping
         cb_block_release_pages<upstream_noc_xy,
-                               upstream_dispatch_cb_sem_id,
-                               dispatch_cb_blocks,
-                               dispatch_cb_pages_per_block>(block_noc_writes_to_clear,
-                                                            wr_block_idx);
+            upstream_dispatch_cb_sem_id,
+            dispatch_cb_blocks,
+            dispatch_cb_pages_per_block>(block_noc_writes_to_clear,
+                    wr_block_idx);
     }
 
     noc_async_write_barrier();

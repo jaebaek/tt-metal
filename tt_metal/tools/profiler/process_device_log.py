@@ -302,9 +302,10 @@ def is_new_op_device(tsCore, coreOpMap):
     if (risc == "BRISC" and timerID["zone_name"] == "BRISC-FW" and timerID["zone_phase"] == "begin") or (
         risc == "ERISC" and timerID["zone_name"] == "ERISC-FW" and timerID["zone_phase"] == "begin"
     ):
-        assert (
-            core not in coreOpMap.keys()
-        ), f"Unexpected BRISC start in {tsCore} {coreOpMap[core]}, this could be caused by soft resets"
+        assert core not in coreOpMap.keys(), (
+            f"Unexpected BRISC start in {tsCore} {coreOpMap[core]}, this could be caused by soft resets \n\n"
+            + "\n".join([f"{core} - {data}" for core, data in coreOpMap.items()])
+        )
         if not coreOpMap:
             isNewOp = True
         coreOpMap[core] = (tsValue,)

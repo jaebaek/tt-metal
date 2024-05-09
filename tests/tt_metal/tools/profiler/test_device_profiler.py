@@ -99,7 +99,7 @@ def test_custom_cycle_count():
 def test_full_buffer():
     OP_COUNT = 26
     RISC_COUNT = 5
-    ZONE_COUNT = 125
+    ZONE_COUNT = 124
     REF_COUNT_DICT = {
         "grayskull": [108 * OP_COUNT * RISC_COUNT * ZONE_COUNT, 88 * OP_COUNT * RISC_COUNT * ZONE_COUNT],
         "wormhole_b0": [

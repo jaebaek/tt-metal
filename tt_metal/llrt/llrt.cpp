@@ -305,7 +305,7 @@ static bool check_if_riscs_on_specified_core_done(chip_id_t chip_id, const CoreC
     bool is_active_eth_core = false;
     bool is_inactive_eth_core = false;
 
-        // Determine whether an ethernet core is active or idle. Their host handshake interfaces are different.
+    // Determine whether an ethernet core is active or idle. Their host handshake interfaces are different.
     if (is_eth_core) {
         auto active_eth_cores =  tt::Cluster::instance().get_active_ethernet_cores(chip_id);
         auto inactive_eth_cores =  tt::Cluster::instance().get_inactive_ethernet_cores(chip_id);
