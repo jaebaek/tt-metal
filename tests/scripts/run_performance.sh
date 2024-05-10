@@ -36,7 +36,11 @@ run_perf_models_llm_javelin() {
     local tt_arch=$1
     local test_marker=$2
 
-    env pytest models/demos/falcon7b/tests -m $test_marker
+    if [ "$tt_arch" == "wormhole_b0" ]; then
+        env WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/demos/falcon7b/tests -m $test_marker
+    else
+        env pytest models/demos/falcon7b/tests -m $test_marker
+    fi
 
     if [ "$tt_arch" == "wormhole_b0" ]; then
         env pytest models/demos/mamba/tests -m $test_marker
@@ -52,7 +56,7 @@ run_perf_models_llm_javelin_multi_device() {
     local tt_arch=$1
     local test_marker=$2
 
-    env pytest models/demos/falcon7b/tests -m $test_marker
+    env WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/demos/falcon7b/tests -m $test_marker
 
     # Mistral8x7b env flags are set inside the tests
     env pytest models/demos/t3000/mixtral8x7b/tests -m $test_marker
