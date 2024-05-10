@@ -3,19 +3,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "tt_dnn/op_library/reduce/reduce_op.hpp"
-#include "tt_dnn/op_library/transpose/transpose_op.hpp"
-#include "tt_dnn/op_library/auto_format.hpp"
-#include "tt_dnn/op_library/reshape/reshape_op.hpp"
-#include "tt_dnn/op_library/run_operation.hpp"
-#include "tt_metal/tools/profiler/op_profiler.hpp"
-#include "tt_dnn/op_library/bcast/bcast_op.hpp"
-#include "tt_dnn/op_library/composite/composite_ops.hpp"
-#include "tt_metal/host_api.hpp"
-#include "tt_metal/common/constants.hpp"
-
-#include "third_party/magic_enum/magic_enum.hpp"
 
 #include <limits>
+
+#include "third_party/magic_enum/magic_enum.hpp"
+#include "tt_dnn/op_library/bcast/bcast_op.hpp"
+#include "tt_dnn/op_library/composite/composite_ops.hpp"
+#include "tt_dnn/op_library/reshape/reshape_op.hpp"
+#include "tt_dnn/op_library/run_operation.hpp"
+#include "tt_dnn/op_library/transpose/transpose_op.hpp"
+#include "tt_metal/common/constants.hpp"
+#include "tt_metal/host_api.hpp"
+#include "tt_metal/tools/profiler/op_profiler.hpp"
 
 using namespace tt::constants;
 
@@ -170,29 +169,43 @@ Tensor reduce(const Tensor &input_tensor, ReduceOpMath reduce_math, ReduceOpDim 
         operation::launch_op(
         [reduce_math, reduce_dim, pad_value, scaler, output_dtype, output_mem_config] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
             const auto& input_tensor = input_tensors.at(0);
-            Device * device;
+            Device * device = input_tensor.device();
 
-            // Get the device
-            if (input_tensor.storage_type() != StorageType::DEVICE) {
-                device = AutoFormat::GetDefaultDevice();
-                TT_ASSERT(device != nullptr, "Requires setting default device if no inputs to op are on device");
-            } else {
-                device = input_tensor.device();
-            }
-            auto input_tensor_pad_shape = AutoFormat::pad_to_tile_shape(input_tensor.get_legacy_shape());
-            auto formatted_input_tensor = input_tensor;
-            if (!AutoFormat::check_input_tensor_format(input_tensor, input_tensor_pad_shape)) {
-                formatted_input_tensor = AutoFormat::format_input_tensor(input_tensor, device, input_tensor_pad_shape, pad_value, Layout::TILE);
-            }
-            const Tensor output_tensor = operation::run_without_autoformat(Reduce{reduce_math, ReduceOpDim::W, 1.0, output_mem_config, output_dtype.value_or(input_tensor.get_dtype())}, {formatted_input_tensor}).at(0);
-            return operation::run_without_autoformat(Reduce{reduce_math, ReduceOpDim::H, scaler, output_mem_config, output_dtype.value_or(input_tensor.get_dtype())}, {output_tensor});
+            const Tensor output_tensor = operation::run(
+                                             Reduce{
+                                                 reduce_math,
+                                                 ReduceOpDim::W,
+                                                 1.0,
+                                                 output_mem_config,
+                                                 output_dtype.value_or(input_tensor.get_dtype())},
+                                             {input_tensor})
+                                             .at(0);
+            return operation::run(
+                Reduce{
+                    reduce_math,
+                    ReduceOpDim::H,
+                    scaler,
+                    output_mem_config,
+                    output_dtype.value_or(input_tensor.get_dtype())},
+                {output_tensor});
         }, {input_tensor}, output_tensors);
     } else {
-        operation::launch_with_autoformat(
-        [reduce_math, reduce_dim, pad_value, scaler, output_dtype, output_mem_config] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
-            const auto& input_tensor = input_tensors.at(0);
-            return operation::run_with_autoformat(Reduce{reduce_math, reduce_dim, scaler, output_mem_config, output_dtype.value_or(input_tensor.get_dtype())}, {input_tensor}, {}, pad_value);
-        }, {input_tensor}, output_tensors);
+        operation::launch_op(
+            [reduce_math, reduce_dim, pad_value, scaler, output_dtype, output_mem_config](
+                const std::vector<Tensor>& input_tensors,
+                const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
+                const auto& input_tensor = input_tensors.at(0);
+                return operation::run(
+                    Reduce{
+                        reduce_math,
+                        reduce_dim,
+                        scaler,
+                        output_mem_config,
+                        output_dtype.value_or(input_tensor.get_dtype())},
+                    {input_tensor});
+            },
+            {input_tensor},
+            output_tensors);
     }
     return output_tensors.at(0);
 }
@@ -235,50 +248,24 @@ Tensor reduce_on_dim(const Tensor &input_tensor, uint dim, const MemoryConfig& o
     }
 
     // Other sum dims will autoformat first before doing composite operations
-    Device * device;
-
-    // Get the device
-    if (input_tensor.storage_type() != StorageType::DEVICE) {
-        device = AutoFormat::GetDefaultDevice();
-        TT_FATAL(device != nullptr, "Requires setting default device if no inputs to op are on device");
-    } else {
-        device = input_tensor.device();
-    }
+    Device * device = input_tensor.device();
 
     // @tt-aho TODO: Profile/determine which is more performant
     // reduce sum on h
     // 1 extra transpose wh and reduce sum on w
     // Fused tranpose cw and reduce sum on w
-    if ( dim == 1 ) {
-        // Pad before running the op to only pay cost of formatting once
-        auto input_tensor_pad_shape = AutoFormat::pad_to_tile_shape(input_tensor.get_legacy_shape(), true);
-        auto out_shape = input_tensor.get_legacy_shape();
-        out_shape[1] = 1;
-
-        auto formatted_input_tensor = input_tensor;
+    if (dim == 1) {
         float pad_value = (OpKind == ReduceOpMath::MAX) ? -std::numeric_limits<float>::infinity() : (OpKind == ReduceOpMath::MIN) ? std::numeric_limits<float>::infinity() : 0;
-
-        if (!AutoFormat::check_input_tensor_format(input_tensor, input_tensor_pad_shape)) {
-            formatted_input_tensor = AutoFormat::format_input_tensor(input_tensor, device, input_tensor_pad_shape, pad_value, Layout::TILE);
-        }
-        Tensor output = transpose(formatted_input_tensor, 1, -2, output_mem_config);
+        // TODO: use pad_value
+        Tensor output = transpose(input_tensor, 1, -2, output_mem_config);
         output = reduce_on_dim<OpKind>(output, 2, output_mem_config);
         output = transpose(output, 1, -2, output_mem_config);
-        return AutoFormat::format_output_tensor(output, out_shape, device, Layout::TILE);
+        return output;
     } else {
-        // Pad before running the op to only pay cost of formatting once
-        auto input_tensor_pad_shape = AutoFormat::pad_to_tile_shape(input_tensor.get_legacy_shape(), false, true);
-        auto out_shape = input_tensor.get_legacy_shape();
-        out_shape[0] = 1;
-
-        auto formatted_input_tensor = input_tensor;
-        if (!AutoFormat::check_input_tensor_format(input_tensor, input_tensor_pad_shape)) {
-            formatted_input_tensor = AutoFormat::format_input_tensor(input_tensor, device, input_tensor_pad_shape, 0.0, Layout::TILE);
-        }
         Tensor output = transpose(input_tensor, 0, -2, output_mem_config);
         output = reduce_on_dim<OpKind>(output, 2, output_mem_config);
         output = transpose(output, 0, -2, output_mem_config);
-        return AutoFormat::format_output_tensor(output, out_shape, device, Layout::TILE);
+        return output;
     }
 }
 

@@ -522,7 +522,7 @@ Tensor moreh_layernorm(
     const std::optional<std::reference_wrapper<const Tensor>> mean,
     const std::optional<std::reference_wrapper<const Tensor>> rstd,
     const MemoryConfig& output_mem_config) {
-    return operation::run_with_autoformat(
+    return operation::run(
                operations::primary::MorehLayerNorm{
                    .normalized_dims = normalized_dims, .eps = eps, .output_mem_config = std::move(output_mem_config)},
                {input},

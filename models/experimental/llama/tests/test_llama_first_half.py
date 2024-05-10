@@ -34,7 +34,6 @@ def tt_llama_first_half_decoders(
     position_ids_padded = gen_position_ids(input_embeds)
 
     device = tt_lib.device.CreateDevice(0)
-    tt_lib.device.SetDefaultDevice(device)
     tt_inputs = torch_to_tt_tensor_rm(input_embeds, device)
 
     logger.debug(f"The call of the first half started")
@@ -105,9 +104,7 @@ def test_llama_first_half(pcc, reset_seeds):
 
     # load llama pytorch model ================================================
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
-    hugging_face_reference_model = AutoModelForCausalLM.from_pretrained(
-        llama_model_name
-    )
+    hugging_face_reference_model = AutoModelForCausalLM.from_pretrained(llama_model_name)
 
     hugging_face_reference_model.eval()
     # get configurations
@@ -120,22 +117,16 @@ def test_llama_first_half(pcc, reset_seeds):
     attention_mask = inputs.attention_mask
 
     is_input_padded = True
-    input_ids_padded, _, position_ids_padded = prepare_llama_input(
-        prompt, tokenizer, configuration, is_input_padded
-    )
+    input_ids_padded, _, position_ids_padded = prepare_llama_input(prompt, tokenizer, configuration, is_input_padded)
 
     # TT output: call forward() function several times ========================
     with torch.no_grad():
         # call huggingface model
         # PyTorch output =========================================================================
-        embeddings = torch.nn.Embedding(
-            configuration.vocab_size, configuration.hidden_size
-        )
+        embeddings = torch.nn.Embedding(configuration.vocab_size, configuration.hidden_size)
         input_embeds = embeddings(input_ids_padded)
 
-        pt_llama_first_half = PytorchLlamaDecoderModelStacked(
-            hugging_face_reference_model, decoder_stack_list
-        )
+        pt_llama_first_half = PytorchLlamaDecoderModelStacked(hugging_face_reference_model, decoder_stack_list)
         pt_llama_first_half.eval()
         pytorch_out = pt_llama_first_half(x=input_embeds, y=position_ids_padded)
 

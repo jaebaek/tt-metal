@@ -6,11 +6,10 @@
 
 #include <iostream>
 
-#include "tt_metal/common/constants.hpp"
-#include "tt_dnn/op_library/auto_format.hpp"
 #include "tt_dnn/op_library/reshape/reshape_op.hpp"
 #include "tt_dnn/op_library/transpose/transpose_op.hpp"
 #include "tt_dnn/op_library/work_split.hpp"
+#include "tt_metal/common/constants.hpp"
 #include "tt_metal/detail/util.hpp"
 #include "tt_metal/host_api.hpp"
 
@@ -293,10 +292,7 @@ std::vector<Tensor> impl_split_last_dim_two_chunks_tiled(const Tensor &input_ten
 
     auto input_shape = input_tensor.get_legacy_shape();
     TT_FATAL(input_shape[-1] % TILE_WIDTH == 0, "Split last dim currently only supported tile sized widths");
-
-    auto padded_input_shape = AutoFormat::pad_to_tile_shape(input_shape);
-    FormatParams input_format_params = {.pad_shape = padded_input_shape, .pad_value = 0.0, .target_layout = Layout::TILE};
-    return operation::run_with_autoformat(op, {input_tensor}, {input_format_params}, {Layout::TILE, Layout::TILE});
+    return operation::run(op, {input_tensor});
 }
 
 std::vector<Tensor> split_dim_two_chunks_tiled(

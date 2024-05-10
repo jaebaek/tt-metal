@@ -14,7 +14,6 @@
 
 #include "tt_dnn/op_library/work_split.hpp"
 #include "tt_dnn/op_library/sharding_utilities.hpp"
-#include "tt_dnn/op_library/auto_format.hpp"
 
 #include "tensor/tensor_utils.hpp"
 

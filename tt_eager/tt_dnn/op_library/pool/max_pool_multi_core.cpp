@@ -91,7 +91,7 @@ uint32_t get_num_cores(const Device* device, uint32_t out_nhw, uint32_t nbatch) 
                 uint32_t out_nhw_per_core = (uint32_t) ceil((float) out_nhw / avail_ncores);
                 ncores = out_nhw / out_nhw_per_core;
                 while (avail_ncores > 0) {
-                    if (out_nhw % avail_ncores == 0 && (out_nhw / avail_ncores) % TILE_HEIGHT == 0) {
+                    if (out_nhw % avail_ncores == 0 && (out_nhw / avail_ncores) % tt::constants::TILE_HEIGHT == 0) {
                         ncores = avail_ncores;
                         break;
                     }
@@ -104,7 +104,7 @@ uint32_t get_num_cores(const Device* device, uint32_t out_nhw, uint32_t nbatch) 
         uint32_t out_nhw_per_core = (uint32_t) ceil((float) out_nhw / avail_ncores);
         ncores = out_nhw / out_nhw_per_core;
         while (avail_ncores > 0) {
-            if (out_nhw % avail_ncores == 0 && (out_nhw / avail_ncores) % TILE_HEIGHT == 0) {
+            if (out_nhw % avail_ncores == 0 && (out_nhw / avail_ncores) % tt::constants::TILE_HEIGHT == 0) {
                 ncores = avail_ncores;
                 break;
             }

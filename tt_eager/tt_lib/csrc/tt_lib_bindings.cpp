@@ -5,7 +5,6 @@
 #include "tt_lib_bindings.hpp"
 
 #include "operations/module.hpp"
-#include "tt_dnn/op_library/auto_format.hpp"
 #include "tt_dnn/op_library/math.hpp"
 #include "tt_lib_bindings_tensor.hpp"
 #include "tt_metal/detail/persistent_kernel_cache.hpp"
@@ -124,20 +123,6 @@ void DeviceModule(py::module &m_device) {
 
     m_device.def("GetNumPCIeDevices", &GetNumPCIeDevices, R"doc(
         Returns number of Tenstorrent devices that are connected to host via PCIe and can be targeted.
-    )doc");
-
-    m_device.def("SetDefaultDevice", &AutoFormat::SetDefaultDevice, R"doc(
-        Sets the default device to use for ops when inputs aren't on device.
-
-        +------------------+------------------------+-----------------------+-------------+----------+
-        | Argument         | Description            | Data type             | Valid range | Required |
-        +==================+========================+=======================+=============+==========+
-        | device           | TT Device to use       | tt_lib.device.Device  |             | Yes      |
-        +------------------+------------------------+-----------------------+-------------+----------+
-    )doc");
-
-    m_device.def("GetDefaultDevice", &AutoFormat::GetDefaultDevice, R"doc(
-        Gets the default device to use for ops when inputs aren't on device.
     )doc");
 
     m_device.def("EnablePersistentKernelCache", &detail::EnablePersistentKernelCache, R"doc(
@@ -267,10 +252,9 @@ void ProfilerModule(py::module &m_profiler) {
     )doc");
 }
 
-} // end namespace tt_metal
+}  // end namespace tt_metal
 
-} // end namespace tt
-
+}  // end namespace tt
 
 PYBIND11_MODULE(_C, m) {
 

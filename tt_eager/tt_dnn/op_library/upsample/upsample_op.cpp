@@ -114,10 +114,7 @@ Tensor upsample(const Tensor &input,
                 int scale_factor_h,
                 int scale_factor_w,
                 const MemoryConfig& out_mem_config) {
-    return operation::run_without_autoformat(UpSample{scale_factor_h,
-                                                      scale_factor_w,
-                                                      out_mem_config},
-                                              {input}).at(0);
+    return operation::run(UpSample{scale_factor_h, scale_factor_w, out_mem_config}, {input}).at(0);
 }
 
 } // namespace tt_metal

@@ -225,8 +225,8 @@ struct ShardedAllGatherConfig {
             return;
         }
 
-        TT_ASSERT(input_tensor.get_legacy_shape()[2] / TILE_HEIGHT > 0);
-        TT_ASSERT(input_tensor.get_legacy_shape()[3] / TILE_WIDTH > 0);
+        TT_ASSERT(input_tensor.get_legacy_shape()[2] / tt::constants::TILE_HEIGHT > 0);
+        TT_ASSERT(input_tensor.get_legacy_shape()[3] / tt::constants::TILE_WIDTH > 0);
         TT_ASSERT(output_tensor.get_legacy_shape().rank() == 4, "Assumes rank 4");
         TT_ASSERT(input_tensor.get_legacy_shape().rank() == 4, "Assumes rank 4");
 

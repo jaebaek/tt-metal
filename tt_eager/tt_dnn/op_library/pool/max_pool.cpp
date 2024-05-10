@@ -177,16 +177,26 @@ Tensor max_pool2d(const Tensor &input,
     // calculate the H and W dims for output
     uint32_t out_h = ((in_h + 2 * pad_h - (dilation_h * kernel_size_h - 1) - 1) / stride_h) + 1;   // floor
     uint32_t out_w = ((in_w + 2 * pad_w - (dilation_w * kernel_size_w - 1) - 1) / stride_w) + 1;   // floor
-    return operation::run_without_autoformat(MaxPool{in_n, in_h, in_w,
-                                                     out_h, out_w,
-                                                     kernel_size_h, kernel_size_w,
-                                                     stride_h, stride_w,
-                                                     pad_h, pad_w,
-                                                     dilation_h, dilation_w,
-                                                     out_mem_config,
-                                                     nblocks,
-                                                     use_multicore},
-                                             {input}).at(0);
+    return operation::run(
+               MaxPool{
+                   in_n,
+                   in_h,
+                   in_w,
+                   out_h,
+                   out_w,
+                   kernel_size_h,
+                   kernel_size_w,
+                   stride_h,
+                   stride_w,
+                   pad_h,
+                   pad_w,
+                   dilation_h,
+                   dilation_w,
+                   out_mem_config,
+                   nblocks,
+                   use_multicore},
+               {input})
+        .at(0);
 }
 
 Tensor max_pool2d_v2(const Tensor &input,
@@ -205,16 +215,26 @@ Tensor max_pool2d_v2(const Tensor &input,
     // calculate the H and W dims for output
     uint32_t out_h = ((in_h + 2 * pad_h - (dilation_h * kernel_size_h - 1) - 1) / stride_h) + 1;   // floor
     uint32_t out_w = ((in_w + 2 * pad_w - (dilation_w * kernel_size_w - 1) - 1) / stride_w) + 1;   // floor
-    return operation::run_without_autoformat(MaxPool{in_n, in_h, in_w,
-                                                     out_h, out_w,
-                                                     kernel_size_h, kernel_size_w,
-                                                     stride_h, stride_w,
-                                                     pad_h, pad_w,
-                                                     dilation_h, dilation_w,
-                                                     out_mem_config,
-                                                     nblocks,
-                                                     use_multicore},
-                                             {input, reader_indices}).at(0);
+    return operation::run(
+               MaxPool{
+                   in_n,
+                   in_h,
+                   in_w,
+                   out_h,
+                   out_w,
+                   kernel_size_h,
+                   kernel_size_w,
+                   stride_h,
+                   stride_w,
+                   pad_h,
+                   pad_w,
+                   dilation_h,
+                   dilation_w,
+                   out_mem_config,
+                   nblocks,
+                   use_multicore},
+               {input, reader_indices})
+        .at(0);
 }
 
 operation::OpPerformanceModel MaxPool::create_op_performance_model(const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<Tensor> &output_tensors) const {

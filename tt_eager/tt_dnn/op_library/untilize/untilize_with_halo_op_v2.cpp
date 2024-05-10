@@ -353,8 +353,9 @@ Tensor untilize_with_halo_v2(
     // NOTE: for HEIGHT_SHARDED, ncores_nhw == ncores
     //       for BLOCK_SHARDED, ncores_nhw is just the ncores along height dim (last tensor dim is split along width)
 
-    return operation::run_without_autoformat(
-               UntilizeWithHaloV2{pad_val, ncores_nhw, max_out_nsticks_per_core, mem_config, remote_read, transpose_mcast},
+    return operation::run(
+               UntilizeWithHaloV2{
+                   pad_val, ncores_nhw, max_out_nsticks_per_core, mem_config, remote_read, transpose_mcast},
                {
                    input_tensor,
                    padding_config,

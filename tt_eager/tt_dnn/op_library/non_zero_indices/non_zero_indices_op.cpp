@@ -52,7 +52,7 @@ tt::stl::reflection::Attributes NonZeroIndices::attributes() const {
 }
 
 std::vector<Tensor> non_zero_indices(const Tensor& input, const MemoryConfig& output_mem_config) {
-    return operation::run_without_autoformat(NonZeroIndices{output_mem_config}, {input});
+    return operation::run(NonZeroIndices{output_mem_config}, {input});
 }
 
 

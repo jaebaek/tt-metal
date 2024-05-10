@@ -96,8 +96,10 @@ struct make_layernorm {
     Tensor operator()(
         const Tensor &a, float eps, std::optional<const Tensor> gamma = std::nullopt, std::optional<const Tensor> beta = std::nullopt, const MemoryConfig& mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, std::optional<const DeviceComputeKernelConfig> compute_kernel_config = std::nullopt) const {
         std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({a}))};
-        operation::launch_with_autoformat(
-            [eps, mem_config, compute_kernel_config] (std::vector<Tensor> input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
+        operation::launch_op(
+            [eps, mem_config, compute_kernel_config](
+                std::vector<Tensor> input_tensors,
+                const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
                 auto& a = input_tensors.at(0);
                 const auto& gamma = optional_input_tensors.at(0);
                 const auto& beta = optional_input_tensors.at(1);
@@ -119,21 +121,23 @@ struct make_layernorm {
                 std::optional<const Tensor> gamma_4D = gamma.has_value() ? ttnn::unsqueeze_to_4D(gamma.value()) : gamma;
                 std::optional<const Tensor> beta_4D = beta.has_value() ? ttnn::unsqueeze_to_4D(beta.value()) : beta;
 
-                auto arch =
-                    a.storage_type() == StorageType::DEVICE ? a.device()->arch() : AutoFormat::GetDefaultDevice()->arch();
+                auto arch = a.device()->arch();
                 auto kernel_config_val = init_device_compute_kernel_config(arch, compute_kernel_config, MathFidelity::HiFi4, true, false, false);
-                auto output = operation::run_with_autoformat(
-                                LayerNorm{
-                                    .norm_type = norm_type,
-                                    .eps = eps,
-                                    .output_mem_config = mem_config,
-                                    .program_config = LayerNormDefaultProgramConfig(),
-                                    .compute_kernel_config = kernel_config_val},
-                                {a_4D},
-                                {std::nullopt, gamma_4D, beta_4D})
-                                .at(0);
+                auto output = operation::run(
+                                  LayerNorm{
+                                      .norm_type = norm_type,
+                                      .eps = eps,
+                                      .output_mem_config = mem_config,
+                                      .program_config = LayerNormDefaultProgramConfig(),
+                                      .compute_kernel_config = kernel_config_val},
+                                  {a_4D},
+                                  {std::nullopt, gamma_4D, beta_4D})
+                                  .at(0);
                 return {ttnn::reshape(output, original_shape)};
-            }, {a}, output_tensors, {gamma, beta});
+            },
+            {a},
+            output_tensors,
+            {gamma, beta});
         return output_tensors.at(0);
     }
 };
@@ -161,9 +165,9 @@ struct make_add_layernorm {
         auto gamma_4D = gamma.has_value() ? ttnn::unsqueeze_to_4D(gamma.value()) : gamma;
         auto beta_4D = beta.has_value() ? ttnn::unsqueeze_to_4D(beta.value()) : beta;
 
-        auto arch = a.storage_type() == StorageType::DEVICE ? a.device()->arch() : AutoFormat::GetDefaultDevice()->arch();
+        auto arch = a.device()->arch();
         auto kernel_config_val = init_device_compute_kernel_config(arch, compute_kernel_config, MathFidelity::HiFi4, true, false, false);
-        auto output = operation::run_with_autoformat(
+        auto output = operation::run(
                           LayerNorm{
                               .norm_type = norm_type,
                               .eps = eps,
@@ -206,7 +210,7 @@ struct make_layernorm {
                 const auto& a = input_tensors.at(0);
                 const auto& gamma = optional_input_tensors.at(0);
                 const auto& beta = optional_input_tensors.at(1);
-                auto arch = a.storage_type() == StorageType::DEVICE ? a.device()->arch() : AutoFormat::GetDefaultDevice()->arch();
+                auto arch = a.device()->arch();
                 auto kernel_config_val = init_device_compute_kernel_config(arch, compute_kernel_config, MathFidelity::HiFi4, true, false, false);
                 return operation::run(
                         LayerNorm{
@@ -233,7 +237,7 @@ struct make_add_layernorm {
                 const auto& b = input_tensors.at(1);
                 const auto& gamma = optional_input_tensors.at(0);
                 const auto& beta = optional_input_tensors.at(1);
-                auto arch = a.storage_type() == StorageType::DEVICE ? a.device()->arch() : AutoFormat::GetDefaultDevice()->arch();
+                auto arch = a.device()->arch();
                 auto kernel_config_val = init_device_compute_kernel_config(arch, compute_kernel_config, MathFidelity::HiFi4, true, false, false);
                 return operation::run(
                    LayerNorm{

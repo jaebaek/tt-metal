@@ -295,7 +295,7 @@ std::vector<Device*> Tensor::get_workers(bool blocking) const {
     std::vector<Device*> workers = {};
 
     if (this->tensor_attributes->dynamic_storage) {
-        // Tensor is populated by launch_with_autoformat
+        // Tensor is populated by launch_op
         // Storage type can change based on op behaviour, wait until tensor populated.
         this->wait_for_tensor_metadata_populated();
     }

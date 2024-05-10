@@ -61,7 +61,7 @@ tt::stl::reflection::Attributes IndexedFill::attributes() const {
 }
 
 Tensor indexed_fill(const Tensor &batch_ids, const Tensor& input_a, const Tensor& input_b, const MemoryConfig& output_mem_config, std::int64_t dim) {
-    return operation::run_without_autoformat(IndexedFill{output_mem_config, dim}, {batch_ids, input_a, input_b}).at(0);
+    return operation::run(IndexedFill{output_mem_config, dim}, {batch_ids, input_a, input_b}).at(0);
 }
 
 

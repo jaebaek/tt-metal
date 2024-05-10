@@ -166,38 +166,26 @@ const operation::Hash Transpose::compute_program_hash(
         input_mem_config, output_mem_config, dtype, this->dim, get_parallelization_strategy(input_tensors));
 }
 
-inline Tensor transpose_(const Tensor &a, TransposeOpDim transpose_dim, const MemoryConfig& output_mem_config) {
-    bool pad_c = false;
-    bool pad_n = false;
-
+inline Tensor transpose_(const Tensor& a, TransposeOpDim transpose_dim, const MemoryConfig& output_mem_config) {
     switch (transpose_dim) {
-        case TransposeOpDim::HC:
-            pad_c = true;
-            break;
-        case TransposeOpDim::NH:
-            return permute(a, {2, 1, 0, 3}, output_mem_config);
-            pad_n = true;
-            break;
-        case TransposeOpDim::NW:
-            return permute(a, {3, 1, 2, 0}, output_mem_config);
-            pad_n = true;
-            break;
-        case TransposeOpDim::CW:
-            return permute(a, {0, 3, 2, 1}, output_mem_config);
-            pad_c = true;
-            break;
+        case TransposeOpDim::HC: break;
+        case TransposeOpDim::NH: return permute(a, {2, 1, 0, 3}, output_mem_config); break;
+        case TransposeOpDim::NW: return permute(a, {3, 1, 2, 0}, output_mem_config); break;
+        case TransposeOpDim::CW: return permute(a, {0, 3, 2, 1}, output_mem_config); break;
         default:
             break;
     }
 
-    // TODO: Add pad_n to run_with_autoformat when needed
-    return operation::run_with_autoformat(Transpose{transpose_dim, output_mem_config}, {a}, {}, 0, pad_c /*, pad_n */).at(0);
+    // TODO: Add pad_n to run when needed
+    return operation::run(Transpose{transpose_dim, output_mem_config}, {a}).at(0);
 }
 
 Tensor transpose(const Tensor &a, std::int64_t dim1, std::int64_t dim2, const MemoryConfig& output_mem_config) {
     std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({a}))};
-    operation::launch_with_autoformat(
-        [dim1, dim2, output_mem_config] (std::vector<Tensor> input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
+    operation::launch_op(
+        [dim1, dim2, output_mem_config](
+            std::vector<Tensor> input_tensors,
+            const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
             auto& a = input_tensors.at(0);
             uint32_t normalized_dim1 = a.get_legacy_shape().get_normalized_index(dim1);
             uint32_t normalized_dim2 = a.get_legacy_shape().get_normalized_index(dim2);
@@ -209,7 +197,7 @@ Tensor transpose(const Tensor &a, std::int64_t dim1, std::int64_t dim2, const Me
                 (normalized_dim1 == normalized_dim2) ||
                 (a.get_legacy_shape()[normalized_dim1] == 1 && a.get_legacy_shape()[normalized_dim2] == 1)
             ) {
-                return {AutoFormat::move_tensor_to_mem_config(a, output_mem_config)};
+                return {a};
             }
 
             if ( normalized_dim1 > normalized_dim2 ) {
@@ -221,7 +209,7 @@ Tensor transpose(const Tensor &a, std::int64_t dim1, std::int64_t dim2, const Me
             if ( normalized_dim2 == 3 && normalized_dim1 == 0 ) {
                 transpose_dim = TransposeOpDim::NW;
             } else if (normalized_dim2 == 3 && normalized_dim1 == 1) {
-            transpose_dim = TransposeOpDim::CW;
+                transpose_dim = TransposeOpDim::CW;
             } else if (normalized_dim2 == 3 && normalized_dim1 == 2) {
                 transpose_dim = TransposeOpDim::WH;
             } else if (normalized_dim2 == 2 && normalized_dim1 == 0) {
@@ -234,7 +222,9 @@ Tensor transpose(const Tensor &a, std::int64_t dim1, std::int64_t dim2, const Me
                 TT_ASSERT(false, "Unsupported transpose dims");
             }
             return {transpose_(a, transpose_dim, output_mem_config)};
-        }, {a}, output_tensors);
+        },
+        {a},
+        output_tensors);
     return output_tensors.at(0);
 }
 

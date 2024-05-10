@@ -1484,7 +1484,10 @@ Tensor untilize_with_halo(const Tensor &input_tensor_a, const uint32_t pad_val, 
     }
     log_debug("max nsticks across all cores = {}", max_out_nsticks_per_core);
 
-    return operation::run_without_autoformat(UntilizeWithHalo{pad_val, in_b, in_h, in_w, max_out_nsticks_per_core, stride, pc, mem_config}, {input_tensor_a}).at(0);
+    return operation::run(
+               UntilizeWithHalo{pad_val, in_b, in_h, in_w, max_out_nsticks_per_core, stride, pc, mem_config},
+               {input_tensor_a})
+        .at(0);
 }
 
 }  // namespace tt_metal

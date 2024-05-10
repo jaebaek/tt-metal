@@ -27,8 +27,6 @@ from models.experimental.convnet_mnist.convnet_mnist_utils import get_test_data
 def test_mnist_inference():
     device = tt_lib.device.CreateDevice(0)
 
-    tt_lib.device.SetDefaultDevice(device)
-
     tt_convnet, pt_convnet = convnet_mnist(device)
 
     test_input, images = get_test_data(1)
@@ -37,9 +35,7 @@ def test_mnist_inference():
     logger.info(f"Input image saved to {input_path}")
 
     with torch.no_grad():
-        tt_input = torch2tt_tensor(
-            test_input, device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR
-        )
+        tt_input = torch2tt_tensor(test_input, device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR)
         tt_output = tt_convnet(tt_input)
         tt_output = tt2torch_tensor(tt_output)
 

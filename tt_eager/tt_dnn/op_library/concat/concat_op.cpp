@@ -5,7 +5,6 @@
 #include "tt_dnn/op_library/concat/concat_op.hpp"
 
 #include "tensor/tensor_utils.hpp"
-#include "tt_dnn/op_library/auto_format.hpp"
 #include "tt_dnn/op_library/copy/copy_op.hpp"
 
 using namespace tt::constants;
@@ -106,7 +105,7 @@ operation::ProgramWithCallbacks Concat::create_program(
 Tensor concat(std::vector<Tensor> &input_tensors, const std::int64_t dim, const MemoryConfig &output_mem_config) {
     TT_FATAL(input_tensors.size() > 0, "need 1 or more tensors");
     if (input_tensors.size() == 1) {
-        return AutoFormat::move_tensor_to_mem_config(input_tensors[0], output_mem_config);
+        return input_tensors[0];
     }
     uint32_t ref_rank = input_tensors[0].get_legacy_shape().rank();
     uint32_t normalized_dim = input_tensors[0].get_legacy_shape().get_normalized_index(dim);
@@ -121,32 +120,8 @@ Tensor concat(std::vector<Tensor> &input_tensors, const std::int64_t dim, const 
                     "Current concat implementation requires aligned last dim when concatting on last dim");
             }
         }
-        Layout target_layout = Layout::TILE;
-        for (const auto &input_tensor : input_tensors) {
-            if (input_tensor.get_layout() == Layout::ROW_MAJOR) {
-                const auto &input_shape = input_tensor.get_legacy_shape();
-                if (input_shape.rank() < 2 || input_shape[-2] % TILE_HEIGHT != 0 || input_shape[-1] % TILE_WIDTH != 0) {
-                    target_layout = Layout::ROW_MAJOR;
-                    break;
-                }
-            }
-        }
-        std::vector<FormatParams> input_format_params;
-        input_format_params.reserve(input_tensors.size());
-        for (const auto &input_tensor : input_tensors) {
-            if (target_layout == Layout::ROW_MAJOR) {
-                input_format_params.push_back(FormatParams{
-                    .pad_shape = input_tensor.get_legacy_shape(), .pad_value = 0.0, .target_layout = target_layout});
-            } else {
-                Shape pad_shape = AutoFormat::pad_to_tile_shape(input_tensor.get_legacy_shape());
-                input_format_params.push_back(
-                    FormatParams{.pad_shape = pad_shape, .pad_value = 0.0, .target_layout = target_layout});
-            }
-        }
 
-        return operation::run_with_autoformat(
-                   Concat{normalized_dim, output_mem_config}, {input_tensors}, {input_format_params}, {target_layout})
-            .at(0);
+        return operation::run(Concat{normalized_dim, output_mem_config}, {input_tensors}).at(0);
     }
 }
 

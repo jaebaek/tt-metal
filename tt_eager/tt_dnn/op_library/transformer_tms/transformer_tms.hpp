@@ -92,7 +92,7 @@ inline Tensor attn_matmul(const Tensor &input_tensor_a, const Tensor &input_tens
         [compute_with_storage_grid_size, mem_config, output_dtype, compute_kernel_config] (std::vector<Tensor> input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
             const auto& input_tensor_a = input_tensors.at(0);
             const auto& input_tensor_b = input_tensors.at(1);
-            auto arch = input_tensor_a.storage_type() == StorageType::DEVICE ? input_tensor_a.device()->arch() : AutoFormat::GetDefaultDevice()->arch();
+            auto arch = input_tensor_a.device()->arch();
             auto kernel_config_val = init_device_compute_kernel_config(arch, compute_kernel_config);
             return operation::run(AttnMatmul{std::nullopt, std::nullopt, compute_with_storage_grid_size, mem_config, output_dtype.value_or(input_tensor_a.get_dtype()), kernel_config_val}, {input_tensor_a, input_tensor_b});
         },
@@ -104,7 +104,7 @@ inline Tensor attn_matmul_from_cache(const Tensor &input_tensor_a, const Tensor 
     TT_FATAL(num_tokens > 0, "Number of tokens must be at least 1!");
     TT_FATAL(num_tokens <= input_tensor_b.get_legacy_shape()[2], "Number of tokens must be smaller or equal to the max cache length (B.shape[2])!");
     const uint32_t num_tokens_rounded_up_to_32 = ((num_tokens - 1) / 32 + 1) * 32;
-    auto arch = input_tensor_a.storage_type() == StorageType::DEVICE ? input_tensor_a.device()->arch() : AutoFormat::GetDefaultDevice()->arch();
+    auto arch = input_tensor_a.device()->arch();
     auto kernel_config_val = init_device_compute_kernel_config(arch, compute_kernel_config);
     return operation::run(AttnMatmul{num_tokens_rounded_up_to_32, transpose_hw, compute_with_storage_grid_size, mem_config, output_dtype.value_or(input_tensor_a.get_dtype()), kernel_config_val}, {input_tensor_a, input_tensor_b}).at(0);
 }
@@ -146,7 +146,7 @@ inline Tensor group_attn_matmul(const Tensor &input_tensor_a, const Tensor &inpu
                 }
             }
 
-            auto arch = input_tensor_a.storage_type() == StorageType::DEVICE ? input_tensor_a.device()->arch() : AutoFormat::GetDefaultDevice()->arch();
+            auto arch = input_tensor_a.device()->arch();
             auto kernel_config_val = init_device_compute_kernel_config(arch, compute_kernel_config);
 
             // Need to cache on out_subblock_w because it must be a compile time arg for optimal use of templated pack_untilize APIs

@@ -13,6 +13,8 @@
 #include "tt_stl/concepts.hpp"
 #include "tt_stl/reflection.hpp"
 
+using namespace tt::constants;
+
 namespace tt {
 
 namespace tt_metal {

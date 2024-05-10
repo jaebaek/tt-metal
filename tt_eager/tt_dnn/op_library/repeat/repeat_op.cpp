@@ -5,7 +5,6 @@
 #include "tt_dnn/op_library/repeat/repeat_op.hpp"
 
 #include "tensor/tensor_utils.hpp"
-#include "tt_dnn/op_library/auto_format.hpp"
 #include "tt_dnn/op_library/copy/copy_op.hpp"
 
 using namespace tt::constants;
@@ -89,7 +88,7 @@ Tensor repeat(const Tensor &input_tensor, const Shape &shape, const MemoryConfig
                         (input_tensor.get_legacy_shape()[dim] * input_tensor.element_size()) % ADDRESS_ALIGNMENT == 0,
                         "Current repeat implementation requires aligned last dim when repeating on last dim");
                 }
-                output = operation::run_without_autoformat(Repeat{dim, shape[dim], output_mem_config}, {output}).at(0);
+                output = operation::run(Repeat{dim, shape[dim], output_mem_config}, {output}).at(0);
             }
             return {output};
         }, {input_tensor}, output_tensors);

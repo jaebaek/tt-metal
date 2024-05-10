@@ -8,7 +8,6 @@
 #include <tt_eager/tensor/tensor.hpp>
 
 #include "third_party/magic_enum/magic_enum.hpp"
-#include "tt_dnn/op_library/auto_format.hpp"
 #include "tt_dnn/op_library/operation.hpp"
 #include "tt_dnn/op_library/operation_history.hpp"
 #include "tt_stl/concepts.hpp"
@@ -321,77 +320,8 @@ inline auto run(
     }
 }
 
-template<class OutputTensors=Tensors>
-OutputTensors run_without_autoformat(
-    const DeviceOperation<OutputTensors>& operation,
-    const Tensors& input_tensors,
-    const OptionalConstTensors& optional_input_tensors = {},
-    const OptionalTensors& optional_output_tensors = {}
-);
-template <typename ConcreteOperation>
-inline auto run_without_autoformat(
-    ConcreteOperation&& concrete_op,
-    const std::vector<Tensor>& input_tensors,
-    const std::vector<std::optional<const Tensor>>& optional_input_tensors = {},
-    const std::vector<std::optional<Tensor>>& optional_output_tensors = {})
-    -> ProgramOutputTensors<ConcreteOperation>{
-    using OutputTensors = ProgramOutputTensors<ConcreteOperation>;
-    const auto operation = DeviceOperation<OutputTensors>(concrete_op);
-    return run_without_autoformat<OutputTensors>(operation, input_tensors, optional_input_tensors, optional_output_tensors);
-}
-
-Tensors run_with_autoformat(
-    const DeviceOperation<Tensors>& operation,
-    const Tensors& input_tensors,
-    const OptionalConstTensors& optional_input_tensors = {},
-    const float pad_value = 0,
-    const bool pad_c = false
-);
-
-template<typename ConcreteOperation>
-inline auto run_with_autoformat(
-    ConcreteOperation&& concrete_op,
-    const std::vector<Tensor>& input_tensors,
-    const std::vector<std::optional<const Tensor>>& optional_input_tensors = {},
-    const float pad_value = 0,
-    const bool pad_c = false
-)-> Tensors {
-    using OutputTensors = ProgramOutputTensors<ConcreteOperation>;
-    const auto operation = DeviceOperation<Tensors>(concrete_op);
-    return run_with_autoformat(operation, input_tensors, optional_input_tensors, pad_value, pad_c);
-}
-
-Tensors run_with_autoformat(
-    const DeviceOperation<Tensors>& operation,
-    const Tensors& input_tensors,
-    const std::vector<FormatParams>& input_formatting,
-    const std::vector<Layout>& output_layouts,
-    const OptionalConstTensors& optional_input_tensors = {},
-    const std::vector<std::optional<FormatParams>>& optional_input_formatting = {}
-);
-template<typename ConcreteOperation>
-inline auto run_with_autoformat(
-    ConcreteOperation&& concrete_op,
-    const std::vector<Tensor>& input_tensors,
-    const std::vector<FormatParams>& input_formatting,
-    const std::vector<Layout>& output_layouts,
-    const std::vector<std::optional<const Tensor>>& optional_input_tensors = {},
-    const std::vector<std::optional<FormatParams>>& optional_input_formatting = {}
-)-> ProgramOutputTensors<ConcreteOperation> {
-    using OutputTensors = ProgramOutputTensors<ConcreteOperation>;
-    const auto operation = DeviceOperation<OutputTensors>(concrete_op);
-    return run_with_autoformat(operation, input_tensors, input_formatting, output_layouts, optional_input_tensors, optional_input_formatting);
-}
-
 void launch_op(
     std::function<std::vector<Tensor>(const Tensors&, const OptionalConstTensors&)>&& op_func,
-    const std::vector<Tensor> input_tensors,
-    std::vector<Tensor>& output_tensors,
-    const std::vector<std::optional<const Tensor>> optional_input_tensors = {}
-);
-
-void launch_with_autoformat(
-    std::function<std::vector<Tensor>(const std::vector<Tensor>&, const std::vector<std::optional<const Tensor>>&)>&& op_func,
     const std::vector<Tensor> input_tensors,
     std::vector<Tensor>& output_tensors,
     const std::vector<std::optional<const Tensor>> optional_input_tensors = {}

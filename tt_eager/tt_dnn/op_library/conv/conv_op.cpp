@@ -11,7 +11,6 @@
 
 #include "tt_metal/tt_stl/reflection.hpp"
 
-#include "tt_dnn/op_library/auto_format.hpp"
 using namespace tt::constants;
 
 namespace conv_op_utils {
@@ -1379,18 +1378,30 @@ inline Tensor conv_(const Tensor& a, const Tensor &b, std::optional<const Tensor
                     uint32_t out_subblock_h_ntiles, uint32_t out_subblock_w_ntiles, uint32_t output_channels,
                     bool use_address_map, bool use_fast_reader, bool untilize_out, bool has_bias = false, bool fuse_relu = false, MathFidelity math_fidelity = MathFidelity::HiFi4) {
     TT_ASSERT(b.get_layout() == Layout::TILE); // Weights should already be formatted
-    auto padded_a_shape = Shape({a.get_legacy_shape()[0], a.get_legacy_shape()[1], a.get_legacy_shape()[2], round_up(a.get_legacy_shape()[3], 16)});
-    FormatParams input_a_format_params = {.pad_shape=padded_a_shape, .pad_value=0.0, .target_layout=Layout::ROW_MAJOR};
-    FormatParams input_b_format_params = {.pad_shape=b.get_legacy_shape(), .pad_value=0.0, .target_layout=Layout::TILE};
-    FormatParams input_bias_format_params = {};
-    if (has_bias) {
-        input_bias_format_params = {.pad_shape=bias.value().get_legacy_shape(), .pad_value=0, .target_layout=Layout::TILE};
-    }
+    auto padded_a_shape = Shape(
+        {a.get_legacy_shape()[0],
+         a.get_legacy_shape()[1],
+         a.get_legacy_shape()[2],
+         round_up(a.get_legacy_shape()[3], 16)});
     auto output_layout = untilize_out ? Layout::ROW_MAJOR : Layout::TILE;
-    return operation::run_without_autoformat(
-        Conv(act_block_h_ntiles, act_block_w_ntiles, weight_block_w_ntiles, out_subblock_h_ntiles, out_subblock_w_ntiles, conv_params, output_channels, use_address_map, use_fast_reader, untilize_out, has_bias, fuse_relu, math_fidelity),
-        {a, b},
-        {bias}).at(0);
+    return operation::run(
+               Conv(
+                   act_block_h_ntiles,
+                   act_block_w_ntiles,
+                   weight_block_w_ntiles,
+                   out_subblock_h_ntiles,
+                   out_subblock_w_ntiles,
+                   conv_params,
+                   output_channels,
+                   use_address_map,
+                   use_fast_reader,
+                   untilize_out,
+                   has_bias,
+                   fuse_relu,
+                   math_fidelity),
+               {a, b},
+               {bias})
+        .at(0);
 }
 
 Tensor conv(const Tensor& a, const Tensor &b, std::optional<const Tensor> bias, const vector<int> conv_params, uint32_t act_block_h_ntiles, uint32_t act_block_w_ntiles, uint32_t weight_block_w_ntiles,

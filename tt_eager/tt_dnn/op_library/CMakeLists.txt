@@ -1,7 +1,6 @@
 
 # We do not use GLOB here since build system won't be able to pick up changes to the file list generated
 set(TT_DNN_SRCS
-    ${CMAKE_CURRENT_SOURCE_DIR}/auto_format.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/data_transfer/data_transfer_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/layout_conversion/layout_conversion_op.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/all_gather/all_gather_op.cpp

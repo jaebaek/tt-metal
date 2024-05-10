@@ -191,10 +191,6 @@ def run_mixtral_demo(user_input, batch_size, devices, instruct_mode):
     # Keep track of generated outputs to print out every iteration
     all_outputs = [[] for _ in range(batch_size)]
 
-    # TODO Debug (only device 0 is doing argmax, otherwise it throws an error)
-    # Alternatively, send the output back to device: tt_lib.tensor.Tensor.to()
-    ttl.device.SetDefaultDevice(devices[0])
-
     # Keep running inference as long as there is a user in the batch still decoding or max tokens per user are decoded
     for iteration in range(max_generated_tokens):
         iteration_time_start = time()

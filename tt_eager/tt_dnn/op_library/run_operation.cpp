@@ -9,13 +9,12 @@
 #include <tt_eager/tensor/tensor_utils.hpp>
 
 #include "third_party/magic_enum/magic_enum.hpp"
-#include "tt_dnn/op_library/auto_format.hpp"
 #include "tt_dnn/op_library/operation.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
 #include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
 #include "tt_metal/tools/profiler/op_profiler.hpp"
-#include "tt_numpy/functions.hpp"
 #include "tt_metal/tt_stl/reflection.hpp"
+#include "tt_numpy/functions.hpp"
 
 namespace tt::tt_metal::operation {
 
@@ -36,14 +35,12 @@ static Device* get_device(const Tensors& input_tensors, const OptionalConstTenso
             return optional_input_tensor.value().device();
         }
     }
-    auto device = AutoFormat::GetDefaultDevice();
-    TT_ASSERT(device != nullptr, "Requires setting default device if no inputs to operation are on device");
-    return device;
+    TT_THROW("Input tensors are not on device!");
 }
 
 void validate_op_launch(Device* worker) {
     if (worker->get_worker_mode() == WorkExecutorMode::ASYNCHRONOUS) {
-        TT_FATAL(not worker->in_main_thread(), "launch_op or launch_with_autoformat must be used when running in async mode.");
+        TT_FATAL(not worker->in_main_thread(), "launch_op must be used when running in async mode.");
     }
 }
 
@@ -441,218 +438,6 @@ template OptionalTensors run(
     const OptionalConstTensors& optional_input_tensors,
     const OptionalTensors& optional_output_tensors);
 
-template<class OutputTensors>
-OutputTensors run_without_autoformat(
-    const DeviceOperation<OutputTensors>& operation,
-    const Tensors& input_tensors,
-    const OptionalConstTensors& optional_input_tensors
-) {
-    ZoneScoped;
-    Device* device = detail::get_device(input_tensors, optional_input_tensors);
-    detail::validate_op_launch(device);
-    Tensors input_tensors_on_dev;
-    input_tensors_on_dev.reserve(input_tensors.size());
-    for (auto& input_tensor : input_tensors) {
-        if (input_tensor.storage_type() != StorageType::DEVICE) {
-            input_tensors_on_dev.push_back(AutoFormat::move_tensor_to_device(input_tensor, device));
-        } else {
-            input_tensors_on_dev.push_back(input_tensor);
-        }
-    }
-    OptionalConstTensors optional_input_tensors_on_dev;
-    optional_input_tensors_on_dev.reserve(optional_input_tensors.size());
-    for (auto& optional_input_tensor : optional_input_tensors) {
-        if (optional_input_tensor.has_value() and optional_input_tensor.value().storage_type() != StorageType::DEVICE) {
-            optional_input_tensors_on_dev.push_back(AutoFormat::move_tensor_to_device(optional_input_tensor.value(), device));
-        } else {
-            optional_input_tensors_on_dev.push_back(optional_input_tensor);
-        }
-    }
-    return run<OutputTensors>(operation, input_tensors_on_dev, optional_input_tensors_on_dev, {});
-}
-
-template Tensors run_without_autoformat<Tensors>(
-    const DeviceOperation<Tensors>& operation,
-    const Tensors& input_tensors,
-    const OptionalConstTensors& optional_input_tensors
-);
-
-template OptionalTensors run_without_autoformat<OptionalTensors>(
-    const DeviceOperation<OptionalTensors>& operation,
-    const Tensors& input_tensors,
-    const OptionalConstTensors& optional_input_tensors
-);
-
-template<class OutputTensors>
-OutputTensors run_without_autoformat(
-    const DeviceOperation<OutputTensors>& operation,
-    const Tensors& input_tensors,
-    const OptionalConstTensors& optional_input_tensors,
-    const OptionalTensors& optional_output_tensors
-) {
-    ZoneScoped;
-    Device* device = detail::get_device(input_tensors, optional_input_tensors);
-    detail::validate_op_launch(device);
-    Tensors input_tensors_on_dev;
-    input_tensors_on_dev.reserve(input_tensors.size());
-    for (auto& input_tensor : input_tensors) {
-        if (input_tensor.storage_type() != StorageType::DEVICE) {
-            input_tensors_on_dev.push_back(AutoFormat::move_tensor_to_device(input_tensor, device));
-        } else {
-            input_tensors_on_dev.push_back(input_tensor);
-        }
-    }
-    OptionalConstTensors optional_input_tensors_on_dev;
-    optional_input_tensors_on_dev.reserve(optional_input_tensors.size());
-    for (auto& optional_input_tensor : optional_input_tensors) {
-        if (optional_input_tensor.has_value() and optional_input_tensor.value().storage_type() != StorageType::DEVICE) {
-            optional_input_tensors_on_dev.push_back(AutoFormat::move_tensor_to_device(optional_input_tensor.value(), device));
-        } else {
-            optional_input_tensors_on_dev.push_back(optional_input_tensor);
-        }
-    }
-    return run<OutputTensors>(operation, input_tensors_on_dev, optional_input_tensors_on_dev, optional_output_tensors);
-}
-
-template Tensors run_without_autoformat<Tensors>(
-    const DeviceOperation<Tensors>& operation,
-    const Tensors& input_tensors,
-    const OptionalConstTensors& optional_input_tensors,
-    const OptionalTensors& optional_output_tensors
-);
-
-template OptionalTensors run_without_autoformat<OptionalTensors>(
-    const DeviceOperation<OptionalTensors>& operation,
-    const Tensors& input_tensors,
-    const OptionalConstTensors& optional_input_tensors,
-    const OptionalTensors& optional_output_tensors
-);
-
-// To be deprecated/removed in favor of new implementation where ops specifically request how to format inputs/outputss
-Tensors run_with_autoformat(
-    const DeviceOperation<Tensors>& operation,
-    const Tensors& input_tensors,
-    const OptionalConstTensors& optional_input_tensors,
-    const float pad_value,
-    const bool pad_c
-) {
-    ZoneScoped;
-    if (detail::any_tensor_on_multi_device(input_tensors)) {
-        return run<Tensors>(operation, input_tensors, optional_input_tensors);
-    }
-    Device* device = detail::get_device(input_tensors, optional_input_tensors);
-    detail::validate_op_launch(device);
-    auto output_shapes = operation.compute_output_shapes(input_tensors);
-
-    Tensors formatted_input_tensors;
-    formatted_input_tensors.reserve(input_tensors.size());
-    for (auto& input_tensor : input_tensors) {
-        auto padded_input_shape = AutoFormat::pad_to_tile_shape(input_tensor.get_legacy_shape(), pad_c);
-        auto pad_input = not AutoFormat::check_input_tensor_format(input_tensor, padded_input_shape);
-        if (pad_input) {
-            formatted_input_tensors.push_back(AutoFormat::format_input_tensor(input_tensor, device, padded_input_shape, pad_value, Layout::TILE));
-        } else {
-            formatted_input_tensors.push_back(input_tensor);
-        }
-    }
-
-    OptionalConstTensors formatted_optional_input_tensors;
-    formatted_optional_input_tensors.reserve(optional_input_tensors.size());
-    for (auto& optional_input_tensor : optional_input_tensors) {
-        if (optional_input_tensor.has_value()) {
-            auto& input_tensor = optional_input_tensor.value();
-            auto padded_input_shape = AutoFormat::pad_to_tile_shape(input_tensor.get_legacy_shape(), pad_c);
-            auto pad_input = not AutoFormat::check_input_tensor_format(input_tensor, padded_input_shape);
-            if (pad_input) {
-                formatted_optional_input_tensors.push_back(AutoFormat::format_input_tensor(input_tensor, device, padded_input_shape, pad_value, Layout::TILE));
-            } else {
-                formatted_optional_input_tensors.push_back(input_tensor);
-            }
-        } else {
-            formatted_optional_input_tensors.push_back(optional_input_tensor);
-        }
-    }
-
-    auto output_tensors = run<Tensors>(operation, formatted_input_tensors, formatted_optional_input_tensors);
-
-    TT_ASSERT(output_tensors.size() == output_shapes.size());
-
-    formatted_input_tensors.clear();
-    formatted_optional_input_tensors.clear();
-
-    for (auto i = 0; i < output_tensors.size(); ++i) {
-        output_tensors[i] = AutoFormat::format_output_tensor(output_tensors[i], output_shapes[i], device, Layout::TILE);
-    }
-    return output_tensors;
-}
-
-Tensors run_with_autoformat(
-    const DeviceOperation<Tensors>& operation,
-    const Tensors& input_tensors,
-    const std::vector<FormatParams>& input_formatting,
-    const std::vector<Layout>& output_layouts,
-    const OptionalConstTensors& optional_input_tensors,
-    const std::vector<std::optional<FormatParams>>& optional_input_formatting
-) {
-    ZoneScoped;
-    if (detail::any_tensor_on_multi_device(input_tensors)) {
-        return run<Tensors>(operation, input_tensors, optional_input_tensors);
-    }
-    Device* device = detail::get_device(input_tensors, optional_input_tensors);
-    detail::validate_op_launch(device);
-    auto output_shapes = operation.compute_output_shapes(input_tensors);
-
-    TT_ASSERT(input_tensors.size() == input_formatting.size());
-    TT_ASSERT(optional_input_tensors.size() == optional_input_formatting.size());
-
-    Tensors formatted_input_tensors;
-    formatted_input_tensors.reserve(input_tensors.size());
-    for (uint32_t i = 0; i < input_tensors.size(); ++i) {
-        formatted_input_tensors.push_back(AutoFormat::format_input_tensor(input_tensors[i], device, input_formatting[i].pad_shape, input_formatting[i].pad_value, input_formatting[i].target_layout));
-    }
-
-    OptionalConstTensors formatted_optional_input_tensors;
-    formatted_optional_input_tensors.reserve(optional_input_tensors.size());
-    for (uint32_t i = 0; i < optional_input_tensors.size(); ++i) {
-        if (optional_input_tensors[i].has_value()) {
-            auto& input_tensor = optional_input_tensors[i].value();
-            TT_ASSERT(optional_input_formatting[i].has_value());
-            auto& input_formatting = optional_input_formatting[i].value();
-            formatted_optional_input_tensors.push_back(AutoFormat::format_input_tensor(input_tensor, device, input_formatting.pad_shape, input_formatting.pad_value, input_formatting.target_layout));
-        } else {
-            formatted_optional_input_tensors.push_back(optional_input_tensors[i]);
-        }
-    }
-
-    auto output_tensors = run<Tensors>(operation, formatted_input_tensors, formatted_optional_input_tensors);
-
-    TT_ASSERT(output_tensors.size() == output_shapes.size());
-    TT_ASSERT(output_tensors.size() == output_layouts.size());
-
-    formatted_input_tensors.clear();
-    formatted_optional_input_tensors.clear();
-
-    for (auto i = 0; i < output_tensors.size(); ++i) {
-        output_tensors[i] = AutoFormat::format_output_tensor(output_tensors[i], output_shapes[i], device, output_layouts[i]);
-    }
-
-    return output_tensors;
-}
-
-void launch_with_autoformat(
-    std::function<std::vector<Tensor>(const std::vector<Tensor>&, const std::vector<std::optional<const Tensor>>&)>&& op_func,
-    const std::vector<Tensor> input_tensors,
-    std::vector<Tensor>& output_tensors,
-    const std::vector<std::optional<const Tensor>> optional_input_tensors
-) {
-    // Mark each output tensor as having dynamic storage (can be on host or device, depending
-    // on autoformat behaviour). Multi device tensors do not support dynamic storage.
-    for (auto& output_tensor : output_tensors) {
-        output_tensor.tensor_attributes->dynamic_storage = (output_tensor.workers.size() <= 1);
-    }
-    launch_op(std::move(op_func), input_tensors, output_tensors, optional_input_tensors);
-}
-
 void launch_op(
     std::function<std::vector<Tensor>(const std::vector<Tensor>&, const std::vector<std::optional<const Tensor>>&)>&& op_func,
     const std::vector<Tensor> input_tensors,
@@ -746,7 +531,9 @@ void launch_op(
                 }
                 for (int i = 0; i < local_tensors.size(); i++) {
                     if (local_tensors.at(i).storage_type() == StorageType::OWNED) {
-                        TT_ASSERT(outputs.at(i).tensor_attributes->dynamic_storage, "launch_with_autoformat must be used if output tensor for op can be placed on host.");
+                        TT_ASSERT(
+                            outputs.at(i).tensor_attributes->dynamic_storage,
+                            "launch_op must be used if output tensor for op can be placed on host.");
                         TT_ASSERT(std::holds_alternative<DeviceStorage>(outputs.at(i).tensor_attributes->storage), "All inputs and outputs to an op must be on device for multi-device tensors.");
                         // Make this a host side tensor - Set storage = Owned and clear workers
                         outputs.at(i).tensor_attributes->storage = OwnedStorage();
@@ -789,8 +576,9 @@ void launch_op(
 void validate_workers_and_storage(const std::vector<Tensor>& inputs, const std::vector<std::optional<const Tensor>>& optional_inputs, const std::vector<Device*>& workers) {
     bool single_device_storage = false;
     bool multi_device_storage = false;
-    // Verify that storage types are consistent - cannot mix single and multi-device storage. For multi-device tensors, ensure that workers are specified, since they cannot be inferred.
-    // This means that launch_op/launch_with_autoformat cannot be called with MultiDeviceHostStorage.
+    // Verify that storage types are consistent - cannot mix single and multi-device storage. For multi-device tensors,
+    // ensure that workers are specified, since they cannot be inferred. This means that launch_op/launch_op cannot be
+    // called with MultiDeviceHostStorage.
     for (const auto& input: inputs) {
         if (std::holds_alternative<DeviceStorage>(input.tensor_attributes->storage) or std::holds_alternative<OwnedStorage>(input.tensor_attributes->storage)) {
             single_device_storage |= true;
@@ -844,10 +632,7 @@ std::vector<Device*> get_workers_for_op_output(const std::vector<Tensor>&& input
     validate_workers_and_storage(inputs, optional_inputs, workers_for_op);
     // Workers not specified - inputs are on host and not multi-device.
     // Use the default device from autoformat.
-    if (not workers_for_op.size()) {
-        TT_FATAL(AutoFormat::GetDefaultDevice(), "Default device must be specified using AutoFormat::SetDefaultDevice, if workers are not specified for inputs to op.");
-        workers_for_op = {AutoFormat::GetDefaultDevice()};
-    }
+    TT_FATAL(workers_for_op.size(), "There must be workers when launchig async");
     return workers_for_op;
 }
 

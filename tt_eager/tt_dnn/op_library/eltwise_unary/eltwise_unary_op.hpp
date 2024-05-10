@@ -197,19 +197,21 @@ inline Tensor run_eltwise_unary(
     std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor}))};
     if(output_mem_config.is_sharded()){
         operation::launch_op(
-            [ops_chain, output_mem_config, fp32_dest_acc_en] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
-                return operation::run_without_autoformat(
-                    EltwiseUnary{ops_chain, output_mem_config, fp32_dest_acc_en}, input_tensors);
-            }, {input_tensor}, output_tensors);
+            [ops_chain, output_mem_config, fp32_dest_acc_en](
+                const std::vector<Tensor>& input_tensors,
+                const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
+                return operation::run(EltwiseUnary{ops_chain, output_mem_config, fp32_dest_acc_en}, input_tensors);
+            },
+            {input_tensor},
+            output_tensors);
     }
     else {
-        operation::launch_with_autoformat(
+        operation::launch_op(
             [ops_chain, output_mem_config,fp32_dest_acc_en] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
                 Tensor input_tensor = input_tensors.at(0);
-                Shape pad_shape = AutoFormat::pad_to_tile_shape(input_tensor.get_legacy_shape());
-                FormatParams input_format_params = {.pad_shape = pad_shape, .pad_value = 0.0, .target_layout = Layout::TILE};
-                return operation::run_with_autoformat(
-                        EltwiseUnary{ops_chain, output_mem_config, fp32_dest_acc_en}, {input_tensor}, {input_format_params}, {Layout::TILE});
+                return operation::run(
+                    EltwiseUnary{ops_chain, output_mem_config, fp32_dest_acc_en},
+                    {input_tensor});
             }, {input_tensor}, output_tensors);
     }
     return output_tensors.at(0);

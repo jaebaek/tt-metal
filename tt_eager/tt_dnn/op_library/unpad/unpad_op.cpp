@@ -205,9 +205,6 @@ Tensor unpad(
                 output_tensor_end[2] - output_tensor_start[2] + 1,
                 output_tensor_end[3] - output_tensor_start[3] + 1,
             };
-            if (input_tensor_a.get_legacy_shape() == output_tensor_shape) {
-                return {AutoFormat::move_tensor_to_mem_config(input_tensor_a, output_mem_config)};
-            }
             return operation::run(
                 Unpad{
                     output_tensor_start, output_tensor_end, output_mem_config, output_tensor_shape, input_tensor_shape},

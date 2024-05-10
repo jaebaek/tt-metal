@@ -39,7 +39,7 @@ Tensor bmm_tilize_untilize(const Tensor& a, const Tensor& b, const Tensor& bias,
             if (has_bias) {
                 bias = input_tensors.at(2);
             }
-            auto arch = a.storage_type() == StorageType::DEVICE ? a.device()->arch() : AutoFormat::GetDefaultDevice()->arch();
+            auto arch = a.device()->arch();
             auto kernel_config_val = init_device_compute_kernel_config(arch, compute_kernel_config, MathFidelity::LoFi, true, false, false);
             return operation::run(BMMTilizeUntilize {
                             out_dt,

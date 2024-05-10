@@ -108,7 +108,6 @@ def demo():
     # Initialize the device
     device = ttl.device.CreateDevice(0)
 
-    ttl.device.SetDefaultDevice(device)
     # enable_persistent_kernel_cache()
     disable_persistent_kernel_cache()
     # 1. Load the autoencoder model which will be used to decode the latents into image space.

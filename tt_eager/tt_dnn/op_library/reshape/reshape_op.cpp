@@ -336,7 +336,7 @@ Tensor reshape (const Tensor &input_tensor_a, int N, int C, int H, int W, const 
         return input_tensor_a.reshape(N, C, H, W);
     }
     if (input_tensor_a.get_legacy_shape() == output_shape) {
-        return AutoFormat::move_tensor_to_mem_config(input_tensor_a, output_mem_config);
+        return input_tensor_a;
     }
     if (input_tensor_a.get_layout() == Layout::ROW_MAJOR && ((compute_volume(output_shape) / output_shape[-1]) % TILE_HEIGHT != 0 || output_shape[-1] % TILE_WIDTH != 0 || input_tensor_a.get_legacy_shape()[-1] % TILE_WIDTH != 0 || (input_tensor_a.volume() / input_tensor_a.get_legacy_shape()[-1]) % TILE_HEIGHT != 0)) {
         TT_FATAL(input_tensor_a.get_dtype()==DataType::BFLOAT16);
@@ -344,9 +344,13 @@ Tensor reshape (const Tensor &input_tensor_a, int N, int C, int H, int W, const 
     }
     std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor_a}))};
     operation::launch_op(
-        [N, C, H, W, output_mem_config] (std::vector<Tensor> input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
-            return operation::run_without_autoformat(Reshape{N, C, H, W, output_mem_config}, input_tensors);
-        }, {input_tensor_a}, output_tensors);
+        [N, C, H, W, output_mem_config](
+            std::vector<Tensor> input_tensors,
+            const std::vector<std::optional<const Tensor>> &optional_input_tensors) mutable -> std::vector<Tensor> {
+            return operation::run(Reshape{N, C, H, W, output_mem_config}, input_tensors);
+        },
+        {input_tensor_a},
+        output_tensors);
     return output_tensors.at(0);
 }
 

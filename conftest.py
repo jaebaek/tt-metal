@@ -269,8 +269,6 @@ def device_l1_small_size(request):
         device = ttl.device.CreateDevice(device_id, l1_small_size)
     else:
         device = ttl.device.CreateDevice(device_id)
-    ttl.device.SetDefaultDevice(device)
-
     yield device
 
     ttl.device.Synchronize(device)
@@ -399,15 +397,6 @@ def clear_compile_cache():
     import tt_lib as ttl
 
     ttl.device.DisablePersistentKernelCache()
-
-
-@pytest.fixture(autouse=True)
-def reset_default_device():
-    import tt_lib as ttl
-
-    device = ttl.device.GetDefaultDevice()
-    yield
-    ttl.device.SetDefaultDevice(device)
 
 
 @pytest.fixture(scope="function")

@@ -28,8 +28,7 @@ operation::ProgramWithCallbacks moreh_adamw_(
     const Tensor& exp_avg_sq,
     float lr, float beta1, float beta2, float eps, float weight_decay, uint32_t step, bool amsgrad,
     const std::optional<std::reference_wrapper<const Tensor>> max_exp_avg_sq) {
-
-    uint32_t num_tiles = param.volume() / TILE_HW;
+    uint32_t num_tiles = param.volume() / tt::constants::TILE_HW;
 
     Program program{};
 

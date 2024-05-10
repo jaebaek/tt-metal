@@ -354,7 +354,6 @@ if __name__ == "__main__":
 
     device_id = args.device_id
     device = tt_lib.device.CreateDevice(device_id)
-    tt_lib.device.SetDefaultDevice(device)
 
     logger.info(f"Running on device {device_id} for test.")
 

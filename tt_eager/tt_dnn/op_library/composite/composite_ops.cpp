@@ -983,35 +983,16 @@ Tensor celu(const Tensor& input_a, float alpha, const MemoryConfig& output_mem_c
     return operation::decorate_as_composite(__func__, _celu)(input_a, alpha, output_mem_config);
 }
 
-Tensor prod_all(const Tensor& input_a, const MemoryConfig& output_mem_config) {
-    auto formatted_input_tensor = input_a;
-    if(formatted_input_tensor.get_layout()==Layout::ROW_MAJOR){
-        auto a_pad_shape = AutoFormat::pad_to_tile_shape(input_a.get_legacy_shape(), false, false, true, true);
-        auto out_shape = input_a.get_legacy_shape();
-        out_shape = {out_shape[0], out_shape[1], out_shape[2], out_shape[3]};
-        if (!AutoFormat::check_input_tensor_format(input_a, a_pad_shape)) {
-            formatted_input_tensor = AutoFormat::format_input_tensor(input_a, input_a.device(), a_pad_shape, 1.0, Layout::TILE);
-        }
-    }
-    return tt::operations::primary::prod_all(formatted_input_tensor, output_mem_config);
+Tensor prod_all(const Tensor& input_tensor, const MemoryConfig& output_mem_config) {
+    return tt::operations::primary::prod_all(input_tensor, output_mem_config);
 }
 
-Tensor prod_nc(const Tensor& temp, int64_t dim, const MemoryConfig& output_mem_config) {
-    //layout conversion
-    auto formatted_input_tensor = temp;
-    if(formatted_input_tensor.get_layout()==Layout::ROW_MAJOR){
-        auto a_pad_shape = AutoFormat::pad_to_tile_shape(temp.get_legacy_shape(), false, false, true, true);
-        auto out_shape = temp.get_legacy_shape();
-        out_shape = {out_shape[0], out_shape[1], out_shape[2], out_shape[3]};
-        if (!AutoFormat::check_input_tensor_format(temp, a_pad_shape)) {
-            formatted_input_tensor = AutoFormat::format_input_tensor(temp, temp.device(), a_pad_shape, 1.0, Layout::TILE);
-        }
-    }
+Tensor prod_nc(const Tensor& input_tensor, int64_t dim, const MemoryConfig& output_mem_config) {
     //Apply prod
     std::vector<int64_t> dimension = {(dim == 1 || dim == -3) ? 1 : 0};
-    Shape input_shape = formatted_input_tensor.get_legacy_shape();
+    Shape input_shape = input_tensor.get_legacy_shape();
     Shape required = { ((dim == 1 || dim == -3) ? input_shape[0] : 1), ((dim == 1 || dim == -3) ? 1 : input_shape[1]) , input_shape[2], input_shape[3]};
-    return tt::operations::primary::prod_nc(formatted_input_tensor, zeros( required, formatted_input_tensor.get_dtype(), formatted_input_tensor.get_layout(), formatted_input_tensor.device(), output_mem_config), dimension, output_mem_config);
+    return tt::operations::primary::prod_nc(input_tensor, zeros( required, input_tensor.get_dtype(), input_tensor.get_layout(), input_tensor.device(), output_mem_config), dimension, output_mem_config);
 }
 
 Tensor _prod(const Tensor& input_a, bool all_dimensions, int64_t dim, const MemoryConfig& output_mem_config) {
@@ -1568,8 +1549,10 @@ Tensor pow(const Tensor& input_a, int exponent, const MemoryConfig& output_mem_c
 // Argmax returns the index of maximum element in the tensor
 Tensor _argmax(const Tensor& input_a, int64_t _dim, bool all, const MemoryConfig& output_mem_config) {
     std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_a}))};
-    operation::launch_with_autoformat(
-        [_dim, all, output_mem_config] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
+    operation::launch_op(
+        [_dim, all, output_mem_config](
+            const std::vector<Tensor>& input_tensors,
+            const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
             const auto& input_a = input_tensors.at(0);
             auto& input_shape = input_a.get_legacy_shape();
             TT_FATAL(input_shape.rank() == 4, "supported for rank-4 tensors at this time");
@@ -1671,7 +1654,9 @@ Tensor _argmax(const Tensor& input_a, int64_t _dim, bool all, const MemoryConfig
             max_indices.deallocate();
             result = global_min(result, output_mem_config);
             return {result};
-    }, {input_a}, output_tensors);
+        },
+        {input_a},
+        output_tensors);
     return output_tensors.at(0);
 }
 

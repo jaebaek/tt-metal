@@ -113,8 +113,10 @@ struct make_eltwise_binary {
         const MemoryConfig &output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         std::optional<const DataType> output_dtype = std::nullopt) const {
         std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor_a, input_tensor_b}))};
-        operation::launch_with_autoformat(
-            [fused_activations, output_mem_config, output_dtype] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
+        operation::launch_op(
+            [fused_activations, output_mem_config, output_dtype](
+                const std::vector<Tensor> &input_tensors,
+                const std::vector<std::optional<const Tensor>> &optional_input_tensors) mutable -> std::vector<Tensor> {
                 Tensor in_a = input_tensors.at(0);
                 Tensor in_b = input_tensors.at(1);
                 Shape shape_a = in_a.get_legacy_shape();
@@ -136,16 +138,17 @@ struct make_eltwise_binary {
                     (in_a.get_legacy_shape() == in_b.get_legacy_shape()) or
                     (in_a.get_legacy_shape().without_padding() == in_b.get_legacy_shape().without_padding()),
                     "Input shapes must be the same!");
-                return operation::run_with_autoformat(
-                        EltwiseBinary{
-                            binary_op_type,
-                            fused_activations,
-                            output_mem_config,
-                            output_dtype.value_or(in_a.get_dtype()),
-                            false},
-                        {in_a, in_b});
+                return operation::run(
+                    EltwiseBinary{
+                        binary_op_type,
+                        fused_activations,
+                        output_mem_config,
+                        output_dtype.value_or(in_a.get_dtype()),
+                        false},
+                    {in_a, in_b});
             },
-        {input_tensor_a, input_tensor_b}, output_tensors);
+            {input_tensor_a, input_tensor_b},
+            output_tensors);
         return output_tensors.at(0);
     }
 };

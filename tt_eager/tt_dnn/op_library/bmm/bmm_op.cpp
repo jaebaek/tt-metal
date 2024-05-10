@@ -83,7 +83,7 @@ operation::OpPerformanceModel create_op_performance_model_for_matmul(
         tt::log_warning(tt::LogOp, "Output tensor not on DEVICE?!");
     }
 
-    auto arch = t.storage_type() == StorageType::DEVICE ? t.device()->arch() : AutoFormat::GetDefaultDevice()->arch();
+    auto arch = t.device()->arch();
     const int num_cores = (arch == ARCH::WORMHOLE_B0) ? 8 * 8 : 9 * 12;
     const int tensix_mul_adds_per_cycle_lofi = (arch == ARCH::WORMHOLE_B0) ? 4096 : 2048;
 
@@ -555,7 +555,14 @@ Tensor falcon_dense_h_to_4h_matmul(const Tensor &input_tensor_a, const Tensor &i
         TT_FATAL((input_tensor_a.get_legacy_shape() == Shape({1, 1, seq_len, 4544})), "Unsupported input shape");
         TT_FATAL((input_tensor_b.get_legacy_shape() == Shape({1, 1, 4544, 18176})), "Unsupported input shape");
         TT_FATAL(!fused_activation.has_value());
-        return operation::run_with_autoformat(tt::operations::primary::Matmul{.program_config=tt::operations::primary::MatmulDefaultProgramConfig{}, .bcast_batch=true, .output_mem_config=mem_config, .output_dtype=output_dtype.value_or(input_tensor_a.get_dtype())}, {input_tensor_a, input_tensor_b}).at(0);
+        return operation::run(
+                   tt::operations::primary::Matmul{
+                       .program_config = tt::operations::primary::MatmulDefaultProgramConfig{},
+                       .bcast_batch = true,
+                       .output_mem_config = mem_config,
+                       .output_dtype = output_dtype.value_or(input_tensor_a.get_dtype())},
+                   {input_tensor_a, input_tensor_b})
+            .at(0);
     } else {
         CoreCoord grid_size = get_falcon_matmul_grid_size(input_tensor_a.device());
         std::optional<const DeviceComputeKernelConfig> config = std::nullopt;
@@ -570,8 +577,10 @@ Tensor falcon_lm_head_matmul(const Tensor &input_tensor_a, const Tensor &input_t
     std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor_a, input_tensor_b}, {bias}))};
     if (seq_len > 512) {
         // TODO: Check support for seq_len == 128, 256, 512, ..., 2048
-        operation::launch_with_autoformat(
-            [seq_len, mem_config, output_dtype] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
+        operation::launch_op(
+            [seq_len, mem_config, output_dtype](
+                const std::vector<Tensor>& input_tensors,
+                const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
                 auto& input_tensor_a = input_tensors.at(0);
                 auto& input_tensor_b = input_tensors.at(1);
                 auto& bias = optional_input_tensors.at(0);
@@ -579,9 +588,18 @@ Tensor falcon_lm_head_matmul(const Tensor &input_tensor_a, const Tensor &input_t
                 TT_FATAL(seq_len >=  128, "Falcon mm's seq_len must be greater than 128!");
                 TT_FATAL((input_tensor_a.get_legacy_shape() == Shape({1, 1, seq_len, 4544})), "Unsupported input shape");
                 TT_FATAL((input_tensor_b.get_legacy_shape() == Shape({1, 1, 4544, 65024})), "Unsupported input shape");
-                return operation::run_with_autoformat(tt::operations::primary::Matmul{.program_config=tt::operations::primary::MatmulDefaultProgramConfig{}, .bcast_batch=true, .output_mem_config=mem_config, .output_dtype=output_dtype.value_or(input_tensor_a.get_dtype())}, {input_tensor_a, input_tensor_b}, {bias});
+                return operation::run(
+                    tt::operations::primary::Matmul{
+                        .program_config = tt::operations::primary::MatmulDefaultProgramConfig{},
+                        .bcast_batch = true,
+                        .output_mem_config = mem_config,
+                        .output_dtype = output_dtype.value_or(input_tensor_a.get_dtype())},
+                    {input_tensor_a, input_tensor_b},
+                    {bias});
             },
-        {input_tensor_a, input_tensor_b}, output_tensors, {bias});
+            {input_tensor_a, input_tensor_b},
+            output_tensors,
+            {bias});
 
     } else {
         operation::launch_op(

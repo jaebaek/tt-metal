@@ -203,7 +203,6 @@ TEST_F(CommonFixture, TestAsyncEltwiseBinaryAutoFormat) {
     // Test usecase where both inputs and outputs are on host and autoformat is used
     Device* device = this->devices_[0];
     device->set_worker_mode(WorkExecutorMode::ASYNCHRONOUS);
-    AutoFormat::SetDefaultDevice(device);
 
     for (int i = 0; i < 5; i++) {
         // Initialize tensors and keep them on host. Since none of the tensors are divisible by tile dims, the inputs and

@@ -3,20 +3,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "tt_dnn/op_library/conv/optimized_conv_op.hpp"
-#include "tt_dnn/op_library/eltwise_unary/eltwise_unary_op.hpp"
-
-#include "tt_metal/host_api.hpp"
-#include "tt_metal/detail/tt_metal.hpp"
-#include "tt_metal/detail/util.hpp"
-#include "tt_metal/common/constants.hpp"
-
-#include "tt_metal/tt_stl/reflection.hpp"
-
-#include "tt_dnn/op_library/work_split.hpp"
-#include "tt_dnn/op_library/sharding_utilities.hpp"
-#include "tt_dnn/op_library/auto_format.hpp"
 
 #include "tensor/tensor_utils.hpp"
+#include "tt_dnn/op_library/eltwise_unary/eltwise_unary_op.hpp"
+#include "tt_dnn/op_library/sharding_utilities.hpp"
+#include "tt_dnn/op_library/work_split.hpp"
+#include "tt_metal/common/constants.hpp"
+#include "tt_metal/detail/tt_metal.hpp"
+#include "tt_metal/detail/util.hpp"
+#include "tt_metal/host_api.hpp"
+#include "tt_metal/tt_stl/reflection.hpp"
 using namespace tt::constants;
 
 namespace optimized_conv_op_utils {
@@ -75,25 +71,32 @@ Tensor optimized_conv(const Tensor& a,
     //TT_ASSERT(!untilize_out, "Optimized conv only supports tiled out");
     TT_ASSERT(b.get_layout() == Layout::TILE); // Weights should already be formatted
     const auto& ashape = input_tensor_shape.has_value() ? Shape(input_tensor_shape.value()) : a.get_legacy_shape();
-    auto padded_a_shape = Shape({ashape[0], ashape[1], ashape[2], round_up(ashape[3], 16)});
-    FormatParams input_a_format_params = {.pad_shape=padded_a_shape, .pad_value=0.0, .target_layout=Layout::ROW_MAJOR};
-    FormatParams input_b_format_params = {.pad_shape=b.get_legacy_shape(), .pad_value=0.0, .target_layout=Layout::TILE};
-    FormatParams input_bias_format_params = {};
-    if (has_bias) {
-        input_bias_format_params = {.pad_shape=bias.value().get_legacy_shape(), .pad_value=0, .target_layout=Layout::TILE};
-    }
-    auto output_layout = untilize_out ? Layout::ROW_MAJOR : Layout::TILE;
     if (output_mem_config.has_value()) {
         TT_ASSERT((output_mem_config.value().is_sharded() || output_mem_config.value().memory_layout == TensorMemoryLayout::INTERLEAVED));
     }
-    auto arch = a.storage_type() == StorageType::DEVICE ? a.device()->arch() : AutoFormat::GetDefaultDevice()->arch();
+    auto arch = a.device()->arch();
     bool fp32_accum = a.device()->arch() == ARCH::WORMHOLE_B0;  // && compute_kernel_config.has_value()) ? compute_kernel_config.value().fp32_dest_acc_en : false;
     auto kernel_config_val = init_device_compute_kernel_config(arch, compute_kernel_config, MathFidelity::LoFi, true, fp32_accum, false);
-    return operation::run_without_autoformat(
-        OptimizedConv(conv_params, output_channels, untilize_out, has_bias, fuse_relu, math_fidelity, parallelization_config, block_config, extra_padding_for_32B_alignment, output_mem_config.value_or(a.memory_config()), output_dtype.value_or(a.get_dtype()), ashape, use_shallow_conv_variant, transpose_mcast, kernel_config_val
-        ),
-        {a, b},
-        {bias, conv_reader_indices}).at(0);
+    return operation::run(
+               OptimizedConv(
+                   conv_params,
+                   output_channels,
+                   untilize_out,
+                   has_bias,
+                   fuse_relu,
+                   math_fidelity,
+                   parallelization_config,
+                   block_config,
+                   extra_padding_for_32B_alignment,
+                   output_mem_config.value_or(a.memory_config()),
+                   output_dtype.value_or(a.get_dtype()),
+                   ashape,
+                   use_shallow_conv_variant,
+                   transpose_mcast,
+                   kernel_config_val),
+               {a, b},
+               {bias, conv_reader_indices})
+        .at(0);
 }
 
 void OptimizedConv::validate(const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) const {
@@ -227,7 +230,7 @@ operation::OpPerformanceModel OptimizedConv::create_op_performance_model(const s
         tt::log_warning(tt::LogOp, "Output tensor not on DEVICE?!");
     }
 
-    auto arch = t.storage_type() == StorageType::DEVICE ? t.device()->arch() : AutoFormat::GetDefaultDevice()->arch();
+    auto arch = t.device()->arch();
     const int num_cores = (arch == ARCH::WORMHOLE_B0) ? 8 * 8 : 9 * 12;
     const int tensix_mul_adds_per_cycle_lofi = (arch == ARCH::WORMHOLE_B0) ? 4096 : 2048;
 
