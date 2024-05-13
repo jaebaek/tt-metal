@@ -11,7 +11,7 @@ from models.demos.t3000.falcon40b.tt.falcon_attention import TtFalconAttention
 from models.demos.t3000.falcon40b.tt.falcon_mlp import TtFalconMLP
 from models.utility_functions import torch2tt_tensor, pad_by_zero
 
-from models.demos.t3000.falcon40b.tt.model_utils import convert_to_layout, partial_layernorm
+from models.demos.t3000.falcon40b.tt.model_utils import convert_to_layout, partial_layernorm, fused_partial_layernorm
 
 
 class TtFalconDecoderLayer:
@@ -69,7 +69,7 @@ class TtFalconDecoderLayer:
         ln_mlp_bias_str = f"{layer_name}.ln_mlp.bias"
 
         ln_mlp_weights_path = (
-            tt_cache_path / f"{ln_mlp_weights_str}_rm_{self.model_config['LN_MLP_WEIGHTS_DTYPE'].name}.bin"
+            tt_cache_path / f"{ln_mlp_weights_str}_rm_{self.model_config['LN_MLP_WEIGHTS_DTYPE'].name}_fused.bin"
         )
         if (ln_mlp_weights_path).exists():
             ln_mlp_gamma_host = ttnn.experimental.tensor.load_tensor(str(ln_mlp_weights_path))
@@ -77,9 +77,12 @@ class TtFalconDecoderLayer:
                 ln_mlp_gamma_host.to(device, self.model_config["LN_MLP_WEIGHTS_MEMCFG"]) for device in devices
             ]
         else:
-            ln_mlp_gamma_host = ttnn.experimental.tensor.Tensor(
-                self.state_dict[ln_mlp_weights_str].reshape([1, 1, -1, 32]),
-                self.model_config["LN_MLP_WEIGHTS_DTYPE"],
+            ln_mlp_gamma_host = torch2tt_tensor(
+                self.state_dict[ln_mlp_weights_str],
+                None,
+                tt_layout=tt_lib.tensor.Layout.ROW_MAJOR,
+                tt_memory_config=self.model_config["LN_MLP_WEIGHTS_MEMCFG"],
+                tt_dtype=self.model_config["LN_MLP_WEIGHTS_DTYPE"],
             )
             self.ln_mlp_gamma = [
                 ln_mlp_gamma_host.to(device, self.model_config["LN_MLP_WEIGHTS_MEMCFG"]) for device in devices
@@ -89,16 +92,21 @@ class TtFalconDecoderLayer:
                 ln_mlp_gamma_host,
             )
 
-        ln_mlp_bias_path = tt_cache_path / f"{ln_mlp_bias_str}_rm_{self.model_config['LN_MLP_BIAS_DTYPE'].name}.bin"
+        ln_mlp_bias_path = (
+            tt_cache_path / f"{ln_mlp_bias_str}_rm_{self.model_config['LN_MLP_BIAS_DTYPE'].name}_fused.bin"
+        )
         if (ln_mlp_bias_path).exists():
             ln_mlp_beta_host = ttnn.experimental.tensor.load_tensor(str(ln_mlp_bias_path))
             self.ln_mlp_beta = [
                 ln_mlp_beta_host.to(device, self.model_config["LN_MLP_BIAS_MEMCFG"]) for device in devices
             ]
         else:
-            ln_mlp_beta_host = ttnn.experimental.tensor.Tensor(
-                self.state_dict[ln_mlp_bias_str].reshape([1, 1, -1, 32]),
-                self.model_config["LN_MLP_BIAS_DTYPE"],
+            ln_mlp_beta_host = torch2tt_tensor(
+                self.state_dict[ln_mlp_bias_str],
+                None,
+                tt_layout=tt_lib.tensor.Layout.ROW_MAJOR,
+                tt_memory_config=self.model_config["LN_MLP_BIAS_MEMCFG"],
+                tt_dtype=self.model_config["LN_MLP_BIAS_DTYPE"],
             )
             self.ln_mlp_beta = [
                 ln_mlp_beta_host.to(device, self.model_config["LN_MLP_BIAS_MEMCFG"]) for device in devices
@@ -112,7 +120,7 @@ class TtFalconDecoderLayer:
         ln_attn_bias_str = f"{layer_name}.ln_attn.bias"
 
         ln_attn_weights_path = (
-            tt_cache_path / f"{ln_attn_weights_str}_rm_{self.model_config['LN_ATTN_WEIGHTS_DTYPE'].name}.bin"
+            tt_cache_path / f"{ln_attn_weights_str}_rm_{self.model_config['LN_ATTN_WEIGHTS_DTYPE'].name}_fused.bin"
         )
         if (ln_attn_weights_path).exists():
             ln_attn_gamma_host = ttnn.experimental.tensor.load_tensor(str(ln_attn_weights_path))
@@ -120,9 +128,12 @@ class TtFalconDecoderLayer:
                 ln_attn_gamma_host.to(device, self.model_config["LN_ATTN_WEIGHTS_MEMCFG"]) for device in devices
             ]
         else:
-            ln_attn_gamma_host = ttnn.experimental.tensor.Tensor(
-                self.state_dict[ln_attn_weights_str].reshape([1, 1, -1, 32]),
-                self.model_config["LN_ATTN_WEIGHTS_DTYPE"],
+            ln_attn_gamma_host = torch2tt_tensor(
+                self.state_dict[ln_attn_weights_str],
+                None,
+                tt_layout=tt_lib.tensor.Layout.ROW_MAJOR,
+                tt_memory_config=self.model_config["LN_ATTN_WEIGHTS_MEMCFG"],
+                tt_dtype=self.model_config["LN_ATTN_WEIGHTS_DTYPE"],
             )
             self.ln_attn_gamma = [
                 ln_attn_gamma_host.to(device, self.model_config["LN_ATTN_WEIGHTS_MEMCFG"]) for device in devices
@@ -132,16 +143,21 @@ class TtFalconDecoderLayer:
                 ln_attn_gamma_host,
             )
 
-        ln_attn_bias_path = tt_cache_path / f"{ln_attn_bias_str}_rm_{self.model_config['LN_ATTN_BIAS_DTYPE'].name}.bin"
+        ln_attn_bias_path = (
+            tt_cache_path / f"{ln_attn_bias_str}_rm_{self.model_config['LN_ATTN_BIAS_DTYPE'].name}_fused.bin"
+        )
         if (ln_attn_bias_path).exists():
             ln_attn_beta_host = ttnn.experimental.tensor.load_tensor(str(ln_attn_bias_path))
             self.ln_attn_beta = [
                 ln_attn_beta_host.to(device, self.model_config["LN_ATTN_BIAS_MEMCFG"]) for device in devices
             ]
         else:
-            ln_attn_beta_host = ttnn.experimental.tensor.Tensor(
-                self.state_dict[ln_attn_bias_str].reshape([1, 1, -1, 32]),
-                self.model_config["LN_ATTN_BIAS_DTYPE"],
+            ln_attn_beta_host = torch2tt_tensor(
+                self.state_dict[ln_attn_bias_str],
+                None,
+                tt_layout=tt_lib.tensor.Layout.ROW_MAJOR,
+                tt_memory_config=self.model_config["LN_ATTN_BIAS_MEMCFG"],
+                tt_dtype=self.model_config["LN_ATTN_BIAS_DTYPE"],
             )
             self.ln_attn_beta = [
                 ln_attn_beta_host.to(device, self.model_config["LN_ATTN_BIAS_MEMCFG"]) for device in devices
@@ -153,6 +169,49 @@ class TtFalconDecoderLayer:
 
         self.layernorm_eps = config.layer_norm_epsilon
 
+        ln_no_weights_str = f"{layer_name}.ln_no.weight"
+        ln_no_bias_str = f"{layer_name}.ln_no.bias"
+
+        ln_no_weights_path = (
+            tt_cache_path / f"{ln_no_weights_str}_rm_{self.model_config['LN_MLP_WEIGHTS_DTYPE'].name}_fused.bin"
+        )
+        if (ln_no_weights_path).exists():
+            ln_no_gamma_host = tt_lib.tensor.load_tensor(str(ln_no_weights_path))
+            self.ln_no_gamma = [
+                ln_no_gamma_host.to(device, self.model_config["LN_MLP_WEIGHTS_MEMCFG"]) for device in devices
+            ]
+        else:
+            ln_no_gamma_host = tt_lib.tensor.Tensor(
+                torch.ones(self.state_dict[ln_mlp_weights_str].reshape([1, 1, -1, 32]).shape),
+                self.model_config["LN_MLP_WEIGHTS_DTYPE"],
+            )
+            self.ln_no_gamma = [
+                ln_no_gamma_host.to(device, self.model_config["LN_MLP_WEIGHTS_MEMCFG"]) for device in devices
+            ]
+            tt_lib.tensor.dump_tensor(
+                str(ln_no_weights_path),
+                ln_no_gamma_host,
+            )
+
+        ln_no_bias_path = tt_cache_path / f"{ln_no_bias_str}_rm_{self.model_config['LN_MLP_BIAS_DTYPE'].name}_fused.bin"
+        if (ln_no_bias_path).exists():
+            ln_no_beta_host = tt_lib.tensor.load_tensor(str(ln_no_bias_path))
+            self.ln_no_beta = [
+                ln_no_beta_host.to(device, self.model_config["LN_MLP_BIAS_MEMCFG"]) for device in devices
+            ]
+        else:
+            ln_no_beta_host = tt_lib.tensor.Tensor(
+                torch.zeros(self.state_dict[ln_mlp_bias_str].reshape([1, 1, -1, 32]).shape),
+                self.model_config["LN_MLP_BIAS_DTYPE"],
+            )
+            self.ln_no_beta = [
+                ln_no_beta_host.to(device, self.model_config["LN_MLP_BIAS_MEMCFG"]) for device in devices
+            ]
+            tt_lib.tensor.dump_tensor(
+                str(ln_no_bias_path),
+                ln_no_beta_host,
+            )
+
     def set_model_config(self, model_config):
         self.model_config = model_config
         self.self_attn.set_model_config(model_config)
@@ -160,6 +219,54 @@ class TtFalconDecoderLayer:
 
     def preprocessing(self, llm_mode, batch_size, sequence_size):
         self.self_attn.preprocessing(llm_mode, batch_size, sequence_size)
+
+        # broadcast layernorm gamma and beta along S
+        repeat_shape = (1, 1, sequence_size, 1)
+
+        # mlp
+        self.ln_mlp_gamma_for_seqlen = [
+            tt_lib.tensor.repeat(self.ln_mlp_gamma[i], repeat_shape, output_mem_config=self.model_config["DRAM_MEMCFG"])
+            for i in range(len(self.devices))
+        ]
+        for i in range(len(self.devices)):
+            self.ln_mlp_gamma_for_seqlen[i] = tt_lib.tensor.tilize(
+                self.ln_mlp_gamma_for_seqlen[i],
+                output_mem_config=self.model_config["DRAM_MEMCFG"],
+                output_dtype=self.model_config["LN_MLP_WEIGHTS_DTYPE"],
+            )
+        self.ln_mlp_beta_for_seqlen = [
+            tt_lib.tensor.repeat(self.ln_mlp_beta[i], repeat_shape, output_mem_config=self.model_config["DRAM_MEMCFG"])
+            for i in range(len(self.devices))
+        ]
+        for i in range(len(self.devices)):
+            self.ln_mlp_beta_for_seqlen[i] = tt_lib.tensor.tilize(
+                self.ln_mlp_beta_for_seqlen[i],
+                output_mem_config=self.model_config["DRAM_MEMCFG"],
+                output_dtype=self.model_config["LN_MLP_BIAS_DTYPE"],
+            )
+        # attn
+        self.ln_attn_gamma_for_seqlen = [
+            tt_lib.tensor.repeat(
+                self.ln_attn_gamma[i], repeat_shape, output_mem_config=self.model_config["DRAM_MEMCFG"]
+            )
+            for i in range(len(self.devices))
+        ]
+        for i in range(len(self.devices)):
+            self.ln_attn_gamma_for_seqlen[i] = tt_lib.tensor.tilize(
+                self.ln_attn_gamma_for_seqlen[i],
+                output_mem_config=self.model_config["DRAM_MEMCFG"],
+                output_dtype=self.model_config["LN_ATTN_WEIGHTS_DTYPE"],
+            )
+        self.ln_attn_beta_for_seqlen = [
+            tt_lib.tensor.repeat(self.ln_attn_beta[i], repeat_shape, output_mem_config=self.model_config["DRAM_MEMCFG"])
+            for i in range(len(self.devices))
+        ]
+        for i in range(len(self.devices)):
+            self.ln_attn_beta_for_seqlen[i] = tt_lib.tensor.tilize(
+                self.ln_attn_beta_for_seqlen[i],
+                output_mem_config=self.model_config["DRAM_MEMCFG"],
+                output_dtype=self.model_config["LN_ATTN_BIAS_DTYPE"],
+            )
 
     def __call__(
         self,
@@ -254,24 +361,14 @@ class TtFalconDecoderLayer:
                     replicated_hidden_states[i], self.model_config["LN_INPUT_DTYPE"]
                 )
 
-        attn_ln_output = partial_layernorm(
+        attn_ln_output, mlp_ln_output = fused_partial_layernorm(
             replicated_hidden_states,
-            self.ln_attn_gamma,
-            self.ln_attn_beta,
-            self.layernorm_eps,
-            self.model_config["layernorm_params"],
-            self.model_config["PARTIAL_LN_MEMCFG"],
-            self.model_config["PARTIAL_LN_PROGCFG"],
-            self.model_config["LN_MLP_OUTPUT_DTYPE"],
-            self.hidden_size,
-            self.devices,
-            self.ln_output_tensors_dict["attn_layernorm"],
-        )
-
-        mlp_ln_output = partial_layernorm(
-            replicated_hidden_states,
-            self.ln_mlp_gamma,
-            self.ln_mlp_beta,
+            self.ln_no_gamma,
+            self.ln_no_beta,
+            self.ln_attn_gamma_for_seqlen,
+            self.ln_attn_beta_for_seqlen,
+            self.ln_mlp_gamma_for_seqlen,
+            self.ln_mlp_beta_for_seqlen,
             self.layernorm_eps,
             self.model_config["layernorm_params"],
             self.model_config["PARTIAL_LN_MEMCFG"],
@@ -280,6 +377,7 @@ class TtFalconDecoderLayer:
             self.hidden_size,
             self.devices,
             self.ln_output_tensors_dict["mlp_layernorm"],
+            self.ln_output_tensors_dict["attn_layernorm"],
         )
 
         residual = hidden_states
