@@ -6,7 +6,7 @@ import torch
 import tt_lib
 import ttnn
 from models.demos.falcon7b.tt.model_utils import get_weights_cached
-from models.utility_functions import torch2tt_tensor
+from models.utility_functions import is_grayskull, torch2tt_tensor
 from torch import nn
 
 
@@ -33,6 +33,9 @@ class TtFalconMLPPrefill(nn.Module):
         self.max_position_embeddings = max_position_embeddings
         self.padding_value = model_config["MLP_PADDING_VALUE"]
         self.seq_len = model_config["MLP_SEQ_LEN"]
+
+        self.is_grayskull = is_grayskull()
+
         # Padding tensor for 1024 and 2048 sequence lengths
 
         layer_name = f"{base_url}.{layer_num}"
@@ -40,10 +43,14 @@ class TtFalconMLPPrefill(nn.Module):
         dense_4h_to_h_str = f"{layer_name}.mlp.dense_4h_to_h.weight"
 
         custom_output_shape_h_to_4h = (
-            (1, 1, self.padding_value, 4 * self.padding_value) if self.seq_len in [1024, 2048] else None
+            (1, 1, self.padding_value, 4 * self.padding_value)
+            if not self.is_grayskull and self.seq_len in [1024, 2048]
+            else None
         )
         custom_output_shape_4h_to_h = (
-            (1, 1, 4 * self.padding_value, self.padding_value) if self.seq_len in [1024, 2048] else None
+            (1, 1, 4 * self.padding_value, self.padding_value)
+            if not self.is_grayskull and self.seq_len in [1024, 2048]
+            else None
         )
 
         self.dense_h_to_4h_weights = get_weights_cached(
@@ -67,9 +74,9 @@ class TtFalconMLPPrefill(nn.Module):
             custom_output_shape=custom_output_shape_4h_to_h,
         )
 
-        if "MLP_PREFILL_PADDING_TENSORS" not in self.model_config:
+        if "MLP_PREFILL_PADDING_TENSORS" not in self.model_config and not self.is_grayskull:
             self._load_mlp_padded_tensors()
-        if "MLP_OUTPUT_TENSORS" not in self.model_config:
+        if "MLP_OUTPUT_TENSORS" not in self.model_config and not self.is_grayskull:
             self._allocate_output_mlp_tensors()
 
     def _load_mlp_padded_tensors(self):
@@ -112,7 +119,7 @@ class TtFalconMLPPrefill(nn.Module):
         self.model_config["MLP_OUTPUT_TENSORS"] = out_tt
 
     def forward(self, x: tt_lib.tensor.Tensor) -> tt_lib.tensor.Tensor:
-        if self.seq_len in [1024, 2048]:
+        if not self.is_grayskull and self.seq_len in [1024, 2048]:
             for device_id in range(self.num_devices):
                 tt_padding = self.model_config["MLP_PREFILL_PADDING_TENSORS"][device_id][self.seq_len]
 
@@ -234,11 +241,17 @@ class TtFalconMLPDecode(nn.Module):
         dense_h_to_4h_str = f"{layer_name}.mlp.dense_h_to_4h.weight"
         dense_4h_to_h_str = f"{layer_name}.mlp.dense_4h_to_h.weight"
 
+        self.is_grayskull = devices[0].arch() == tt_lib.device.Arch.GRAYSKULL
+
         custom_output_shape_h_to_4h = (
-            (1, 1, self.padding_value, 4 * self.padding_value) if self.prefill_seq_len in [1024, 2048] else None
+            (1, 1, self.padding_value, 4 * self.padding_value)
+            if not self.is_grayskull and self.prefill_seq_len in [1024, 2048]
+            else None
         )
         custom_output_shape_4h_to_h = (
-            (1, 1, 4 * self.padding_value, self.padding_value) if self.prefill_seq_len in [1024, 2048] else None
+            (1, 1, 4 * self.padding_value, self.padding_value)
+            if not self.is_grayskull and self.prefill_seq_len in [1024, 2048]
+            else None
         )
 
         self.dense_h_to_4h_weights = get_weights_cached(
@@ -283,7 +296,11 @@ class TtFalconMLPDecode(nn.Module):
         hidden_states = []
         for device_id in range(len(x)):
             # pad inputs with padding tensor if not already padded
-            if x[device_id].shape[-1] < self.padding_value and self.prefill_seq_len in [1024, 2048]:
+            if (
+                not self.is_grayskull
+                and x[device_id].shape[-1] < self.padding_value
+                and self.prefill_seq_len in [1024, 2048]
+            ):
                 x[device_id] = ttnn.concat(
                     [x[device_id], self.model_config["MLP_DECODE_PADDING_TENSORS"][device_id]], dim=3
                 )
@@ -306,7 +323,7 @@ class TtFalconMLPDecode(nn.Module):
                 packer_l1_acc=True,
             )
         # remove padding from output
-        if self.prefill_seq_len in [1024, 2048]:
+        if not self.is_grayskull and self.prefill_seq_len in [1024, 2048]:
             hidden_states = [hidden_states[i][:, :, :, : self.hidden_size] for i in range(len(self.devices))]
 
         # return TT Tensor

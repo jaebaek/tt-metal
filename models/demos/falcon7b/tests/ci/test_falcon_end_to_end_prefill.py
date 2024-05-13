@@ -12,14 +12,16 @@ from models.utility_functions import disable_compilation_reports, disable_persis
 @pytest.mark.parametrize(
     "llm_mode, num_layers, batch, seq_len, kv_cache_len, model_config_str, expected_output_pcc, expected_k_cache_pcc, expected_v_cache_pcc",
     (
+        ("prefill", 32, 1, 32, 0, "BFLOAT16-DRAM", 0.97, 0.95, 0.95),
         ("prefill", 32, 1, 128, 0, "BFLOAT16-L1_SHARDED", 0.97, 0.99, 0.96),
-        ("prefill", 32, 1, 1024, 0, "BFLOAT16-L1_SHARDED", 0.98, 0.99, 0.96),
-        ("prefill", 32, 1, 2048, 0, "BFLOAT16-L1_SHARDED", 0.99, 0.99, 0.97),
+        # ("prefill", 32, 1, 1024, 0, "BFLOAT16-L1_SHARDED", 0.98, 0.99, 0.96), #Enable when #8349 is resolved
+        # ("prefill", 32, 1, 2048, 0, "BFLOAT16-L1_SHARDED", 0.99, 0.99, 0.97),
     ),
     ids=[
+        "prefill_seq32",
         "prefill_seq128",
-        "prefill_seq1024",
-        "prefill_seq2048",
+        # "prefill_seq1024",
+        # "prefill_seq2048",
     ],
 )
 @pytest.mark.parametrize(

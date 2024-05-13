@@ -10,6 +10,7 @@ from typing import List, Optional, Tuple
 import tt_lib
 
 from models.utility_functions import (
+    is_grayskull,
     torch2tt_tensor,
     tt2torch_tensor,
     pad_by_zero,
@@ -134,6 +135,8 @@ class TtFalconAttentionPrefill(nn.Module):
         self.model_config = model_config
         self.padded_local_heads = nearest_32(num_heads)
 
+        self.is_grayskull = is_grayskull()
+
         if (self.head_dim * num_heads) != self.hidden_size:
             raise ValueError(
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
@@ -182,7 +185,7 @@ class TtFalconAttentionPrefill(nn.Module):
         self.scalar_for_optimized_prefill = 1 / math.sqrt(self.head_dim)
 
         # generate output buffer on device
-        if "ATTN_OUTPUT_TENSORS" not in self.model_config:
+        if not self.is_grayskull and "ATTN_OUTPUT_TENSORS" not in self.model_config:
             self.model_config["ATTN_OUTPUT_TENSORS"] = {}
             # create output tensors
             for seq_len in [128, 1024, 2048]:
@@ -216,7 +219,7 @@ class TtFalconAttentionPrefill(nn.Module):
 
         seq_len = hidden_states[0].get_legacy_shape()[2]
 
-        if seq_len in [128, 1024, 2048]:
+        if not self.is_grayskull and seq_len in [128, 1024, 2048]:
             attn_output, layer_present = self._optimized_forward(
                 hidden_states,
                 attention_mask,

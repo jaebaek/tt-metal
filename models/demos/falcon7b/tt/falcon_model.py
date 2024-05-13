@@ -11,7 +11,7 @@ import ttnn
 
 from models.demos.falcon7b.tt.falcon_decoder import TtFalconDecoderLayer
 from models.demos.falcon7b.tt.model_utils import get_weights_cached
-from models.utility_functions import nearest_32, torch_tensors_to_tt_tensors
+from models.utility_functions import is_grayskull, nearest_32, torch_tensors_to_tt_tensors
 from models.demos.falcon7b.tests.test_utils import create_prefill_attn_mask_for_sharded_softmax
 from tqdm import tqdm
 
@@ -117,7 +117,7 @@ class TtFalconModelShared(torch.nn.Module):
                 dim=-1,
             )
 
-            if num_input_tokens in [128, 1024, 2048]:
+            if not is_grayskull() and num_input_tokens in [128, 1024, 2048]:
                 attention_mask_ = create_prefill_attn_mask_for_sharded_softmax(
                     attention_mask_bool_padded * -1e5,
                     self.config.num_attention_heads,

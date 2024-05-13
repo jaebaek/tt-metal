@@ -9,7 +9,7 @@ import tt_lib
 from models.demos.falcon7b.tt.falcon_lm_head import falcon_lm_head_matmul_2d
 from models.demos.falcon7b.tt.falcon_model import TtFalconModelShared
 from models.demos.falcon7b.tt.model_utils import get_weights_cached
-from models.utility_functions import torch_tensors_to_tt_tensors
+from models.utility_functions import is_grayskull, torch_tensors_to_tt_tensors
 
 
 class TtFalconCausalLM(TtFalconModelShared):
@@ -40,12 +40,14 @@ class TtFalconCausalLM(TtFalconModelShared):
         self.model_config = model_config
         self.seq_len = seq_len
 
+        self.is_grayskull = is_grayskull()
+
         lm_head_weight = None
         if self.state_dict:
             lm_head_weight = self.state_dict["lm_head.weight"]
             lm_head_weight = torch.transpose(lm_head_weight, -2, -1)
 
-        if self.seq_len > 512:
+        if not self.is_grayskull and self.seq_len > 512:
             # Optimization for lm_head matmul
             self.num_slices = 4 if self.seq_len <= 1024 else 8
             if lm_head_weight is not None:
@@ -105,7 +107,7 @@ class TtFalconCausalLM(TtFalconModelShared):
             use_cache=use_cache,
         )
 
-        if hidden_states[0].get_legacy_shape()[-2] > 512:
+        if not self.is_grayskull and hidden_states[0].get_legacy_shape()[-2] > 512:
             lm_logits = [
                 falcon_lm_head_matmul_2d(
                     hidden_states[device_id],

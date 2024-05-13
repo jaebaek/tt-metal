@@ -4,7 +4,7 @@
 
 import torch
 import tt_lib
-from models.utility_functions import torch2tt_tensor, tt2torch_tensor
+from models.utility_functions import is_grayskull, torch2tt_tensor, tt2torch_tensor
 
 
 def create_prefill_attn_mask_for_sharded_softmax(attention_mask, num_attn_heads, seq_len):
@@ -75,7 +75,7 @@ def get_rand_falcon_inputs(
                     attention_input_i = attention_input[batch * i : batch * (i + 1)]
                     attention_mask_bool_i = attention_mask_bool[batch * i : batch * (i + 1)]
                     tt_attention_input.append(torch2tt_tensor(attention_input_i.unsqueeze(1), device))
-                    if seq_len in [2048, 128, 1024]:
+                    if not is_grayskull() and seq_len in [2048, 128, 1024]:
                         attn_masks = create_prefill_attn_mask_for_sharded_softmax(
                             (attention_mask_bool_i * -1e5),
                             configuration.num_attention_heads,
