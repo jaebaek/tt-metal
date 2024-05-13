@@ -284,7 +284,7 @@ MatmulParallelizationStrategy get_parallelization_strategy(const std::vector<Ten
     }
 }
 
-tt::operations::primary::MatmulMultiCoreReuseMultiCast1DProgramConfig get_mcast_1d_config(const Tensor &input_tensor_a, const Tensor &input_tensor_b, bool fuse_batch, std::optional<UnaryWithParam> fused_activation, bool mcast_in0, bool out_sharded, std::optional<CoreCoord> compute_with_storage_grid_size, std::optional<const DeviceComputeKernelConfig> compute_kernel_config) {
+tt::operations::primary::MatmulMultiCoreReuseMultiCast1DProgramConfig get_mcast_1d_config(const Tensor &input_tensor_a, const Tensor &input_tensor_b, bool fuse_batch, std::optional<UnaryWithParams> fused_activation, bool mcast_in0, bool out_sharded, std::optional<CoreCoord> compute_with_storage_grid_size, std::optional<const DeviceComputeKernelConfig> compute_kernel_config) {
     auto device = input_tensor_a.device();
     auto grid_size = compute_with_storage_grid_size.value_or(device->compute_with_storage_grid_size());
     uint32_t M = fuse_batch ? input_tensor_a.volume() / input_tensor_a.get_legacy_shape()[-1] : input_tensor_a.get_legacy_shape()[-2];
@@ -351,7 +351,7 @@ tuple<uint32_t, uint32_t> get_matmul_subblock_params(const uint32_t per_core_M, 
 
 
 // TODO: Only supports sharded matmul for now; infer most matmul params from shard spec
-tt::operations::primary::MatmulProgramConfig get_matmul_program_config(const Tensor &input_tensor_a, const Tensor &input_tensor_b, const MemoryConfig &output_mem_config, std::optional<UnaryWithParam> fused_activation, const bool matmul, const std::optional<const CoreCoord> user_core_coord, std::optional<const DeviceComputeKernelConfig> compute_kernel_config) {
+tt::operations::primary::MatmulProgramConfig get_matmul_program_config(const Tensor &input_tensor_a, const Tensor &input_tensor_b, const MemoryConfig &output_mem_config, std::optional<UnaryWithParams> fused_activation, const bool matmul, const std::optional<const CoreCoord> user_core_coord, std::optional<const DeviceComputeKernelConfig> compute_kernel_config) {
     TT_FATAL(input_tensor_a.is_sharded());
     bool fp32_dest_acc_en = bmm_op_utils::get_fp32_dest_acc_en(compute_kernel_config);
     // TODO: allow overwriting of grid size by user_core_coord after allowing support of arbitrary compute grid and more generic sharded output tensor creation
@@ -545,7 +545,7 @@ Tensor falcon_dense_4h_to_h_matmul(const Tensor &input_tensor_a, const Tensor &i
         compute_kernel_config);
 }
 
-Tensor falcon_dense_h_to_4h_matmul(const Tensor &input_tensor_a, const Tensor &input_tensor_b, std::optional<const Tensor> bias, std::optional<UnaryWithParam> fused_activation, const MemoryConfig& mem_config, std::optional<const DataType> output_dtype) {
+Tensor falcon_dense_h_to_4h_matmul(const Tensor &input_tensor_a, const Tensor &input_tensor_b, std::optional<const Tensor> bias, std::optional<UnaryWithParams> fused_activation, const MemoryConfig& mem_config, std::optional<const DataType> output_dtype) {
     auto seq_len = input_tensor_a.get_legacy_shape()[2];
     if (seq_len > 1024) {
         TT_FATAL(not fused_activation.has_value());

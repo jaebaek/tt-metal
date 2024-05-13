@@ -115,13 +115,13 @@ bool is_parametrized_type(T val) {
     return false;
 }
 
-struct UnaryWithParam {
+struct UnaryWithParams {
     UnaryOpType op_type;
     std::vector<float> params;
 
-    UnaryWithParam(UnaryOpType op_type, const std::vector<float>& params) : op_type{op_type}, params{params} {}
-    UnaryWithParam(UnaryOpType op_type, float param) : op_type{op_type}, params{param} {}
-    UnaryWithParam(UnaryOpType op_type) : op_type{op_type} {}
+    UnaryWithParams(UnaryOpType op_type, const std::vector<float>& params) : op_type{op_type}, params{params} {}
+    UnaryWithParams(UnaryOpType op_type, float param) : op_type{op_type}, params{param} {}
+    UnaryWithParams(UnaryOpType op_type) : op_type{op_type} {}
 
     bool has_parameter() const { return params.size() > 0; }
 
@@ -129,46 +129,46 @@ struct UnaryWithParam {
     const auto attribute_values() const { return std::make_tuple(std::cref(this->op_type), std::cref(this->params)); }
 };
 
-inline UnaryWithParam string_to_unary_with_param(const std::string& name) {
+inline UnaryWithParams string_to_unary_with_param(const std::string& name) {
     if (name == "relu")
-        return UnaryWithParam(UnaryOpType::RELU);
+        return UnaryWithParams(UnaryOpType::RELU);
     else if (name == "gelu")
-        return UnaryWithParam(UnaryOpType::GELU, static_cast<float>(true));
+        return UnaryWithParams(UnaryOpType::GELU, static_cast<float>(true));
     else if (name == "silu")
-        return UnaryWithParam(UnaryOpType::SILU);
+        return UnaryWithParams(UnaryOpType::SILU);
     else if (name == "sigmoid")
-        return UnaryWithParam(UnaryOpType::SIGMOID);
+        return UnaryWithParams(UnaryOpType::SIGMOID);
     else if (name == "sqrt")
-        return UnaryWithParam(UnaryOpType::SQRT);
+        return UnaryWithParams(UnaryOpType::SQRT);
     else if (name == "exp")
-        return UnaryWithParam(UnaryOpType::EXP, static_cast<float>(true));
+        return UnaryWithParams(UnaryOpType::EXP, static_cast<float>(true));
     else if (name == "recip")
-        return UnaryWithParam(UnaryOpType::RECIP);
+        return UnaryWithParams(UnaryOpType::RECIP);
     else if (name == "log")
-        return UnaryWithParam(UnaryOpType::LOG);
+        return UnaryWithParams(UnaryOpType::LOG);
     else if (name == "tanh")
-        return UnaryWithParam(UnaryOpType::TANH);
+        return UnaryWithParams(UnaryOpType::TANH);
     else if (name == "log2")
-        return UnaryWithParam(UnaryOpType::LOG2);
+        return UnaryWithParams(UnaryOpType::LOG2);
     else if (name == "log10")
-        return UnaryWithParam(UnaryOpType::LOG10);
+        return UnaryWithParams(UnaryOpType::LOG10);
     else if (name == "sin")
-        return UnaryWithParam(UnaryOpType::SIN);
+        return UnaryWithParams(UnaryOpType::SIN);
     else if (name == "cos")
-        return UnaryWithParam(UnaryOpType::COS);
+        return UnaryWithParams(UnaryOpType::COS);
     else if (name == "abs")
-        return UnaryWithParam(UnaryOpType::ABS);
+        return UnaryWithParams(UnaryOpType::ABS);
     else if (name == "sign")
-        return UnaryWithParam(UnaryOpType::SIGN);
+        return UnaryWithParams(UnaryOpType::SIGN);
     else if (name == "square")
-        return UnaryWithParam(UnaryOpType::SQUARE);
+        return UnaryWithParams(UnaryOpType::SQUARE);
     TT_THROW("Unknown unary op: " + name);
 }
 
 enum class UnaryOpParallelizationStrategy { SINGLE_CORE = 0, MULTI_CORE = 1, SHARDED_MULTI_CORE = 2 };
 
 struct EltwiseUnary {
-    const std::vector<UnaryWithParam> op_chain;
+    const std::vector<UnaryWithParams> op_chain;
     const MemoryConfig output_mem_config;
     bool fp32_dest_acc_en;
 
@@ -188,15 +188,15 @@ struct EltwiseUnary {
 };
 
 operation::ProgramWithCallbacks eltwise_unary_sharded(
-    const Tensor& a, Tensor& output, const std::vector<UnaryWithParam> op_chain, bool fp32_dest_acc_en);
+    const Tensor& a, Tensor& output, const std::vector<UnaryWithParams> op_chain, bool fp32_dest_acc_en);
 operation::ProgramWithCallbacks eltwise_unary_multi_core(
-    const Tensor& a, Tensor& output, const std::vector<UnaryWithParam> op_chain, bool fp32_dest_acc_en);
+    const Tensor& a, Tensor& output, const std::vector<UnaryWithParams> op_chain, bool fp32_dest_acc_en);
 operation::ProgramWithCallbacks eltwise_unary_single_core(
-    const Tensor& a, Tensor& output, const std::vector<UnaryWithParam> op_chain, bool fp32_dest_acc_en);
+    const Tensor& a, Tensor& output, const std::vector<UnaryWithParams> op_chain, bool fp32_dest_acc_en);
 
 inline Tensor run_eltwise_unary(
     const Tensor& input_tensor,
-    const std::vector<UnaryWithParam>& ops_chain,
+    const std::vector<UnaryWithParams>& ops_chain,
     const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG) {
     TT_FATAL(ops_chain.size() > 0, "At least 1 unary op must be specified");
     bool fp32_dest_acc_en =
@@ -240,7 +240,7 @@ inline Tensor run_eltwise_unary(
 inline Tensor run_eltwise_unary(
     CommandQueue& queue,
     const Tensor& input_tensor,
-    const std::vector<UnaryWithParam>& ops_chain,
+    const std::vector<UnaryWithParams>& ops_chain,
     const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG) {
     TT_FATAL(ops_chain.size() > 0, "At least 1 unary op must be specified");
     bool fp32_dest_acc_en =
@@ -261,7 +261,7 @@ struct make_eltwise_unary_with_param {
         T param,
         const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG) const {
         return run_eltwise_unary(
-            input_tensor, {UnaryWithParam(unary_op_type, static_cast<float>(param))}, output_mem_config);
+            input_tensor, {UnaryWithParams(unary_op_type, static_cast<float>(param))}, output_mem_config);
     }
 };
 
@@ -270,7 +270,7 @@ struct make_eltwise_unary {
     Tensor operator()(
         const Tensor& input_tensor,
         const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG) const {
-        return run_eltwise_unary(input_tensor, {UnaryWithParam(unary_op_type)}, output_mem_config);
+        return run_eltwise_unary(input_tensor, {UnaryWithParams(unary_op_type)}, output_mem_config);
     }
 };
 
@@ -281,14 +281,14 @@ struct make_eltwise_symmetric_binop_unary_with_param {
         T param,
         const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG) const {
         return run_eltwise_unary(
-            input_tensor, {UnaryWithParam(unary_op_type, static_cast<float>(param))}, output_mem_config);
+            input_tensor, {UnaryWithParams(unary_op_type, static_cast<float>(param))}, output_mem_config);
     }
     Tensor operator()(
         T param,
         const Tensor& input_tensor,
         const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG) const {
         return run_eltwise_unary(
-            input_tensor, {UnaryWithParam(unary_op_type, static_cast<float>(param))}, output_mem_config);
+            input_tensor, {UnaryWithParams(unary_op_type, static_cast<float>(param))}, output_mem_config);
     }
 };
 
@@ -299,27 +299,27 @@ struct make_eltwise_asymmetric_binop_unary_with_param {
         T param,
         const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG) const {
         return run_eltwise_unary(
-            input_tensor, {UnaryWithParam(unary_op_type, static_cast<float>(param))}, output_mem_config);
+            input_tensor, {UnaryWithParams(unary_op_type, static_cast<float>(param))}, output_mem_config);
     }
     Tensor operator()(
         T param,
         const Tensor& input_tensor,
         const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG) const {
         return run_eltwise_unary(
-            input_tensor, {UnaryWithParam(unary_op_rev_type, static_cast<float>(param))}, output_mem_config);
+            input_tensor, {UnaryWithParams(unary_op_rev_type, static_cast<float>(param))}, output_mem_config);
     }
 };
 
 inline Tensor sqrt(
     const Tensor& input_tensor, const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG) {
-    return run_eltwise_unary(input_tensor, {UnaryWithParam(UnaryOpType::SQRT)}, output_mem_config);
+    return run_eltwise_unary(input_tensor, {UnaryWithParams(UnaryOpType::SQRT)}, output_mem_config);
 }
 
 inline Tensor sqrt(
     CommandQueue& queue,
     const Tensor& input_tensor,
     const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG) {
-    return run_eltwise_unary(queue, input_tensor, {UnaryWithParam(UnaryOpType::SQRT)}, output_mem_config);
+    return run_eltwise_unary(queue, input_tensor, {UnaryWithParams(UnaryOpType::SQRT)}, output_mem_config);
 }
 
 constexpr auto recip = make_eltwise_unary<UnaryOpType::RECIP>{};
@@ -419,23 +419,23 @@ inline Tensor rsqrt(
 inline Tensor log_sigmoid(
     const Tensor& input_tensor, const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG) {
     return run_eltwise_unary(
-        input_tensor, {UnaryWithParam(UnaryOpType::SIGMOID), UnaryWithParam(UnaryOpType::LOG)}, output_mem_config);
+        input_tensor, {UnaryWithParams(UnaryOpType::SIGMOID), UnaryWithParams(UnaryOpType::LOG)}, output_mem_config);
 }
 
 inline Tensor sigmoid_accurate(
     const Tensor& input_tensor, const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG) {
     return run_eltwise_unary(
         input_tensor,
-        {UnaryWithParam(UnaryOpType::NEG),
-         UnaryWithParam(UnaryOpType::EXP, 1.0f),
-         UnaryWithParam(UnaryOpType::ADD_UNARY_SFPU, 1.0f),
-         UnaryWithParam(UnaryOpType::RECIP)},
+        {UnaryWithParams(UnaryOpType::NEG),
+         UnaryWithParams(UnaryOpType::EXP, 1.0f),
+         UnaryWithParams(UnaryOpType::ADD_UNARY_SFPU, 1.0f),
+         UnaryWithParams(UnaryOpType::RECIP)},
         output_mem_config);
 }
 
 inline Tensor unary_chain(
     const Tensor& input_tensor,
-    std::vector<UnaryWithParam> ops_chain,
+    std::vector<UnaryWithParams> ops_chain,
     const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG) {
     return run_eltwise_unary(input_tensor, ops_chain, output_mem_config);
 }
@@ -544,7 +544,7 @@ inline Tensor relu(
                 input_tensor.get_dtype() == DataType::UINT32 or
                 input_tensor.get_dtype() == DataType::INT32;  // MT: Currently only uint32/int32 is moved to DST
                                                               // directly, fp32 is converted to fp16b
-            return operation::run(EltwiseUnary{{UnaryWithParam(UnaryOpType::RELU)}, output_mem_config}, {input_tensor});
+            return operation::run(EltwiseUnary{{UnaryWithParams(UnaryOpType::RELU)}, output_mem_config}, {input_tensor});
         },
         {input_tensor},
         output_tensors);
@@ -565,5 +565,5 @@ std::pair<string, string> get_op_init_and_func(UnaryOpType op_type, std::vector<
 std::map<string, string> get_defines(
     UnaryOpType op_type, std::optional<std::vector<float>> params = std::nullopt, string id = "0", string idst = "0");
 std::map<string, string> get_block_defines(
-    const std::vector<UnaryWithParam>& op_chain, string block_id = "0", string idst = "0");
+    const std::vector<UnaryWithParams>& op_chain, string block_id = "0", string idst = "0");
 }  // namespace eltwise_unary_op_utils

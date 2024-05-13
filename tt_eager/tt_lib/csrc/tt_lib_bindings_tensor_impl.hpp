@@ -76,7 +76,7 @@ void bind_binary_op(py::module_ &module, std::string op_name, Func &&f, std::str
     );
     if constexpr (fused_activations) {
         const std::string fused_activations_name = "fused_activations";
-        const std::optional<std::vector<UnaryWithParam>> default_fused_activations = std::nullopt;
+        const std::optional<std::vector<UnaryWithParams>> default_fused_activations = std::nullopt;
         docstring += fmt::format(R"doc(
             "{0}", "Fused activations after binary computation", "List of FusibleActivation with optional param", "Default is None", "No")doc",
             fused_activations_name

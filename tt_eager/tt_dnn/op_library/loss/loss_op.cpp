@@ -25,14 +25,14 @@ Tensor lossfunction(
     const LossReductionMode reduce_mode,
     const MemoryConfig& mem_config) {
     Tensor result(ref);
-    std::vector<UnaryWithParam> fused_ops;
+    std::vector<UnaryWithParams> fused_ops;
     switch(loss_kind) {
         case LossFunction::MAE:
-            fused_ops = {UnaryWithParam{UnaryOpType::ABS}};
+            fused_ops = {UnaryWithParams{UnaryOpType::ABS}};
             result = sub(ref,prediction, fused_ops);
             break;
         case LossFunction::MSE:
-            fused_ops = {UnaryWithParam{UnaryOpType::SQUARE}};
+            fused_ops = {UnaryWithParams{UnaryOpType::SQUARE}};
             result = sub(ref,prediction, fused_ops);
             break;
         default:

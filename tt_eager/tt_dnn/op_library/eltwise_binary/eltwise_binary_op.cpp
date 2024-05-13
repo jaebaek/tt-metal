@@ -18,7 +18,7 @@ using namespace tt::constants;
 namespace eltwise_binary_op_utils {
 using namespace tt::tt_metal;
 
-std::map<string, string> get_defines(BinaryOpType op_type, const std::optional<std::vector<UnaryWithParam>> fused_activations) {
+std::map<string, string> get_defines(BinaryOpType op_type, const std::optional<std::vector<UnaryWithParams>> fused_activations) {
     std::map<string, string> defines;
     string op_name = "sub_tiles";
     string op_code = "1";

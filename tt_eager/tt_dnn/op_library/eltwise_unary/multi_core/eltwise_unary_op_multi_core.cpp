@@ -17,7 +17,7 @@ namespace tt {
 
 namespace tt_metal {
 
-operation::ProgramWithCallbacks eltwise_unary_multi_core(const Tensor &a, Tensor &output, const std::vector<UnaryWithParam> op_chain, bool fp32_dest_acc_en) {
+operation::ProgramWithCallbacks eltwise_unary_multi_core(const Tensor &a, Tensor &output, const std::vector<UnaryWithParams> op_chain, bool fp32_dest_acc_en) {
     tt_metal::Program program{};
 
     tt::DataFormat cb_data_format = tt_metal::datatype_to_dataformat_converter(a.get_dtype());

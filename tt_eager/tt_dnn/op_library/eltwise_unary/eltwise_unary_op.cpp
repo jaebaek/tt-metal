@@ -254,7 +254,7 @@ std::pair<string, string> get_op_init_and_func(UnaryOpType op_type, std::vector<
 }
 
 std::map<string, string> get_block_defines(
-    const std::vector<UnaryWithParam>& op_chain, std::string block_id, std::string idst) {
+    const std::vector<UnaryWithParams>& op_chain, std::string block_id, std::string idst) {
     std::vector<std::pair<string, string>> op_init_and_name;
     std::map<string, string> block_defines;
     std::string block_define = "";

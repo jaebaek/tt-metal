@@ -38,7 +38,7 @@ inline auto input_tensors_to_validate(const Tensor& input_tensor, Args&&... args
 
 inline Tensor execute(
     const Tensor& input_tensor,
-    const std::vector<tt::tt_metal::UnaryWithParam>& op_chain,
+    const std::vector<tt::tt_metal::UnaryWithParams>& op_chain,
     const std::optional<MemoryConfig>& memory_config = std::nullopt) {
     bool fp32_dest_acc_en = input_tensor.get_dtype() == DataType::UINT32 or
                             input_tensor.get_dtype() == DataType::INT32;  // MT: Currently only uint32/int32 is moved to
@@ -70,7 +70,7 @@ struct Unary : public EltwiseUnary {
 
     static Tensor execute(const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config = std::nullopt) {
         return detail::execute(
-            input_tensor, {UnaryWithParam{unary_op_type}}, memory_config);
+            input_tensor, {UnaryWithParams{unary_op_type}}, memory_config);
     }
 };
 
@@ -97,7 +97,7 @@ struct Exp : public EltwiseUnary {
         const std::optional<MemoryConfig>& memory_config = std::nullopt) {
         return detail::execute(
             input_tensor,
-            {UnaryWithParam{
+            {UnaryWithParams{
                 ttnn::operations::unary::UnaryOpType::EXP, static_cast<float>(parameter)}},
             memory_config);
     }

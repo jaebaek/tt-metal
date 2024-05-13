@@ -113,21 +113,21 @@ void TensorModule(py::module &m_tensor) {
 
     // Fusible Activations
     detail::export_enum<UnaryOpType>(m_tensor, "FusibleActivation");
-    py::class_<UnaryWithParam>(m_tensor, "FusibleActivationWithParam")
+    py::class_<UnaryWithParams>(m_tensor, "FusibleActivationWithParam")
         .def(py::init<UnaryOpType>())
         .def(py::init<UnaryOpType, float>())
         .def(py::init<>(
             [](std::pair<UnaryOpType, float> arg) {
-                return UnaryWithParam{arg.first, arg.second};
+                return UnaryWithParams{arg.first, arg.second};
             }
         ))
-        .def_readonly("op_type", &UnaryWithParam::op_type);
-    // Allow implicit construction of UnaryWithParam object without user explicitly creating it
+        .def_readonly("op_type", &UnaryWithParams::op_type);
+    // Allow implicit construction of UnaryWithParams object without user explicitly creating it
     // Can take in just the op type, or sequence container of op type and param value
-    py::implicitly_convertible<UnaryOpType, UnaryWithParam>();
-    py::implicitly_convertible<std::pair<UnaryOpType, float>, UnaryWithParam>();
-    py::implicitly_convertible<std::pair<UnaryOpType, int>, UnaryWithParam>();
-    py::implicitly_convertible<std::pair<UnaryOpType, bool>, UnaryWithParam>();
+    py::implicitly_convertible<UnaryOpType, UnaryWithParams>();
+    py::implicitly_convertible<std::pair<UnaryOpType, float>, UnaryWithParams>();
+    py::implicitly_convertible<std::pair<UnaryOpType, int>, UnaryWithParams>();
+    py::implicitly_convertible<std::pair<UnaryOpType, bool>, UnaryWithParams>();
 
     m_tensor.def("string_to_unary_with_param", &string_to_unary_with_param);
 

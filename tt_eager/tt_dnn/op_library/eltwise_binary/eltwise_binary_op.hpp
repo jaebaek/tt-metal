@@ -45,17 +45,17 @@ operation::ProgramWithCallbacks eltwise_binary_single_core(
     const Tensor &b,
     const Tensor &output_tensor,
     BinaryOpType op_type,
-    const std::optional<std::vector<UnaryWithParam>> fused_activations);
+    const std::optional<std::vector<UnaryWithParams>> fused_activations);
 operation::ProgramWithCallbacks eltwise_binary_multi_core(
     const Tensor &a,
     const Tensor &b,
     const Tensor &output_tensor,
     BinaryOpType op_type,
-    const std::optional<std::vector<UnaryWithParam>> fused_activations);
+    const std::optional<std::vector<UnaryWithParams>> fused_activations);
 
 struct EltwiseBinary {
     const BinaryOpType op_type;
-    const std::optional<std::vector<UnaryWithParam>> fused_activations;
+    const std::optional<std::vector<UnaryWithParams>> fused_activations;
     const MemoryConfig output_mem_config;
     const DataType output_dtype;
     const bool in_place;
@@ -109,7 +109,7 @@ struct make_eltwise_binary {
     Tensor operator()(
         const Tensor &input_tensor_a,
         const Tensor &input_tensor_b,
-        std::optional<std::vector<UnaryWithParam>> fused_activations = std::nullopt,
+        std::optional<std::vector<UnaryWithParams>> fused_activations = std::nullopt,
         const MemoryConfig &output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         std::optional<const DataType> output_dtype = std::nullopt) const {
         std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor_a, input_tensor_b}))};
@@ -181,7 +181,7 @@ namespace primary {
 inline Tensor add(
     const Tensor &input_tensor_a,
     const Tensor &input_tensor_b,
-    std::optional<std::vector<UnaryWithParam>> fused_activations = std::nullopt,
+    std::optional<std::vector<UnaryWithParams>> fused_activations = std::nullopt,
     const MemoryConfig &output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
     std::optional<const DataType> output_dtype = std::nullopt,
     bool in_place = false) {
@@ -240,6 +240,6 @@ namespace eltwise_binary_op_utils {
 using namespace tt::tt_metal;
 
 std::map<string, string> get_defines(
-    BinaryOpType op_typee, const std::optional<std::vector<UnaryWithParam>> fused_activations);
+    BinaryOpType op_typee, const std::optional<std::vector<UnaryWithParams>> fused_activations);
 
 }  // namespace eltwise_binary_op_utils

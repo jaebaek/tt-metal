@@ -14,7 +14,7 @@ namespace tt {
 
 namespace tt_metal {
 
-operation::ProgramWithCallbacks eltwise_unary_single_core(const Tensor &a, Tensor &output, const std::vector<UnaryWithParam> op_chain, bool fp32_dest_acc_en) {
+operation::ProgramWithCallbacks eltwise_unary_single_core(const Tensor &a, Tensor &output, const std::vector<UnaryWithParams> op_chain, bool fp32_dest_acc_en) {
     Program program{};
 
     CoreRange core({0, 0}, {0, 0});

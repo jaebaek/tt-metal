@@ -286,8 +286,8 @@ std::vector<ComplexTensor> complex_sub_bw(const ComplexTensor& grad, const Compl
     grad_tensor.emplace_back(grad);
     const Tensor& grad_r = grad.real();
     const Tensor& grad_i = grad.imag();
-    UnaryWithParam op1 {UnaryOpType::NEG};
-    UnaryWithParam op2 {UnaryOpType::MUL_UNARY_SFPU, alpha};
+    UnaryWithParams op1 {UnaryOpType::NEG};
+    UnaryWithParams op2 {UnaryOpType::MUL_UNARY_SFPU, alpha};
     ComplexTensor grad_b = ComplexTensor({unary_chain( grad_r, {op1, op2}, output_mem_config), unary_chain( grad_i, {op1, op2}, output_mem_config)});
     grad_tensor.emplace_back(grad_b);
     return grad_tensor;

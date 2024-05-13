@@ -271,7 +271,7 @@ operation::ProgramWithCallbacks Binary<binary_op_type, in_place>::create_program
     const auto& input_tensor_b = input_tensors.at(1);
     const auto& output_tensor = output_tensors.at(0);
 
-    std::vector<UnaryWithParam> activations;
+    std::vector<UnaryWithParams> activations;
     if (this->program_config.activations.has_value()) {
         const auto activations_as_strings = this->program_config.activations.value();
         std::transform(
