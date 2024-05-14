@@ -34,6 +34,8 @@ jobs:
   profiler-regression:
     needs: build-docker-artifact
     uses: ./.github/workflows/run-profiler-regression.yaml
+    with:
+      build_docker: false
     secrets: inherit
   eager-package-main:
     uses: ./.github/workflows/eager-package-main.yaml
