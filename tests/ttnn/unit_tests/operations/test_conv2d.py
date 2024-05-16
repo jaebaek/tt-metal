@@ -1267,3 +1267,71 @@ def test_conv_core_nondivis(
         use_1d_systolic_array,
         config_override,
     )
+
+
+@pytest.mark.parametrize(
+    "activations_dtype, weights_dtype, batch_size, output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, use_1d_systolic_array",
+    (
+        (ttnn.bfloat16, ttnn.bfloat16, 8, 1280, 320, 15, 20, 1, 1, 1, 1, 0, 0, True),
+        (ttnn.bfloat8_b, ttnn.bfloat16, 8, 1280, 320, 15, 20, 1, 1, 1, 1, 0, 0, True),
+        (ttnn.bfloat8_b, ttnn.bfloat8_b, 16, 24, 144, 120, 160, 1, 1, 1, 1, 0, 0, True),
+        (ttnn.bfloat8_b, ttnn.bfloat8_b, 20, 24, 144, 120, 160, 1, 1, 1, 1, 0, 0, True),
+    ),
+)
+@pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
+def test_mobilenetv2_conv_ttnn_l1_issue_case(
+    device,
+    use_program_cache,
+    math_fidelity,
+    activations_dtype,
+    weights_dtype,
+    batch_size,
+    output_channels,
+    input_channels,
+    input_height,
+    input_width,
+    filter_height,
+    filter_width,
+    stride_h,
+    stride_w,
+    pad_h,
+    pad_w,
+    use_1d_systolic_array,
+):
+    if batch_size > 8 and (activations_dtype != ttnn.bfloat8_b or weights_dtype != ttnn.bfloat8_b):
+        pytest.skip("Batch > 8 must be run fully bfp8")
+
+    if (
+        activations_dtype == ttnn.bfloat16
+        and batch_size == 20
+        and (
+            output_channels == 64
+            or (
+                stride_h == 2
+                and (output_channels == 256 or (output_channels == 128 and weights_dtype == ttnn.bfloat16))
+            )
+        )
+    ):
+        pytest.skip("Skipping test because it won't fit in L1!")
+
+    run_conv(
+        device,
+        math_fidelity,
+        activations_dtype,
+        weights_dtype,
+        batch_size,
+        output_channels,
+        input_channels,
+        input_height,
+        input_width,
+        filter_height,
+        filter_width,
+        stride_h,
+        stride_w,
+        pad_h,
+        pad_w,
+        use_1d_systolic_array,
+        config_override={"act_block_h": 32},
+        use_shallow_conv_variant=input_channels == 16,
+        padded_input_channels=16 if input_channels == 16 else None,
+    )
