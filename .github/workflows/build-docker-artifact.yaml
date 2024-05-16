@@ -1,0 +1,29 @@
+name: "Build tt-metal docker artifacts"
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  build-docker-image:
+    env:
+      TT_METAL_ENV: ${{ vars.TT_METAL_ENV }}
+      CONFIG: ci
+      SILENT: 0
+      VERBOSE: 1
+      TT_METAL_DOCKER_IMAGE_TAG: ubuntu-20.04-amd64:latest
+    environment: dev
+    runs-on: build
+    steps:
+      - uses: tenstorrent-metal/metal-workflows/.github/actions/checkout-with-submodule-lfs@v2.0.0
+      - name: Build Docker image
+        run: |
+          ./scripts/docker/build_docker_image.sh ${{ env.TT_METAL_DOCKER_IMAGE_TAG }}
+      - name: Save Docker image
+        run: |
+          docker save ${{ env.TT_METAL_DOCKER_IMAGE_TAG }} | gzip > /tmp/docker_image.tar.gz   
+      - name: Upload Docker image as artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: docker_image.tar.gz
+          path: /tmp/docker_image.tar.gz 
