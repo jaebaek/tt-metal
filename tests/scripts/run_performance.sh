@@ -43,6 +43,20 @@ run_perf_models_llm_javelin() {
     env python models/perf/merge_perf_results.py
 }
 
+run_perf_models_llm_javelin_multi_device() {
+    local tt_arch=$1
+    local test_marker=$2
+
+    env pytest models/demos/falcon7b/tests -m $test_marker
+
+    # Mistral8x7b env flags are set inside the tests
+    env pytest models/demos/t3000/mixtral8x7b/tests -m $test_marker
+
+    env WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/experimental/llama2_70b/tests/test_llama_perf_decode.py -m $test_marker
+
+    ## Merge all the generated reports
+    env python models/perf/merge_perf_results.py
+}
 run_perf_models_cnn_javelin() {
     local tt_arch=$1
     local test_marker=$2
