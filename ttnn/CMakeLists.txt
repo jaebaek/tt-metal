@@ -31,6 +31,46 @@ target_include_directories(ttnn PUBLIC
     ${CMAKE_SOURCE_DIR}/tt_metal/third_party/pybind11/include
     ${Python3_INCLUDE_DIRS}
 )
+# target_precompile_headers(ttnn PRIVATE
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/pybind11/core.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/pybind11/decorators.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/pybind11/device.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/pybind11/multi_device.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/pybind11/reports.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/pybind11/types.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/pybind11/operations/__init__.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/pybind11/operations/binary.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/pybind11/operations/ccl.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/pybind11/operations/core.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/pybind11/operations/data_movement.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/pybind11/operations/kv_cache.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/pybind11/operations/matmul.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/pybind11/operations/normalization.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/pybind11/operations/transformer.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/pybind11/operations/unary.hpp
+# )
+
+# target_precompile_headers(ttnn PRIVATE
+#     # ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/async_runtime.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/core.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/decorators.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/device_pool.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/device.hpp
+#     # ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/multi_device.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/reports.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/types.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/validation.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/binary.hpp
+#     # ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/ccl.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/core.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/creation.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/data_movement.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/kv_cache.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/matmul.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/normalization.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/transformer.hpp
+#     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/unary.hpp
+# )
 
 # Make sure library built is _ttnn.so and that it can find all it's linked libraries
 # ttnn breaks if -fvisibility=hidden, so CXX_VISIBILITY_PRESET set to default
