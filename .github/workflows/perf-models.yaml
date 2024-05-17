@@ -61,7 +61,7 @@ jobs:
         run: |
           ./scripts/docker/run_docker_cmd.sh -e TTNN_CONFIG_OVERRIDES=${TTNN_CONFIG_OVERRIDES} -- \
           /bin/bash -c "source python_env/bin/activate \  
-            && ./tests/scripts/run_tests.sh --tt-arch $ARCH_NAME --pipeline-type ${{ matrix.model-type }}_models_performance_${{ matrix.runner-info.machine-type }}"
+            && ./tests/scripts/run_tests.sh --tt-arch $ARCH_NAME --pipeline-type ${{ matrix.model-type }}_models_performance_${{ matrix.test-info.machine-type }}"
       # TODO: Fix the pipeline before enabling notifications.
       #- uses: ./.github/actions/slack-report
       #  if: ${{ failure() }}
