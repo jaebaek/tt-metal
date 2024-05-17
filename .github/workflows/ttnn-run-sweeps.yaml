@@ -48,7 +48,7 @@ jobs:
         run: |
           ./scripts/docker/run_docker_cmd.sh -e LOGURU_LEVEL=DEBUG -- \
             /bin/bash -c "source python_env/bin/activate \
-            && ./tests/scripts/run_tests.sh --tt-arch $ARCH_NAME --pipeline-type ttnn_sweeps
+            && ./tests/scripts/run_tests.sh --tt-arch $ARCH_NAME --pipeline-type ttnn_sweeps"
       - name: Assert that csvs exist in expected ttnn results folder
         run: ls -hal tests/ttnn/sweep_tests/results/*.csv
       - name: Upload ttnn sweep reports csvs
