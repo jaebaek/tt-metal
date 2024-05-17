@@ -16,6 +16,7 @@
 #include "common/utils.hpp"
 #include "llrt/llrt.hpp"
 #include "dev_msgs.h"
+#include "tt_metal/impl/device/device_pool.hpp"
 
 namespace tt {
 
@@ -25,55 +26,11 @@ void ::detail::ProgramDeleter::operator()(Program *p) {
     delete p;
 }
 
-ActiveDevices Device::active_devices_;
-
-ActiveDevices::ActiveDevices() {
-}
-
-ActiveDevices::~ActiveDevices() {
-    for (size_t i = 0; i < active_devices_.size(); i++) {
-        if (active_devices_[i] == ActiveState::ACTIVE) {
-            TT_THROW("Process tear down with device {} still active", i);
-        }
-    }
-}
-
-bool ActiveDevices::activate_device(chip_id_t id) {
-    bool already_initialized;
-    const std::lock_guard<std::mutex> lock(lock_);
-    if (this->active_devices_.size() < id + 1) {
-        this->active_devices_.resize(id + 1);
-        already_initialized = false;
-    } else if (this->active_devices_[id] == ActiveState::ACTIVE) {
-        TT_THROW("Cannot re-initialize device {}, must first call close()", id);
-    } else {
-        already_initialized = (this->active_devices_[id] == ActiveState::INACTIVE) ? true : false;
-    }
-    this->active_devices_[id] = ActiveState::ACTIVE;
-
-    return already_initialized;
-}
-
-void ActiveDevices::deactivate_device(chip_id_t id) {
-    const std::lock_guard<std::mutex> lock(lock_);
-    this->active_devices_[id] = ActiveState::INACTIVE;
-}
-
-bool ActiveDevices::is_device_active(chip_id_t id) {
-    if (this->active_devices_.size() < id + 1) {
-        return false;
-    } else {
-        return this->active_devices_[id] == ActiveState::ACTIVE;
-    }
-}
-
 Device::Device(
     chip_id_t device_id, const uint8_t num_hw_cqs, size_t l1_small_size, const std::vector<uint32_t> &l1_bank_remap, bool minimal) :
-    id_(device_id), num_hw_cqs_(num_hw_cqs), work_executor(device_id) {
+    id_(device_id), work_executor(device_id) {
     ZoneScoped;
-    TT_ASSERT(num_hw_cqs > 0 and num_hw_cqs < 3, "num_hw_cqs can be between 1 and 2");
-    this->build_key_ = tt::Cluster::instance().get_harvesting_mask(device_id);
-    this->initialize(l1_small_size, l1_bank_remap, minimal);
+    this->initialize(num_hw_cqs, l1_small_size, l1_bank_remap, minimal);
 }
 
 void Device::initialize_cluster() {
@@ -179,6 +136,7 @@ void Device::initialize_build() {
 }
 
 void Device::build_firmware() {
+  std::cout << " BUILDING FIRMWARE " << this->id() << std::endl;
     ZoneScoped;
 
     detail::GenerateDeviceHeaders(this, this->build_env_.get_out_firmware_root_path());
@@ -514,7 +472,7 @@ void Device::compile_command_queue_programs() {
         uint32_t cq_id = 0;
         chip_id_t device_id = this->id();
         chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(device_id);
-        Device *mmio_device = tt::tt_metal::detail::GetDeviceHandle(mmio_device_id);
+        Device *mmio_device = tt::DevicePool::instance().get_active_device(mmio_device_id);
         uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(device_id);
         uint32_t cq_size = mmio_device->sysmem_manager().get_cq_size();
 
@@ -1116,7 +1074,7 @@ void Device::compile_command_queue_programs() {
 void Device::configure_command_queue_programs() {
     chip_id_t device_id = this->id();
     chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(device_id);
-    Device *mmio_device = tt::tt_metal::detail::GetDeviceHandle(mmio_device_id);
+    Device *mmio_device = tt::DevicePool::instance().get_active_device(mmio_device_id);
     uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(device_id);
 
     std::vector<uint32_t> zero = {0x0}; // Reset state in case L1 Clear is disabled.
@@ -1219,7 +1177,7 @@ void Device::initialize_command_queue() {
 
     if (!this->is_mmio_capable()) {
         chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->id());
-        Device *mmio_device = tt::tt_metal::detail::GetDeviceHandle(mmio_device_id);
+        Device *mmio_device = tt::DevicePool::instance().get_active_device(mmio_device_id);
         Program& mmio_command_queue_program = *this->command_queue_programs[1];
         for (const auto &[core_type, logical_dispatch_cores] : mmio_command_queue_program.logical_cores()) {
             for (const CoreCoord &logical_dispatch_core : logical_dispatch_cores) {
@@ -1242,44 +1200,22 @@ void Device::initialize_synchronous_sw_cmd_queue() {
     }
 }
 
-bool Device::initialize(size_t l1_small_size, const std::vector<uint32_t> &l1_bank_remap, bool minimal) {
+bool Device::initialize(const uint8_t num_hw_cqs, size_t l1_small_size, const std::vector<uint32_t> &l1_bank_remap, bool minimal) {
     ZoneScoped;
     log_info(tt::LogMetal, "Initializing device {}. Program cache is {}enabled", this->id_, this->program_cache.is_enabled() ? "": "NOT ");
+    TT_ASSERT(num_hw_cqs > 0 and num_hw_cqs < 3, "num_hw_cqs can be between 1 and 2");
+    this->build_key_ = tt::Cluster::instance().get_harvesting_mask(this->id());
+    this->num_hw_cqs_ = num_hw_cqs;
     this->initialize_cluster();
     this->initialize_allocator(l1_small_size, l1_bank_remap);
     this->initialize_build();
-    auto num_devices = tt::tt_metal::GetNumAvailableDevices();
-    tt::tt_metal::device_pool::devices.resize(num_devices, nullptr);
-    TT_ASSERT(id_ < num_devices);
-    tt::tt_metal::device_pool::devices[id_] = this;
     // For minimal setup, don't initialize FW, watcher, dprint. They won't work if we're attaching to a hung chip.
     if (minimal)
         return true;
 
-    bool already_initialized = this->active_devices_.activate_device(this->id_);
-    if (!already_initialized) {
-        this->build_firmware();
-    }
-
-    DprintServerAttach(this);
-    watcher_init(this);
-
-    this->initialize_and_launch_firmware();
-
-    watcher_attach(this);
-
     // Mark initialized before compiling and sending dispatch kernels to device because compilation expects device to be initialized
+    this->work_executor.initialize();
     this->initialized_ = true;
-
-    // Create system memory writer for this device to have an associated interface to hardware command queue (i.e. hugepage)
-    if (std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr) {
-        detail::DispatchStateCheck(true);
-        this->initialize_command_queue();
-    } else {
-        detail::DispatchStateCheck(false);
-        this->initialize_synchronous_sw_cmd_queue();
-        TT_ASSERT(this->num_hw_cqs() == 1, "num_hw_cqs must be 1 in slow dispatch");
-    }
 
     return true;
 }
@@ -1325,7 +1261,8 @@ bool Device::close() {
                         not_done_dispatch_cores.insert(phys_core);
                         log_debug(tt::LogMetal, "MMIO Device Prefetch core: Logical: {} - Physical: {}", prefetch_location.str(), phys_core.str());
                     }
-                } else if (this->active_devices_.is_device_active(device_id)) {
+                } else  {
+                    // Assume that R chip is always open
                     //non mmio devices serviced by this mmio capable device.
                     //skip remote dispatch cores only if respective remote device is active.
                     if (dispatch_core_manager::get(curr_num_hw_cqs).is_dispatcher_core_allocated(device_id, curr_channel, cq_id)) {
@@ -1430,18 +1367,26 @@ bool Device::close() {
     tt::Cluster::instance().l1_barrier(id_);
     allocator::clear(*this->allocator_);
 
-    this->active_devices_.deactivate_device(this->id_);
+    this->trace_buffer_pool_.clear();
+    this->compute_cores_.clear();
+    this->storage_only_cores_.clear();
+    this->ethernet_cores_.clear();
     this->disable_and_clear_program_cache();
     this->command_queue_programs.clear();
     this->sw_command_queues_.clear();
     this->hw_command_queues_.clear();
+    this->sysmem_manager_.reset();
+    this->work_executor.reset();
+    this->allocator_.reset();
 
     this->initialized_ = false;
+    std::cout << " device close " << std::endl;
 
     return true;
 }
 
 Device::~Device() {
+    std::cout << " device dtor " << std::endl;
     if (this->initialized_) {
         this->close();
     }

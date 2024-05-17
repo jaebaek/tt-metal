@@ -164,12 +164,6 @@ inline void SetRuntimeArgs(
 }  // namespace
 
 // #define DEBUG_PRINT_SHARD
-namespace device_pool {
-
-// Definition of the global device vector
-std::vector<Device *> devices;
-
-}  // namespace device_pool
 
 namespace detail {
 
@@ -179,24 +173,15 @@ std::map<chip_id_t, Device *> CreateDevices(
     const size_t l1_small_size,
     const std::vector<uint32_t> &l1_bank_remap) {
     ZoneScoped;
-    std::map<chip_id_t, Device *> active_devices;  // TODO: pass this to CloseDevices
-    for (const auto &device_id : device_ids) {
-        const auto &mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(device_id);
-        if (active_devices.find(mmio_device_id) == active_devices.end()) {
-            for (const auto &mmio_controlled_device_id :
-                 tt::Cluster::instance().get_devices_controlled_by_mmio_device(mmio_device_id)) {
-                // if (mmio_controlled_device_id != mmio_device_id) {
-                //     continue;
-                // }
-                Device *dev = new Device(mmio_controlled_device_id, num_hw_cqs, l1_small_size, l1_bank_remap);
-                active_devices.insert({mmio_controlled_device_id, dev});
-                detail::InitDeviceProfiler(dev);
-            }
-        }
+    tt::DevicePool::initialize(device_ids, num_hw_cqs, l1_small_size);
+    std::vector<Device *> devices = tt::DevicePool::instance().get_all_active_devices();
+    std::map<chip_id_t, Device *> ret_devices;
+    for (Device * dev: devices) {
+        detail::InitDeviceProfiler(dev);
+        ret_devices.insert({dev->id(), dev});
     }
-    // TODO: need to only enable routing for used mmio chips
-    tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(true);
-    return active_devices;
+
+    return ret_devices;
 }
 
 void CloseDevices(std::map<chip_id_t, Device *> devices) {
@@ -703,13 +688,6 @@ void GetBufferAddress(const Buffer *buffer, uint32_t *address_on_host) {
     EnqueueGetBufferAddr(buffer->device()->command_queue(), address_on_host, buffer, false);
 }
 
-Device *GetDeviceHandle(chip_id_t device_id) {
-    ZoneScoped;
-    TT_ASSERT(device_id < device_pool::devices.size());
-    TT_ASSERT(device_pool::devices[device_id] != nullptr);
-    return device_pool::devices[device_id];
-}
-
 void DisableAllocs(Device *device) { tt::tt_metal::allocator::disable_allocs(*(device->allocator_)); }
 
 void EnableAllocs(Device *device) { tt::tt_metal::allocator::enable_allocs(*(device->allocator_)); }
@@ -738,8 +716,8 @@ Device *CreateDevice(
     const size_t l1_small_size,
     const std::vector<uint32_t> &l1_bank_remap) {
     ZoneScoped;
-    Device *dev = new Device(device_id, num_hw_cqs, l1_small_size, l1_bank_remap);
-    tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(true);
+    tt::DevicePool::initialize({device_id}, num_hw_cqs, l1_small_size, l1_bank_remap);
+    auto dev = tt::DevicePool::instance().get_active_device(device_id);
     detail::InitDeviceProfiler(dev);
     return dev;
 }
@@ -755,11 +733,7 @@ bool CloseDevice(Device *device) {
     ZoneScoped;
     tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
     auto device_id = device->id();
-    TT_ASSERT(device_id < device_pool::devices.size());
-    if (device_pool::devices[device_id] != nullptr) {
-        device_pool::devices[device_id] = nullptr;
-    }
-    return device->close();
+    return tt::DevicePool::instance().close_device(device_id);
 }
 
 Program CreateProgram() { return Program(); }

@@ -23,12 +23,9 @@ DeviceMesh::DeviceMesh(const DeviceGrid& device_grid, const DeviceIds &device_id
     TT_ASSERT(num_requested_devices <= num_available_devices, "Requested more devices than available");
     TT_ASSERT(num_requested_devices <= device_ids.size(), "User provided insufficient number of device_ids for DeviceMesh");
 
-
-    //TODO: for DevicePool feature delete CreateDevices and merge with this function
-    //TODO: should there be an explicit CloseDevices call somewhere?
     managed_devices = tt::tt_metal::detail::CreateDevices(device_ids, 1, l1_small_size);
     for (int i = 0; i < num_requested_devices; i++) {
-        mesh_devices.emplace_back(device_ids[i], std::unique_ptr<Device>(managed_devices.at(device_ids[i])));
+        mesh_devices.emplace_back(device_ids[i], managed_devices.at(device_ids[i]));
     }
 }
 
@@ -44,7 +41,7 @@ Device* DeviceMesh::get_device(int queried_device_id)
 {
     for (const auto& [device_id, device] : mesh_devices) {
         if (device_id == queried_device_id) {
-            return device.get();
+            return device;
         }
     }
     TT_THROW("User has provided an invalid device index");
@@ -55,7 +52,7 @@ std::vector<Device*> DeviceMesh::get_devices() const
 {
     std::vector<Device*> devices;
     for (const auto& [device_id, device] : mesh_devices) {
-        devices.push_back(device.get());
+        devices.push_back(device);
     }
     return devices;
 }
