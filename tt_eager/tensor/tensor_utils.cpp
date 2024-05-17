@@ -354,7 +354,7 @@ uint32_t num_buffers_in_tensor(const Tensor& tensor) {
 Tensor get_shard_for_device(const Tensor& tensor, Device* target_device, std::optional<int> buffer_index) {
     ZoneScopedN("GetShardForDevice");
     Tensor shard = Tensor();
-    auto& storage = tensor.get_storage();
+    auto& storage = tensor.tensor_attributes->storage;
     std::visit([target_device, buffer_index, &tensor, &shard] (auto&& s) {
         using T = std::decay_t<decltype(s)>;
         if constexpr (std::is_same_v<T, MultiDeviceStorage>) {
