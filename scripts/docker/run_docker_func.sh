@@ -40,6 +40,8 @@ function run_docker_common {
         tt_device="--device /dev/tenstorrent"
     fi
 
+
+
     docker run \
         --rm \
         -v ${TT_METAL_HOME}:/${TT_METAL_HOME} \
@@ -62,6 +64,7 @@ function run_docker_common {
         -u ${UID}:${GID} \
         ${tt_device} \
         --net host \
+        --privileged \
         "${docker_opts[@]}" \
         ${TT_METAL_DOCKER_IMAGE_TAG} \
         "${cmd[@]}"
