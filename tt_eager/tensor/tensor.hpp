@@ -36,6 +36,8 @@ struct Tensor {
         uint32_t main_thread_ref_count = 0;
         std::atomic<uint32_t> num_sibling_workers_sharing_tensor = 0;
         std::atomic<bool> main_thread_tensor = true;
+        std::atomic<bool> metadata_populated = false;
+        std::atomic<int> worker_index = 0;
         bool deallocated = false; // Set to true if device side storage was deallocated
         bool dynamic_storage = false; // Storage type can change, depending on op behaviour
         bool track_ref_count = false;

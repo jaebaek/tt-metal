@@ -788,10 +788,12 @@ void launch_op(
                         outputs.at(i).tensor_attributes->dynamic_storage = false;
                     }
                     insert_buffer_and_shape_for_device(target_device, local_tensors.at(i), outputs.at(i));
-                    if (not target_device->id() or workers_size == 1) {
+                    int worker_index = (outputs.at(i).tensor_attributes->worker_index)++;
+                    if (not worker_index) {
                         outputs.at(i).set_shape(local_tensors.at(i).get_shape());
                         outputs.at(i).set_dtype(local_tensors.at(i).get_dtype());
                         outputs.at(i).set_layout(local_tensors.at(i).get_layout());
+                        outputs.at(i).tensor_attributes->metadata_populated = true;
                     }
                     if (workers_size == 1) {
                         outputs.at(i).set_populated();

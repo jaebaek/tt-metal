@@ -30,6 +30,28 @@ DeviceMesh::DeviceMesh(const DeviceGrid& device_grid, const DeviceIds &device_id
     for (int i = 0; i < num_requested_devices; i++) {
         mesh_devices.emplace_back(device_ids[i], std::unique_ptr<Device>(managed_devices.at(device_ids[i])));
     }
+    // cpu_set_t cpuset;
+    // CPU_ZERO(&cpuset);
+    // CPU_SET(8, &cpuset);
+    // CPU_SET(9, &cpuset);
+    // CPU_SET(10, &cpuset);
+    // CPU_SET(11, &cpuset);
+    // CPU_SET(12, &cpuset);
+    // CPU_SET(13, &cpuset);
+    // CPU_SET(14, &cpuset);
+    // CPU_SET(15, &cpuset);
+    // CPU_SET(16, &cpuset);
+    // CPU_SET(17, &cpuset);
+    // CPU_SET(18, &cpuset);
+    // CPU_SET(19, &cpuset);
+    // CPU_SET(20, &cpuset);
+    // CPU_SET(21, &cpuset);
+    // CPU_SET(22, &cpuset);
+    // CPU_SET(23, &cpuset);
+    // CPU_SET(24, &cpuset);
+    // CPU_SET(25, &cpuset);
+    // pthread_t current_thread = pthread_self(); // Get the current thread
+    // int result = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
 }
 
 

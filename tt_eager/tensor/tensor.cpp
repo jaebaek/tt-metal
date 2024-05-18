@@ -77,6 +77,7 @@ Tensor::Tensor(const Storage storage, const ttnn::Shape shape, DataType dtype, L
                 raise_unsupported_storage<StorageType>();
             }
         }, storage);
+        this->tensor_attributes->metadata_populated = true;
 }
 
 Tensor::Tensor(const Storage storage, const Shape shape, DataType dtype, Layout layout) :
@@ -226,9 +227,8 @@ void Tensor::wait_for_tensor_metadata_populated() const {
     // First worker is responsible for updating all metadata fields
     // Stall until this worker is done
     while (true) {
-        std::scoped_lock<std::mutex> lock(this->tensor_attributes->populated_mutex);
-        if (this->tensor_attributes->tensor_populated.at(0)) break;
-    };
+        if (this->tensor_attributes->metadata_populated) break;
+    }
 }
 
 // Worker Thread - Set populated flag to true, once worker has completed it's task for this tensor
@@ -256,6 +256,7 @@ void Tensor::deepcopy(const Tensor& other) {
     this->set_layout(other.get_layout());
     // Set metadata populated flag for getters
     this->set_populated();
+    this->tensor_attributes->metadata_populated = true;
 }
 
 void Tensor::populate_buffers_and_metadata(const Tensor& other) {
@@ -277,6 +278,7 @@ void Tensor::populate_buffers_and_metadata(const Tensor& other) {
             this->tensor_attributes->tensor_populated = std::vector<bool>(storage.buffers.size(), true);
         }
     }, other.get_storage()); // Non blocking storage query, since this is done for tensors that get created inside the worker thread
+    this->tensor_attributes->metadata_populated = true;
 }
 
 std::vector<Device*> Tensor::get_workers(bool blocking) const {
@@ -433,10 +435,12 @@ Tensor Tensor::to(const std::vector<Device*>& workers, const MemoryConfig &mem_c
                     shard = tensor_impl::to_device_wrapper(shard, worker, mem_config);
                 }
                 insert_buffer_and_shape_for_device(worker, shard, device_tensor, worker_index);
-                if (not worker->id()) {
+                uint32_t worker_index = (device_tensor.tensor_attributes->worker_index)++;
+                if (not worker_index) {
                     device_tensor.set_shape(this->get_shape());
                     device_tensor.set_dtype(this->get_dtype());
                     device_tensor.set_layout(this->get_layout());
+                    device_tensor.tensor_attributes->metadata_populated = true;
                 }
                 if (num_workers > 1) device_tensor.set_populated(worker);
                 else device_tensor.set_populated();
@@ -466,10 +470,12 @@ Tensor Tensor::cpu(bool blocking) const {
             auto shard = get_shard_for_device(*this, target_device);
             shard = tensor_impl::to_host_wrapper(shard, blocking);
             insert_buffer_and_shape_for_device(target_device, shard, host_tensor, worker_index);
-            if (not target_device->id() or workers.size() == 1) {
+            uint32_t worker_index = (host_tensor.tensor_attributes->worker_index)++;
+            if (not worker_index) {
                 host_tensor.set_shape(this->get_shape());
                 host_tensor.set_dtype(this->get_dtype());
                 host_tensor.set_layout(this->get_layout());
+                host_tensor.tensor_attributes->metadata_populated = true;
             }
             if (workers.size() == 1) {
                 host_tensor.set_populated();
@@ -542,10 +548,12 @@ Tensor Tensor::to(Layout target_layout, DeviceMesh* device_mesh) const {
                 auto shard = get_shard_for_device(*this, worker, worker_index);
                 shard = tensor_impl::to_layout_wrapper(shard, target_layout);
                 insert_buffer_and_shape_for_device(worker, shard, tensor_modified_layout, worker_index);
-                if (not (worker->id())) {
+                uint32_t tensor_worker_index = (tensor_modified_layout.tensor_attributes->worker_index)++;
+                if (not tensor_worker_index) {
                     tensor_modified_layout.set_shape(this->get_shape());
                     tensor_modified_layout.set_dtype(this->get_dtype());
                     tensor_modified_layout.set_layout(target_layout);
+                    tensor_modified_layout.tensor_attributes->metadata_populated = true;
                 }
                 tensor_modified_layout.set_populated(worker);
             });
@@ -928,10 +936,13 @@ Tensor allocate_tensor_on_device(const ttnn::Shape& shape, DataType data_type, L
             [shape, data_type, layout, worker, memory_config, device_tensor, worker_index] () mutable {
                 auto local_tensor = create_device_tensor(shape.value(), data_type, layout, worker, memory_config);
                 insert_buffer_and_shape_for_device(worker, local_tensor, device_tensor, worker_index);
-                if (not worker->id()) {
+
+                uint32_t tensor_worker_index = (device_tensor.tensor_attributes->worker_index)++;
+                if (not tensor_worker_index) {
                     device_tensor.set_shape(ttnn::Shape(shape));
                     device_tensor.set_dtype(data_type);
                     device_tensor.set_layout(layout);
+                    device_tensor.tensor_attributes->metadata_populated = true;
                 }
                 device_tensor.set_populated(worker);
             }
