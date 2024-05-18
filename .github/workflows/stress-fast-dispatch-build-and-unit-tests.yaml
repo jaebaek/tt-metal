@@ -38,6 +38,7 @@ jobs:
       ARCH_NAME: ${{ matrix.runner-info.arch }}
       CONFIG: ci
       TT_METAL_WATCHER: 60
+      LOGURU_LEVEL: INFO
     environment: dev
     runs-on: ${{ matrix.runner-info.runs-on }}
     name: ${{ matrix.runner-info.machine-type }} ${{ matrix.runner-info.name }}
