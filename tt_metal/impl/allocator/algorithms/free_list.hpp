@@ -72,8 +72,6 @@ class FreeList : public Algorithm {
 
     std::shared_ptr<Block> allocate_slice_of_free_block(std::shared_ptr<Block> free_block, uint64_t offset, uint64_t size_bytes);
 
-    std::shared_ptr<Block> find_block(uint64_t address);
-
     void update_lowest_occupied_address();
 
     void update_lowest_occupied_address(uint64_t address);
@@ -83,6 +81,8 @@ class FreeList : public Algorithm {
     std::shared_ptr<Block> block_tail_;
     std::shared_ptr<Block> free_block_head_;
     std::shared_ptr<Block> free_block_tail_;
+
+    std::unordered_map<uint64_t, std::shared_ptr<Block>> allocated_address_to_block_;
 };
 
 }  // namespace allocator

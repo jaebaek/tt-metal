@@ -239,6 +239,7 @@ std::optional<uint64_t> FreeList::allocate(uint64_t size_bytes, bool bottom_up, 
     if (allocated_block->address + this->offset_bytes_ < address_limit) {
         TT_THROW("Out of Memory: Cannot allocate at an address below {}. Tried to allocate at {}", address_limit, allocated_block->address + this->offset_bytes_);
     }
+    this->allocated_address_to_block_[allocated_block->address] = allocated_block;
     return allocated_block->address + this->offset_bytes_;
 }
 
@@ -270,18 +271,6 @@ std::optional<uint64_t> FreeList::allocate_at_address(uint64_t absolute_start_ad
     return absolute_start_address;
 }
 
-std::shared_ptr<FreeList::Block> FreeList::find_block(uint64_t address) {
-    std::shared_ptr<Block> block = nullptr;
-    std::shared_ptr<Block> curr_block = this->block_head_;
-    while (curr_block != nullptr) {
-        if (curr_block->address == address) {
-            return curr_block;
-        }
-        curr_block = curr_block->next_block;
-    }
-    return block;
-}
-
 void FreeList::update_lowest_occupied_address() {
     std::shared_ptr<Block> block = this->block_head_;
     while (block != nullptr) {
@@ -299,7 +288,11 @@ void FreeList::update_lowest_occupied_address() {
 
 void FreeList::deallocate(uint64_t absolute_address) {
     uint64_t address = absolute_address - this->offset_bytes_;
-    std::shared_ptr<Block> block_to_free = find_block(address);
+    std::shared_ptr<Block> block_to_free = nullptr;
+    if (this->allocated_address_to_block_.find(address) != this->allocated_address_to_block_.end()) {
+        block_to_free = this->allocated_address_to_block_[address];
+        this->allocated_address_to_block_[address] = nullptr;
+    }
     if (block_to_free == nullptr or not this->is_allocated(block_to_free)) {
         return;
     }
