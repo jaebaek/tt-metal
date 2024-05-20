@@ -11,6 +11,7 @@ include $(TT_METAL_HOME)/tt_metal/programming_examples/module.mk
 # Every variable in subdir must be prefixed with subdir (emulating a namespace)
 TT_METAL_TESTS += \
 		 tests/tt_metal/test_bmm \
+		 tests/tt_metal/perf_microbenchmark/allocator/test_allocate_deallocate \
 		 tests/tt_metal/perf_microbenchmark/dispatch/test_pgm_dispatch \
 		 tests/tt_metal/perf_microbenchmark/dispatch/test_bw_and_latency \
 		 tests/tt_metal/perf_microbenchmark/dispatch/test_dispatcher \

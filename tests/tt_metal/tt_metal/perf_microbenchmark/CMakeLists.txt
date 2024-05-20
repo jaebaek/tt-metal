@@ -1,5 +1,6 @@
 
 set(PERF_MICROBENCH_TESTS_SRCS
+    allocator/test_allocate_deallocate
     dispatch/test_pgm_dispatch
     dispatch/test_bw_and_latency
     dispatch/test_dispatcher
