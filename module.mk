@@ -89,7 +89,8 @@ LDFLAGS ?= $(CONFIG_LDFLAGS) -L$(LIBDIR) \
 	-lboost_regex \
 	-lpthread \
 	-latomic \
-	-lhwloc
+	-lhwloc \
+	-lnuma
 ifdef TT_METAL_ENV_IS_DEV
 LDFLAGS += \
 	-Wl,-rpath,$(PREFIX)/lib

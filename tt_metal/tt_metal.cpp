@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <mutex>
+#include <numa.h>
 #include <optional>
 #include <unordered_set>
 #include <string>
@@ -154,20 +155,43 @@ std::map<chip_id_t, Device *> CreateDevices(
     const std::vector<uint32_t> &l1_bank_remap) {
     ZoneScoped;
     std::map<chip_id_t, Device *> active_devices;  // TODO: pass this to CloseDevices
+    // Construct NUMA Node to CPU core map
+    std::unordered_map<std::uint32_t, std::vector<uint32_t>> cpu_cores_per_numa_node = {};
+    std::unordered_set<uint32_t> free_cores = {};
+    for (int cpu = 0; cpu < numa_num_configured_cpus(); ++cpu) {
+        int node = numa_node_of_cpu(cpu);
+        if (cpu_cores_per_numa_node.find(node) == cpu_cores_per_numa_node.end()) {
+            cpu_cores_per_numa_node.insert({node, {}});
+        }
+        free_cores.insert(cpu);
+        cpu_cores_per_numa_node.at(node).push_back(cpu);
+    }
+
     for (const auto &device_id : device_ids) {
         const auto &mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(device_id);
         if (active_devices.find(mmio_device_id) == active_devices.end()) {
-            for (const auto &mmio_controlled_device_id :
-                 tt::Cluster::instance().get_devices_controlled_by_mmio_device(mmio_device_id)) {
-                //if (mmio_controlled_device_id != mmio_device_id) {
-                //    continue;
-                //}
-                Device *dev = new Device(mmio_controlled_device_id, num_hw_cqs, l1_small_size, l1_bank_remap);
+            for (const auto &mmio_controlled_device_id : tt::Cluster::instance().get_devices_controlled_by_mmio_device(mmio_device_id)) {
+                // Get NUMA node that the current device is mapped to through UMD
+                int numa_node_for_device = tt::Cluster::instance().get_numa_node_for_device(mmio_controlled_device_id);
+                int num_cores_in_numa_node = cpu_cores_per_numa_node.at(numa_node_for_device).size();
+                int cpu_core_for_device_worker_thread = cpu_cores_per_numa_node.at(numa_node_for_device).at(mmio_controlled_device_id % num_cores_in_numa_node);
+                free_cores.erase(cpu_core_for_device_worker_thread);
+                Device *dev = new Device(mmio_controlled_device_id, num_hw_cqs, l1_small_size, l1_bank_remap, false, cpu_core_for_device_worker_thread);
                 active_devices.insert({mmio_controlled_device_id, dev});
                 detail::InitDeviceProfiler(dev);
             }
         }
     }
+    // Bind main thread to cores not being used by workers
+    cpu_set_t cpuset;
+    pthread_t current_thread = pthread_self();
+    CPU_ZERO(&cpuset);
+
+    for (const auto& free_core : free_cores) {
+        CPU_SET(free_core, &cpuset);
+    }
+    int result = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
+
     // TODO: need to only enable routing for used mmio chips
     tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(true);
     return active_devices;
@@ -683,17 +707,14 @@ void CloseDevices(std::map<chip_id_t, Device *> devices) {
     }
 
     void AllocateBuffer(Buffer* buffer, bool bottom_up) {
-        detail::DispatchStateCheck(not buffer->device()->using_slow_dispatch());
         EnqueueAllocateBuffer(buffer->device()->command_queue(), buffer, bottom_up, false);
     }
 
     void DeallocateBuffer(Buffer *buffer) {
-        detail::DispatchStateCheck(not buffer->device()->using_slow_dispatch());
         EnqueueDeallocateBuffer(buffer->device()->command_queue(), *(buffer->device()->allocator_), buffer->address(), buffer->buffer_type(), false);
     }
 
     void GetBufferAddress(const Buffer* buffer, uint32_t* address_on_host) {
-        detail::DispatchStateCheck(not buffer->device()->using_slow_dispatch());
         EnqueueGetBufferAddr(buffer->device()->command_queue(), address_on_host, buffer, false);
     }
 
