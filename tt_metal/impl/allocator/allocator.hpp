@@ -12,7 +12,7 @@
 #include "allocator_types.hpp"
 #include "tt_metal/common/assert.hpp"
 #include "tt_metal/common/core_coord.h"
-#include "tt_metal/impl/allocator/algorithms/allocator_algorithm.hpp"
+#include "tt_metal/impl/allocator/algorithms/free_list.hpp"
 
 namespace tt {
 
@@ -62,7 +62,7 @@ class BankManager {
     // This is to store offsets for any banks that share a core or node (dram in wh/storage core), so we can view all banks using only bank_id
     // Set to 0 for cores/nodes with only 1 bank
     std::unordered_map<uint32_t, int64_t> bank_id_to_bank_offset_;
-    std::unique_ptr<Algorithm> allocator_;
+    std::unique_ptr<FreeList> allocator_;
     uint64_t interleaved_address_limit_;
     void validate_bank_id(uint32_t bank_id) const;
 

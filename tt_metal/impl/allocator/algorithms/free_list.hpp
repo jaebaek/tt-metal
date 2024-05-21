@@ -15,7 +15,7 @@ namespace tt_metal {
 
 namespace allocator {
 
-class FreeList : public Algorithm {
+class FreeList : public Algorithm<FreeList> {
    public:
     enum class SearchPolicy {
         BEST = 0,
