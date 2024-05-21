@@ -795,12 +795,6 @@ void launch_op(
                         outputs.at(i).set_layout(local_tensors.at(i).get_layout());
                         outputs.at(i).tensor_attributes->metadata_populated = true;
                     }
-                    if (workers_size == 1) {
-                        outputs.at(i).set_populated();
-                    }
-                    else {
-                        outputs.at(i).set_populated(target_device);
-                    }
                 }
             }
         });

@@ -78,6 +78,7 @@ Tensor::Tensor(const Storage storage, const ttnn::Shape shape, DataType dtype, L
                 raise_unsupported_storage<StorageType>();
             }
         }, storage);
+        this->tensor_attributes->worker_index = (this->tensor_attributes->tensor_populated).size();
         this->tensor_attributes->metadata_populated = true;
 }
 
@@ -214,11 +215,8 @@ void Tensor::wait_for_tensor_data_populated() const {
     ZoneScoped;
     // Stall until all the workers for this tensor
     // have populated the full tensor
-    for (int i = 0; i < this->tensor_attributes->tensor_populated.size(); i++) {
-        while (true) {
-            std::scoped_lock<std::mutex> lock(this->tensor_attributes->populated_mutex);
-            if (this->tensor_attributes->tensor_populated.at(i)) break;
-        }
+    while (true) {
+        if (this->tensor_attributes->worker_index == this->tensor_attributes->tensor_populated.size()) break;
     }
 }
 
@@ -443,8 +441,6 @@ Tensor Tensor::to(const std::vector<Device*>& workers, const MemoryConfig &mem_c
                     device_tensor.set_layout(this->get_layout());
                     device_tensor.tensor_attributes->metadata_populated = true;
                 }
-                if (num_workers > 1) device_tensor.set_populated(worker);
-                else device_tensor.set_populated();
         });
     }
     device_tensor.tensor_attributes->update_main_thread_ref_count(workers.at(0), device_tensor_ref_count);
@@ -466,7 +462,7 @@ Tensor Tensor::cpu(bool blocking) const {
     uint32_t original_tensor_ref_count = this->tensor_attributes->record_main_thread_ref_count();
     for (int worker_index = 0; worker_index < workers.size(); worker_index++) {
         auto target_device = workers[worker_index];
-        target_device->push_work([host_tensor, blocking, target_device, *this, workers, worker_index] () mutable {
+        target_device->push_work(std::make_shared<std::function<void()>>([host_tensor, blocking, target_device, *this, workers_size = workers.size(), worker_index] () mutable {
             TT_ASSERT(this->storage_type() == StorageType::DEVICE or this->storage_type() == StorageType::MULTI_DEVICE, "Can only use worker queue for cpu call if tensor is on device.");
             auto shard = get_shard_for_device(*this, target_device);
             shard = tensor_impl::to_host_wrapper(shard, blocking);
@@ -478,13 +474,7 @@ Tensor Tensor::cpu(bool blocking) const {
                 host_tensor.set_layout(this->get_layout());
                 host_tensor.tensor_attributes->metadata_populated = true;
             }
-            if (workers.size() == 1) {
-                host_tensor.set_populated();
-            }
-            else {
-                host_tensor.set_populated(target_device);
-            }
-        });
+        }));
     }
     {
         ZoneScopedN("CPUSynchronize");
@@ -560,7 +550,6 @@ Tensor Tensor::to(Layout target_layout, DeviceMesh* device_mesh) const {
                     tensor_modified_layout.set_layout(target_layout);
                     tensor_modified_layout.tensor_attributes->metadata_populated = true;
                 }
-                tensor_modified_layout.set_populated(worker);
             });
         }
         return tensor_modified_layout;
@@ -949,7 +938,6 @@ Tensor allocate_tensor_on_device(const ttnn::Shape& shape, DataType data_type, L
                     device_tensor.set_layout(layout);
                     device_tensor.tensor_attributes->metadata_populated = true;
                 }
-                device_tensor.set_populated(worker);
             }
         );
     }
