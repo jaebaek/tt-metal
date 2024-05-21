@@ -43,7 +43,7 @@ def falcon_lm_head_matmul_2d(
     hidden_states = tt_lib.tensor.concat([hidden_states, lm_head_padding], -1)
 
     compute_kernel_config = tt_lib.tensor.WormholeComputeKernelConfig(
-        math_fidelity=tt_lib.tensor.MathFidelity.LoFi,
+        math_fidelity=tt_lib.tensor.MathFidelity.HiFi2,
         math_approx_mode=True,
         fp32_dest_acc_en=False,
         packer_l1_acc=True,
