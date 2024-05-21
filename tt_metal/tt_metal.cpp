@@ -156,25 +156,48 @@ std::map<chip_id_t, Device *> CreateDevices(
     ZoneScoped;
     std::map<chip_id_t, Device *> active_devices;  // TODO: pass this to CloseDevices
     // Construct NUMA Node to CPU core map
-    std::unordered_map<std::uint32_t, std::vector<uint32_t>> cpu_cores_per_numa_node = {};
+    std::unordered_map<int, std::vector<uint32_t>> cpu_cores_per_numa_node = {};
     std::unordered_set<uint32_t> free_cores = {};
-    for (int cpu = 0; cpu < numa_num_configured_cpus(); ++cpu) {
-        int node = numa_node_of_cpu(cpu);
-        if (cpu_cores_per_numa_node.find(node) == cpu_cores_per_numa_node.end()) {
-            cpu_cores_per_numa_node.insert({node, {}});
+    bool using_host_with_numa = (numa_available() != -1);
+    if (using_host_with_numa) {
+        // Host has NUMA enabled. Group CPU IDs by the NUMA nodes they belong to.
+        for (int cpu = 0; cpu < numa_num_configured_cpus(); ++cpu) {
+            int node = numa_node_of_cpu(cpu);
+            if (cpu_cores_per_numa_node.find(node) == cpu_cores_per_numa_node.end()) {
+                cpu_cores_per_numa_node.insert({node, {}});
+            }
+            free_cores.insert(cpu);
+            cpu_cores_per_numa_node.at(node).push_back(cpu);
         }
-        free_cores.insert(cpu);
-        cpu_cores_per_numa_node.at(node).push_back(cpu);
+    } else {
+        // Host does not have NUMA. Place all CPU Ids under a single node (0).
+        log_warning(tt::LogMetal, "Host does not use NUMA. May see reduced performance.");
+        for (int cpu = 0; cpu < sysconf(_SC_NPROCESSORS_ONLN); ++cpu) {
+            free_cores.insert(cpu);
+        }
     }
-
     for (const auto &device_id : device_ids) {
         const auto &mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(device_id);
         if (active_devices.find(mmio_device_id) == active_devices.end()) {
             for (const auto &mmio_controlled_device_id : tt::Cluster::instance().get_devices_controlled_by_mmio_device(mmio_device_id)) {
-                // Get NUMA node that the current device is mapped to through UMD
-                int numa_node_for_device = tt::Cluster::instance().get_numa_node_for_device(mmio_controlled_device_id);
-                int num_cores_in_numa_node = cpu_cores_per_numa_node.at(numa_node_for_device).size();
-                int cpu_core_for_device_worker_thread = cpu_cores_per_numa_node.at(numa_node_for_device).at(mmio_controlled_device_id % num_cores_in_numa_node);
+                int cpu_core_for_device_worker_thread = 0;
+                if (using_host_with_numa) {
+                    // Get NUMA node that the current device is mapped to through UMD
+                    int numa_node_for_device = tt::Cluster::instance().get_numa_node_for_device(mmio_controlled_device_id);
+                    if (cpu_cores_per_numa_node.find(numa_node_for_device) != cpu_cores_per_numa_node.end()) {
+                        // NUMA node reported by UMD exists on host.
+                        int num_cores_in_numa_node = cpu_cores_per_numa_node.at(numa_node_for_device).size();
+                        cpu_core_for_device_worker_thread = cpu_cores_per_numa_node.at(numa_node_for_device).at(mmio_controlled_device_id % num_cores_in_numa_node);
+                    } else {
+                        // NUMA node reported by UMD does not exist on host. Use round-robin binding policy for this worker thread.
+                        log_warning(tt::LogMetal, "NUMA node {} for device {} does not exist on host.", numa_node_for_device, mmio_controlled_device_id);
+                        cpu_core_for_device_worker_thread = mmio_controlled_device_id % sysconf(_SC_NPROCESSORS_ONLN);
+                    }
+                } else {
+                    // System does not use NUMA. Use-round robin binding strategy.
+                    cpu_core_for_device_worker_thread = mmio_controlled_device_id % sysconf(_SC_NPROCESSORS_ONLN);
+                }
+                // This core is now assigned to the worker, and will not be given to the main thread by default.
                 free_cores.erase(cpu_core_for_device_worker_thread);
                 Device *dev = new Device(mmio_controlled_device_id, num_hw_cqs, l1_small_size, l1_bank_remap, false, cpu_core_for_device_worker_thread);
                 active_devices.insert({mmio_controlled_device_id, dev});
