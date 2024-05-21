@@ -210,7 +210,7 @@ def set_prefill_config(model_config, seq_len, dram_memcfg):
     model_config["MLP_GRID_SIZE"] = (8, 8)
 
     model_config["MLP_KERNEL_CONFIG"] = ttnn.experimental.tensor.WormholeComputeKernelConfig(
-        math_fidelity=ttnn.experimental.tensor.MathFidelity.LoFi,
+        math_fidelity=ttnn.experimental.tensor.MathFidelity.HiFi2,
         math_approx_mode=False,
         fp32_dest_acc_en=False,
         packer_l1_acc=True,
@@ -255,12 +255,13 @@ def set_prefill_config(model_config, seq_len, dram_memcfg):
         fused_activation=None,
     )
     compute_kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
-        math_fidelity=ttnn.experimental.tensor.MathFidelity.LoFi,
+        math_fidelity=ttnn.experimental.tensor.MathFidelity.HiFi2,
         math_approx_mode=True,
         fp32_dest_acc_en=False,
         packer_l1_acc=True,
     )
     model_config["FUSED_QKV_MM_OPTIMIZED_KERNEL_CONFIG"] = compute_kernel_config
+    model_config["SELFOUT_MM_OPTIMIZED_KERNEL_CONFIG"] = compute_kernel_config
     model_config["ATTN_OPTIMIZED_GRID_SIZE"] = (8, 8)
     model_config["ATTN_OPTIMIZED_MEMCFG"] = dram_memcfg
     model_config[
@@ -286,7 +287,7 @@ def set_prefill_config(model_config, seq_len, dram_memcfg):
     )
 
     model_config["QKTV_AND_SOFTMAX_OPTIMIZED_KERNEL_CONFIG"] = ttnn.experimental.tensor.WormholeComputeKernelConfig(
-        math_fidelity=ttnn.experimental.tensor.MathFidelity.HiFi4,
+        math_fidelity=ttnn.experimental.tensor.MathFidelity.HiFi2,
         math_approx_mode=True,
         fp32_dest_acc_en=False,
         packer_l1_acc=True,
