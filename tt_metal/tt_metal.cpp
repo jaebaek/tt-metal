@@ -15,7 +15,7 @@
 #include "tt_metal/host_api.hpp"
 #include "impl/debug/dprint_server.hpp"
 #include "dev_msgs.h"
-
+#include "common/env_lib.hpp"
 #include "tools/profiler/profiler.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
 #include "tt_metal/detail/program.hpp"
@@ -210,8 +210,12 @@ std::map<chip_id_t, Device *> CreateDevices(
     pthread_t current_thread = pthread_self();
     CPU_ZERO(&cpuset);
 
+    std::uint32_t num_allowed_cores = parse_env("TT_MAIN_THREAD_CORES", 24);
+    std::uint32_t num_cores = 0;
     for (const auto& free_core : free_cores) {
+        num_cores++;
         CPU_SET(free_core, &cpuset);
+        if (num_cores == num_allowed_cores) break;
     }
     int result = pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset);
 

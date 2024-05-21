@@ -896,6 +896,7 @@ Tensor convert_python_tensors_to_tt_tensors(py::list tensor_shards, std::optiona
                     tt_tensor = tt_tensor.to(tt_device)
             )doc")
             .def("sync", [](Tensor &self) { return self.wait_for_tensor_data_populated(); })
+            .def("has_workers", [](Tensor &self) { return self.get_workers().size() > 0; })
             .def(
                 "extract_shard",
                 [](const Tensor &self, CoreCoord core) { return self.extract_shard(core); },

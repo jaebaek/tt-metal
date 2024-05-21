@@ -338,7 +338,7 @@ def to_torch(
         tensor([[-0.3008, -0.8438,  0.3242],
                 [ 0.9023, -0.5820,  0.5312]], dtype=torch.bfloat16)
     """
-    if ttnn.is_tensor_storage_on_device(tensor):
+    if tensor.has_workers():
         tensor = ttnn.from_device(tensor)
 
     if tensor.layout != ttnn.ROW_MAJOR_LAYOUT:

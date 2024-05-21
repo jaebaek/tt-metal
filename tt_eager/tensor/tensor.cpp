@@ -1,4 +1,5 @@
 // SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -485,11 +486,15 @@ Tensor Tensor::cpu(bool blocking) const {
             }
         });
     }
-    if (blocking) {
-        for (auto target_device : workers) {
-            target_device->synchronize();
+    {
+        ZoneScopedN("CPUSynchronize");
+        if (blocking) {
+            for (auto target_device : workers) {
+                target_device->synchronize();
+            }
         }
     }
+
     // Update main_thread_ref_count for tensor after pushing to queue.
     this->tensor_attributes->update_main_thread_ref_count(workers.at(0), original_tensor_ref_count);
     return host_tensor;
