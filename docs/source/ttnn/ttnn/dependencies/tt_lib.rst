@@ -501,6 +501,8 @@ Tensor relational operations
 
 .. autofunction:: tt_lib.tensor.lte
 
+.. autofunction:: tt_lib.tensor.lei
+
 .. autofunction:: tt_lib.tensor.eq
 
 .. autofunction:: tt_lib.tensor.ne
