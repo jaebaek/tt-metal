@@ -52,6 +52,7 @@ extensions = [
     "sphinxcontrib.email",
     "sphinx.ext.mathjax",
     "breathe",
+    "sphinx_markdown_builder",
 ]
 
 # Napoleon settings

@@ -11,6 +11,7 @@ DOXYGENDIR    	= doxygen_build
 HTMLDIR       	= $(BUILDDIR)/html
 TT_METALIUM_BUILDDIR	= $(BUILDDIR)/tt-metalium
 TTNN_BUILDDIR	= $(BUILDDIR)/ttnn
+MARKDOWNDIR	= $(BUILDDIR)/markdown
 PORT          	?= 8888
 DOCS_VERSION       	?= latest
 
@@ -48,6 +49,10 @@ html: html/tt-metalium html/ttnn
 	mv -f $(TT_METALIUM_BUILDDIR) $(HTMLDIR)/tt-metalium
 	mv -f $(TTNN_BUILDDIR) $(HTMLDIR)/ttnn
 	cp source/index.html $(HTMLDIR)/
+
+markdown: build_doxygen sphinx_build_dir
+	@DOCS_VERSION=$(DOCS_VERSION) REQUESTED_DOCS_PKG=tt-metalium $(SPHINXBUILD) -M markdown "$(SOURCEDIR)/tt-metalium" build/tt-metalium-md $(SPHINXOPTS) $(O)
+	@DOCS_VERSION=$(DOCS_VERSION) REQUESTED_DOCS_PKG=ttnn $(SPHINXBUILD) -M markdown "$(SOURCEDIR)/ttnn" build/ttnn-md $(SPHINXOPTS) $(O)
 
 ttnn_sweeps/check_directory:
 	@if [ -d "$(TTNN_SWEEPS_DIR)" ]; then \
