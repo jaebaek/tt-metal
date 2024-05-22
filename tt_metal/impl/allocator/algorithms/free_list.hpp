@@ -42,12 +42,13 @@ class FreeList : public Algorithm<FreeList> {
 
    private:
     struct Block {
-        Block(uint64_t address, uint64_t size) : address(address), size(size) {}
-        Block(uint64_t address, uint64_t size, std::shared_ptr<Block> prev_block, std::shared_ptr<Block> next_block, std::shared_ptr<Block> prev_free, std::shared_ptr<Block> next_free)
-            : address(address), size(size), prev_block(prev_block), next_block(next_block), prev_free(prev_free), next_free(next_free) {}
+        Block(uint64_t address, uint64_t size, bool free) : address(address), size(size), free(free) {}
+        Block(uint64_t address, uint64_t size, bool free, std::shared_ptr<Block> prev_block, std::shared_ptr<Block> next_block, std::shared_ptr<Block> prev_free, std::shared_ptr<Block> next_free)
+            : address(address), size(size), free(free), prev_block(prev_block), next_block(next_block), prev_free(prev_free), next_free(next_free) {}
 
         uint64_t address;
         uint64_t size;
+        bool free;
         std::shared_ptr<Block> prev_block = nullptr;
         std::shared_ptr<Block> next_block = nullptr;
         std::shared_ptr<Block> prev_free = nullptr;
@@ -55,8 +56,6 @@ class FreeList : public Algorithm<FreeList> {
     };
 
     void dump_block(const std::shared_ptr<Block> block, std::ofstream &out) const;
-
-    bool is_allocated(const std::shared_ptr<Block> block) const;
 
     std::shared_ptr<Block> search_best(uint64_t size_bytes, bool bottom_up);
 
