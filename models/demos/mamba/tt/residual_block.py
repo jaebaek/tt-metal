@@ -14,7 +14,14 @@ from models.demos.mamba.tt.transforms import MambaSsmBlockTransformer
 
 
 class TtResidualBlock(torch.nn.Module):
-    def __init__(self, args: ModelArgs, device, configs, load_fn: Callable, transformer: MambaSsmBlockTransformer):
+    def __init__(
+        self,
+        args: ModelArgs,
+        device,
+        configs,
+        load_fn: Callable,
+        transformer: MambaSsmBlockTransformer,
+    ):
         super().__init__()
 
         self.device = device
@@ -43,4 +50,4 @@ class TtResidualBlock(torch.nn.Module):
         ttnn.deallocate(rms_norm_weights)
         mamba_x = self.tt_mamba_block(mamba_x)
 
-        return ttnn.add(residual, mamba_x)
+        return ttnn.add(residual, mamba_x, dtype=self.configs["dtype"]["activations"])
