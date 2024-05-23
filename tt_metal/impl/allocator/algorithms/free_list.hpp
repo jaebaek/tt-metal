@@ -17,18 +17,20 @@ namespace allocator {
 
 class FreeList : public Algorithm<FreeList> {
    public:
-    enum class SearchPolicy {
-        BEST = 0,
-        FIRST = 1
-    };
+    enum class SearchPolicy { BEST = 0, FIRST = 1 };
 
-    FreeList(uint64_t max_size_bytes, uint64_t offset_bytes, uint64_t min_allocation_size, uint64_t alignment, SearchPolicy search_policy);
+    FreeList(
+        uint64_t max_size_bytes,
+        uint64_t offset_bytes,
+        uint64_t min_allocation_size,
+        uint64_t alignment,
+        SearchPolicy search_policy);
 
     void init();
 
     std::vector<std::pair<uint64_t, uint64_t>> available_addresses(uint64_t size_bytes) const;
 
-    std::optional<uint64_t> allocate(uint64_t size_bytes, bool bottom_up=true, uint64_t address_limit=0);
+    std::optional<uint64_t> allocate(uint64_t size_bytes, bool bottom_up = true, uint64_t address_limit = 0);
 
     std::optional<uint64_t> allocate_at_address(uint64_t absolute_start_address, uint64_t size_bytes);
 
@@ -43,8 +45,21 @@ class FreeList : public Algorithm<FreeList> {
    private:
     struct Block {
         Block(uint64_t address, uint64_t size, bool free) : address(address), size(size), free(free) {}
-        Block(uint64_t address, uint64_t size, bool free, std::shared_ptr<Block> prev_block, std::shared_ptr<Block> next_block, std::shared_ptr<Block> prev_free, std::shared_ptr<Block> next_free)
-            : address(address), size(size), free(free), prev_block(prev_block), next_block(next_block), prev_free(prev_free), next_free(next_free) {}
+        Block(
+            uint64_t address,
+            uint64_t size,
+            bool free,
+            std::shared_ptr<Block> prev_block,
+            std::shared_ptr<Block> next_block,
+            std::shared_ptr<Block> prev_free,
+            std::shared_ptr<Block> next_free) :
+            address(address),
+            size(size),
+            free(free),
+            prev_block(prev_block),
+            next_block(next_block),
+            prev_free(prev_free),
+            next_free(next_free) {}
 
         uint64_t address;
         uint64_t size;
@@ -65,11 +80,14 @@ class FreeList : public Algorithm<FreeList> {
 
     void allocate_entire_free_block(std::shared_ptr<Block> free_block_to_allocate);
 
-    void update_left_aligned_allocated_block_connections(std::shared_ptr<Block> free_block, std::shared_ptr<Block> allocated_block);
+    void update_left_aligned_allocated_block_connections(
+        std::shared_ptr<Block> free_block, std::shared_ptr<Block> allocated_block);
 
-    void update_right_aligned_allocated_block_connections(std::shared_ptr<Block> free_block, std::shared_ptr<Block> allocated_block);
+    void update_right_aligned_allocated_block_connections(
+        std::shared_ptr<Block> free_block, std::shared_ptr<Block> allocated_block);
 
-    std::shared_ptr<Block> allocate_slice_of_free_block(std::shared_ptr<Block> free_block, uint64_t offset, uint64_t size_bytes);
+    std::shared_ptr<Block> allocate_slice_of_free_block(
+        std::shared_ptr<Block> free_block, uint64_t offset, uint64_t size_bytes);
 
     void update_lowest_occupied_address();
 
