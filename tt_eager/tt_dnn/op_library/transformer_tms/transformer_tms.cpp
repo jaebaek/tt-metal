@@ -119,14 +119,6 @@ operation::ProgramWithCallbacks SplitFusedQKVAndSplitHeads::create_program(
     }
 }
 
-tt::stl::reflection::Attributes SplitFusedQKVAndSplitHeads::attributes() const {
-    return {
-        {"compute_with_storage_grid_size", this->compute_with_storage_grid_size.str()},
-        {"output_mem_config", this->output_mem_config},
-        {"num_heads", this->num_heads},
-    };
-}
-
 void ConcatenateHeads::validate(const std::vector<Tensor>& input_tensors) const {
     const auto& input_tensor = input_tensors.at(0);
     const auto batch_size = input_tensor.get_legacy_shape()[0];
@@ -168,13 +160,6 @@ operation::ProgramWithCallbacks ConcatenateHeads::create_program(
         "Unsupported grid shape");
 
     return multi_core_concat_heads(input_tensor, output_tensor, this->compute_with_storage_grid_size);
-}
-
-tt::stl::reflection::Attributes ConcatenateHeads::attributes() const {
-    return {
-        {"compute_with_storage_grid_size", this->compute_with_storage_grid_size.str()},
-        {"output_mem_config", this->output_mem_config},
-    };
 }
 
 void AttnMatmul::validate(const std::vector<Tensor>& input_tensors) const {
@@ -276,15 +261,6 @@ operation::ProgramWithCallbacks AttnMatmul::create_program(
         this->transpose_hw,
         this->compute_with_storage_grid_size,
         this->compute_kernel_config);
-}
-
-tt::stl::reflection::Attributes AttnMatmul::attributes() const {
-    return {
-        {"transpose_hw", this->transpose_hw},
-        {"compute_with_storage_grid_size", this->compute_with_storage_grid_size.str()},
-        {"output_mem_config", this->output_mem_config},
-        {"output_dtype", this->output_dtype},
-    };
 }
 
 const operation::Hash AttnMatmul::compute_program_hash(const std::vector<Tensor>& input_tensors) const {
@@ -479,17 +455,6 @@ operation::ProgramWithCallbacks GroupAttnMatmul::create_program(
         this->compute_kernel_config);
 }
 
-tt::stl::reflection::Attributes GroupAttnMatmul::attributes() const {
-    return {
-        {"transpose_hw", this->transpose_hw},
-        {"out_subblock_w", this->out_subblock_w},
-        {"compute_with_storage_grid_size", this->compute_with_storage_grid_size.str()},
-        {"output_mem_config", this->output_mem_config},
-        {"output_dtype", this->output_dtype},
-        {"row_major", this->row_major},
-    };
-}
-
 const operation::Hash GroupAttnMatmul::compute_program_hash(const std::vector<Tensor>& input_tensors) const {
     const auto& input_tensor_a = input_tensors.at(0);
     const auto& input_tensor_b = input_tensors.at(1);
@@ -553,8 +518,10 @@ void SSMEltwiseMul::validate(const std::vector<Tensor>& input_tensors) const {
     TT_FATAL((ashape[2] == TILE_HEIGHT), "Num of users must be 32 for input a!");
     TT_FATAL((bshape[2] == TILE_HEIGHT), "Num of users must be 32 for input b!");
     TT_FATAL((ashape[3] != bshape[3]), "Use eltwise mul for same size inputs!");
-    TT_FATAL((ashape[3] == TILE_WIDTH || ashape[3] == TILE_WIDTH * HIDDEN_SIZE), "Input a width must be 32 or 32*5120!");
-    TT_FATAL((bshape[3] == HIDDEN_SIZE || bshape[3] == TILE_WIDTH * HIDDEN_SIZE), "Input b width must be 32 or 32*5120!");
+    TT_FATAL(
+        (ashape[3] == TILE_WIDTH || ashape[3] == TILE_WIDTH * HIDDEN_SIZE), "Input a width must be 32 or 32*5120!");
+    TT_FATAL(
+        (bshape[3] == HIDDEN_SIZE || bshape[3] == TILE_WIDTH * HIDDEN_SIZE), "Input b width must be 32 or 32*5120!");
 }
 
 std::vector<Shape> SSMEltwiseMul::compute_output_shapes(const std::vector<Tensor>& input_tensors) const {
@@ -582,14 +549,6 @@ operation::ProgramWithCallbacks SSMEltwiseMul::create_program(
 
     return multi_core_ssm_eltwise_mul(
         input_tensor_a, input_tensor_b, output_tensor, hidden_size, device_compute_with_storage_grid_size);
-}
-
-tt::stl::reflection::Attributes SSMEltwiseMul::attributes() const {
-    return {
-        {"output_mem_config", this->output_mem_config},
-        {"output_dtype", this->output_dtype},
-        {"hidden_size", this->HIDDEN_SIZE},
-    };
 }
 
 void SSM1DSumReduce::validate(const std::vector<Tensor>& input_tensors) const {
@@ -639,13 +598,6 @@ operation::ProgramWithCallbacks SSM1DSumReduce::create_program(
     auto& output_tensor = output_tensors.at(0);
     auto device_compute_with_storage_grid_size = input_tensor_a.device()->compute_with_storage_grid_size();
     return multi_core_ssm_1d_sum_reduce(input_tensor_a, output_tensor, device_compute_with_storage_grid_size);
-}
-
-tt::stl::reflection::Attributes SSM1DSumReduce::attributes() const {
-    return {
-        {"output_mem_config", this->output_mem_config},
-        {"output_dtype", this->output_dtype},
-    };
 }
 
 }  // namespace transformers
