@@ -6,7 +6,7 @@ test-list:
         end-shape: [256, 512]
         interval: [32, 32]
         num-shapes: 2
-        num-samples: 128
+        num-samples: 512
         args-sampling-strategy: "all"
         method: ttnn-rmsnorm
       env:

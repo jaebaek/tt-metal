@@ -2,9 +2,9 @@
 test-list:
   - ttnn-concat:
       shape:
-        start-shape: [1, 1, 32, 32]
+        start-shape: [1, 1, 1, 1]
         end-shape: [6, 12, 256, 256]
-        interval: [1, 1, 32, 32]
+        interval: [1, 1, 1, 1]
         num-dims: [2, 3, 4]
         num-shapes: 2
         num-samples: 64
@@ -26,9 +26,9 @@ test-list:
       output-file: concat_sweep.csv
   - ttnn-concat:
       shape:
-        start-shape: [1, 1, 32, 32]
+        start-shape: [1, 1, 1, 1]
         end-shape: [6, 12, 256, 256]
-        interval: [1, 1, 32, 32]
+        interval: [1, 1, 1, 1]
         num-dims: [2, 3, 4]
         num-shapes: 2
         num-samples: 64
@@ -50,7 +50,7 @@ test-list:
       output-file: concat_sweep.csv
   - ttnn-concat:
       shape:
-        start-shape: [1, 1, 32, 32]
+        start-shape: [1, 1, 1, 1]
         end-shape: [6, 12, 256, 256]
         interval: [1, 1, 1, 2]
         num-dims: [2, 3, 4]
