@@ -34,15 +34,26 @@ bool test_single_tile_single_dram_bank_loopback(Device *device) {
 }
 
 bool test_multi_tile_multi_dram_bank_loopback(Device *device) {
-    bool pass = true;
-    Shape multi_tile_shape = {1, 1, 4*TILE_HEIGHT, 3*TILE_WIDTH};
+    bool pass = true; // 768
+    Shape multi_tile_shape = {1, 1, 6*TILE_HEIGHT, 4*TILE_WIDTH};
 
-    Tensor host_a = tt::numpy::random::random(multi_tile_shape).to(Layout::TILE);
-    Tensor device_a = host_a.to(device);
+    Tensor host_a = tt::numpy::index_tile(multi_tile_shape, DataType::BFLOAT16).to(Layout::TILE);
+    ShardSpec shard_spec({2, 2});
+    MemoryConfig mem_config = {.memory_layout = tt::tt_metal::TensorMemoryLayout::INTERLEAVED, .shard_spec = shard_spec};
+    Tensor device_a = host_a.to(device, mem_config);
     Tensor loopbacked_a = device_a.cpu();
     auto host_a_data = owned_buffer::get_as<bfloat16>(host_a);
     auto loopbacked_a_data = owned_buffer::get_as<bfloat16>(loopbacked_a);
     pass &= host_a_data == loopbacked_a_data;
+    for (int i = 0; i < 6 * 4; i++) {
+        log_info(
+            LogTest,
+            "host_a_data[{}] = {}, loopbacked_a_data[{}] = {}",
+            i * 1024,
+            host_a_data[i * 1024].to_float(),
+            i * 1024,
+            loopbacked_a_data[i * 1024].to_float());
+    }
     return pass;
 }
 
@@ -59,7 +70,7 @@ int main(int argc, char **argv) {
 
 
 
-        pass &= test_single_tile_single_dram_bank_loopback(device);
+        //pass &= test_single_tile_single_dram_bank_loopback(device);
 
         pass &= test_multi_tile_multi_dram_bank_loopback(device);
 

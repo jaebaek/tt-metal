@@ -342,6 +342,34 @@ static Tensor index_height(
     return output;
 }
 
+//template <typename T>
+static Tensor index_tile(
+    const Shape& shape,
+    DataType data_type,
+    const Layout layout = Layout::ROW_MAJOR,
+    Device* device = nullptr,
+    const MemoryConfig& output_mem_config = MemoryConfig{
+        .memory_layout = tt::tt_metal::TensorMemoryLayout::INTERLEAVED}) {
+    auto owned_buffer = tt_metal::owned_buffer::create<bfloat16>(tt_metal::compute_volume(shape));
+
+    auto size = owned_buffer.size();
+    auto rank = shape.rank();
+    auto height = shape[rank - 2] / 32;
+    auto width = shape[rank - 1] / 32;
+    for (int i = 0; i < size; i++) {
+        int height_index = i / (width * 1024);
+        int width_index = (i / 32) % width;
+        int value = height_index * width + width_index;
+        owned_buffer[i] = bfloat16(static_cast<float>(value));
+    }
+
+    auto output = Tensor(OwnedStorage{owned_buffer}, shape, data_type, Layout::ROW_MAJOR).to(layout);
+    if (device != nullptr) {
+        output = output.to(device, output_mem_config);
+    }
+    return output;
+}
+
 template <typename T>
 static Tensor index_all(
     const Shape& shape,

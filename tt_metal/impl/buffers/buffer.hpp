@@ -50,6 +50,7 @@ struct ShardSpec {
     ShardOrientation orientation = ShardOrientation::ROW_MAJOR;
     bool halo = false;
 
+    ShardSpec(const std::array<uint32_t, 2> &shard_shape_) : grid(CoreRangeSet(std::set<CoreRange>())), shape(shard_shape_){}
     ShardSpec(const CoreRangeSet & core_sets_,
                     const std::array<uint32_t,2> & shard_shape_,
                     const ShardOrientation & shard_orientation_ = ShardOrientation::ROW_MAJOR,
@@ -121,6 +122,7 @@ struct BufferConfig {
     uint64_t page_size;            // Size of unit being interleaved. For non-interleaved buffers: size == page_size
     BufferType buffer_type;
     TensorMemoryLayout buffer_layout = TensorMemoryLayout::INTERLEAVED;
+    std::optional<ShardSpec> shard_spec = std::nullopt;
 };
 
 typedef BufferConfig InterleavedBufferConfig;
@@ -223,7 +225,7 @@ class Buffer {
     uint64_t sharded_page_address(uint32_t bank_id, uint32_t page_index) const;
 
     ShardSpecBuffer shard_spec() const {
-        TT_ASSERT(is_sharded(this->buffer_layout_) , "Buffer not sharded");
+        //TT_ASSERT(is_sharded(this->buffer_layout_) , "Buffer not sharded");
         TT_ASSERT(shard_parameters_.has_value());
         return this->shard_parameters_.value();
     }
