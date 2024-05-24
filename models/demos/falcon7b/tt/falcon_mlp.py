@@ -189,22 +189,27 @@ class TtFalconMLPPrefill(nn.Module):
             hidden_states = []
             for device_id in range(len(x)):
                 hidden_states.append(
-                    ttnn.experimental.tensor.falcon_dense_h_to_4h_matmul(
+                    ttnn.linear(
                         x[device_id],
                         self.dense_h_to_4h_weights[device_id],
-                        fused_activation=[ttnn.experimental.tensor.FusibleActivation.GELU, True],
-                        output_mem_config=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_MEMCFG"],
-                        output_dtype=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_DTYPE"],
+                        memory_config=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_MEMCFG"],
+                        dtype=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_DTYPE"],
+                        core_grid=ttnn.CoreGrid(y=8, x=8),
+                        use_1d_systolic_array=True,
+                        compute_kernel_config=self.model_config["MLP_KERNEL_CONFIG"],
+                        activation="gelu",
                     )
                 )
                 x[device_id].deallocate()
             for device_id in range(len(x)):
-                hidden_states[device_id] = ttnn.experimental.tensor.falcon_dense_4h_to_h_matmul(
+                hidden_states[device_id] = ttnn.matmul(
                     hidden_states[device_id],
                     self.dense_4h_to_h_weights[device_id],
-                    output_mem_config=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_MEMCFG"],
-                    output_dtype=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_DTYPE"],
-                    packer_l1_acc=True,
+                    memory_config=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_MEMCFG"],
+                    dtype=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_DTYPE"],
+                    core_grid=ttnn.CoreGrid(y=8, x=8),
+                    use_1d_systolic_array=True,
+                    compute_kernel_config=self.model_config["MLP_KERNEL_CONFIG"],
                 )
 
         # return TT Tensor
