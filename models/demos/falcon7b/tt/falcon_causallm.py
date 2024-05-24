@@ -105,28 +105,40 @@ class TtFalconCausalLM(TtFalconModelShared):
             use_cache=use_cache,
         )
 
-        if self.model_config["PREFILL_OPTIMIZED_MODE"] and hidden_states[0].get_legacy_shape()[-2] > 512:
-            lm_logits = [
-                falcon_lm_head_matmul_2d(
-                    hidden_states[device_id],
-                    [weights[device_id] for weights in self.lm_head_sliced_weights],
-                    self.num_slices,
-                    lm_head_padding=self.lm_head_padding[device_id],
-                    out_mem_config=self.model_config["LM_HEAD_MM_OUTPUT_MEMCFG"],
-                    out_dtype=self.model_config["LM_HEAD_MM_OUTPUT_DTYPE"],
-                )
-                for device_id in range(self.num_devices)
-            ]
+        if llm_mode == "prefill":
+            if self.model_config["PREFILL_OPTIMIZED_MODE"] and hidden_states[0].get_legacy_shape()[-2] > 512:
+                lm_logits = [
+                    falcon_lm_head_matmul_2d(
+                        hidden_states[device_id],
+                        [weights[device_id] for weights in self.lm_head_sliced_weights],
+                        self.num_slices,
+                        lm_head_padding=self.lm_head_padding[device_id],
+                        out_mem_config=self.model_config["LM_HEAD_MM_OUTPUT_MEMCFG"],
+                        out_dtype=self.model_config["LM_HEAD_MM_OUTPUT_DTYPE"],
+                    )
+                    for device_id in range(self.num_devices)
+                ]
+            else:
+                lm_logits = [
+                    ttnn.matmul(
+                        hidden_states[device_id],
+                        self.lm_head_weights[device_id],
+                        memory_config=self.model_config["LM_HEAD_MM_OUTPUT_MEMCFG"],
+                        dtype=self.model_config["LM_HEAD_MM_OUTPUT_DTYPE"],
+                        core_grid=ttnn.CoreGrid(y=8, x=8),
+                        use_1d_systolic_array=True,
+                        compute_kernel_config=self.model_config["LM_HEAD_KERNEL_CONFIG"],
+                    )
+                    for device_id in range(self.num_devices)
+                ]
         else:
             lm_logits = [
-                ttnn.matmul(
+                tt_lib.tensor.falcon_lm_head_matmul(
                     hidden_states[device_id],
                     self.lm_head_weights[device_id],
-                    memory_config=self.model_config["LM_HEAD_MM_OUTPUT_MEMCFG"],
-                    dtype=self.model_config["LM_HEAD_MM_OUTPUT_DTYPE"],
-                    core_grid=ttnn.CoreGrid(y=8, x=8),
-                    use_1d_systolic_array=True,
-                    compute_kernel_config=self.model_config["LM_HEAD_KERNEL_CONFIG"],
+                    bias=None,
+                    output_mem_config=self.model_config["LM_HEAD_MM_OUTPUT_MEMCFG"],
+                    output_dtype=self.model_config["LM_HEAD_MM_OUTPUT_DTYPE"],
                 )
                 for device_id in range(self.num_devices)
             ]
