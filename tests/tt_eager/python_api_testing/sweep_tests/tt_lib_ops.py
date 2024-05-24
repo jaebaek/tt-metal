@@ -1236,6 +1236,43 @@ def eltwise_unary_gt(
 
 
 @setup_host_and_device
+def eltwise_gti(
+    x,
+    y,
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = setup_tt_tensor(y, device, layout[1], input_mem_config[1], dtype[1])
+    ttl.tensor.gti(t0, t1)
+
+    return tt2torch_tensor(t0)
+
+
+@setup_host_and_device
+def eltwise_unary_gti(
+    x,
+    *args,
+    value,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    ttl.tensor.gti(t0, value)
+
+    return tt2torch_tensor(t0)
+
+
+@setup_host_and_device
 def eltwise_unary_lt(
     x,
     *args,
