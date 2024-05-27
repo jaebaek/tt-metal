@@ -490,16 +490,66 @@ def fused_partial_layernorm(
                     pgmconfig,
                 )
 
+            # Apply first layernorm gamma+beta
+            xs_output_slice_1 = []
+            for i in range(num_devices):
+                xs_output_slice_1.append(ttnn.experimental.tensor.mul(xs_slice[i], ln_gamma_1[i], output_mem_config=memconfig))
+            for i in range(num_devices):
+                xs_output_slice_1[i] = ttnn.experimental.tensor.add(
+                    xs_output_slice_1[i],
+                    ln_beta_1[i],
+                    output_mem_config=memconfig,
+                )
+            # xs_output_slice_1 = []
+            # for i in range(num_devices):
+            #     xs_output_slice_1.append(
+            #         ttl.tensor.bcast(
+            #             xs_slice[i], ln_gamma_1[i], math_op=ttl.tensor.BcastOpMath.MUL, dim=ttl.tensor.BcastOpDim.H
+            #         )
+            #     )
+            # for i in range(num_devices):
+            #     xs_output_slice_1[i] = ttl.tensor.bcast(
+            #         xs_output_slice_1[i], ln_beta_1[i], math_op=ttl.tensor.BcastOpMath.ADD, dim=ttl.tensor.BcastOpDim.H
+            #     )
+
             for i in range(num_devices):
                 ttnn.experimental.tensor.sharded_to_interleaved_partial(
-                    xs_slice[i],
+                    xs_output_slice_1[i],
                     out_tensor_1[i],
                     num_slices,
                     slice_i,
                     dram_memcfg,
                 )
+                xs_output_slice_1[i].deallocate(True)
+
+            # Apply second layernorm gamma+beta inplace
+            for i in range(num_devices):
+                xs_slice[i] = ttnn.experimental.tensor.mul(xs_slice[i], ln_gamma_2[i], output_mem_config=memconfig)
+            for i in range(num_devices):
+                xs_slice[i] = ttnn.experimental.tensor.add(
+                    xs_slice[i],
+                    ln_beta_2[i],
+                    output_mem_config=memconfig,
+                )
+            # for i in range(num_devices):
+            #     xs_slice[i] = ttl.tensor.bcast(
+            #             xs_slice[i], ln_gamma_2[i], math_op=ttl.tensor.BcastOpMath.MUL, dim=ttl.tensor.BcastOpDim.H
+            #         )
+            # for i in range(num_devices):
+            #     xs_slice[i] = ttl.tensor.bcast(
+            #         xs_slice[i], ln_beta_2[i], math_op=ttl.tensor.BcastOpMath.ADD, dim=ttl.tensor.BcastOpDim.H
+            #     )
+
+            for i in range(num_devices):
+                ttnn.experimental.tensor.sharded_to_interleaved_partial(
+                    xs_slice[i],
+                    out_tensor_2[i],
+                    num_slices,
+                    slice_i,
+                    dram_memcfg,
+                )
                 xs_slice[i].deallocate(True)
-    else:
+    else:  # TODO
         xs = convert_to_layout(xs, dram_memcfg, memconfig)
         for i in range(len(xs)):
             xs[i] = ttnn.experimental.operations.primary.layernorm(
@@ -514,32 +564,8 @@ def fused_partial_layernorm(
         xs_output_cat = xs
     if dtype != ttnn.experimental.tensor.DataType.BFLOAT16:
         for i in range(num_devices):
-            xs_output_cat[i] = ttnn.experimental.tensor.typecast(xs_output_cat[i], dtype)
+            out_tensor_1[i] = ttnn.experimental.tensor.typecast(out_tensor_1[i], dtype)
+        for i in range(num_devices):
+            out_tensor_2[i] = ttnn.experimental.tensor.typecast(out_tensor_2[i], dtype)
 
-    # Apply first layernorm gamma+beta
-    xs_output_1 = []
-    for i in range(num_devices):
-        xs_output_1.append(ttnn.experimental.tensor.mul(xs_output_cat[i], ln_gamma_1[i], output_mem_config=dram_memcfg))
-    for i in range(num_devices):
-        xs_output_1[i] = ttnn.experimental.tensor.add(
-            xs_output_1[i],
-            ln_beta_1[i],
-            output_mem_config=dram_memcfg,
-        )
-
-    # Apply second layernorm gamma+beta
-    xs_output_2 = []
-    for i in range(num_devices):
-        xs_output_2.append(ttnn.experimental.tensor.mul(xs_output_cat[i], ln_gamma_2[i], output_mem_config=dram_memcfg))
-    for i in range(num_devices):
-        xs_output_2[i] = ttnn.experimental.tensor.add(
-            xs_output_2[i],
-            ln_beta_2[i],
-            output_mem_config=dram_memcfg,
-        )
-
-    for i in range(num_devices):
-        xs_output_cat[i].deallocate(True)
-
-    return xs_output_1, xs_output_2
-
+    return out_tensor_1, out_tensor_2
