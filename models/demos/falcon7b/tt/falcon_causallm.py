@@ -125,7 +125,7 @@ class TtFalconCausalLM(TtFalconModelShared):
                         self.lm_head_weights[device_id],
                         memory_config=self.model_config["LM_HEAD_MM_OUTPUT_MEMCFG"],
                         dtype=self.model_config["LM_HEAD_MM_OUTPUT_DTYPE"],
-                        core_grid=ttnn.CoreGrid(y=8, x=8),
+                        core_grid=ttnn.CoreGrid(y=7, x=8),
                         use_1d_systolic_array=True,
                         compute_kernel_config=self.model_config["LM_HEAD_KERNEL_CONFIG"],
                     )
