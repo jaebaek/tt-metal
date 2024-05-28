@@ -76,21 +76,37 @@ def run_perf_resnet(
         profiler.end(cpu_key)
 
         tt_inputs = tt_resnet50.preprocessing(inputs)
+        interleaved_mem_config_DRAM = tt_lib.tensor.MemoryConfig(
+            memory_layout=tt_lib.tensor.TensorMemoryLayout.INTERLEAVED,
+            buffer_type=tt_lib.tensor.BufferType.DRAM,
+        )
+        tt_image_res = tt_lib.tensor.allocate_tensor_on_device(
+            tt_inputs.shape, tt_inputs.dtype, tt_inputs.layout, device, interleaved_mem_config_DRAM
+        )
+        op_event = tt_lib.device.CreateEvent()
+        write_event = tt_lib.device.CreateEvent()
+        # Initialize the op event so we can write
+        tt_lib.device.RecordEvent(device, 0, op_event)
         warmup_end = 5
         for iter in range(0, warmup_end):
             profiler.start(f"{iter}_key")
-            _ = tt_resnet50(tt_inputs).cpu(blocking=True)
+            tt_lib.device.WaitForEvent(device, 1, op_event)
+            tt_lib.tensor.write_tensor(tt_inputs, tt_image_res, 1)
+            tt_lib.device.RecordEvent(device, 1, write_event)
+            _ = tt_resnet50(tt_image_res, write_event, op_event).cpu(blocking=True)
             profiler.end(f"{iter}_key")
             tt_lib.device.DumpDeviceProfiler(device)
-
-        num_warm_iterations = 15
+        num_warm_iterations = 10
         warm_start = warmup_end
         warm_end = warm_start + num_warm_iterations
 
         outputs = []
         profiler.start(f"run")
         for iter in range(warm_start, warm_end):
-            outputs.append(tt_resnet50(tt_inputs).cpu(blocking=False))
+            tt_lib.device.WaitForEvent(device, 1, op_event)
+            tt_lib.tensor.write_tensor(tt_inputs, tt_image_res, 1)
+            tt_lib.device.RecordEvent(device, 1, write_event)
+            outputs.append(tt_resnet50(tt_image_res, write_event, op_event).cpu(blocking=False))
         tt_lib.device.Synchronize(device)
         profiler.end(f"run")
         tt_lib.device.DumpDeviceProfiler(device)

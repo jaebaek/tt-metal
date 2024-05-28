@@ -286,7 +286,6 @@ template<bool cmddat_wrap_enable>
 static uint32_t process_relay_inline_cmd(uint32_t cmd_ptr,
                                          uint32_t& downstream_data_ptr) {
 
-    DeviceZoneScopedN("process_relay_inline_cmd");
     volatile CQPrefetchCmd tt_l1_ptr *cmd = (volatile CQPrefetchCmd tt_l1_ptr *)cmd_ptr;
 
     uint32_t length = cmd->relay_inline.length;
@@ -298,7 +297,6 @@ static uint32_t process_relay_inline_cmd(uint32_t cmd_ptr,
     // grab what we need in one chunk
 
     {
-    DeviceZoneScopedN("cb_acquire_pages");
     cb_acquire_pages<my_noc_xy, my_downstream_cb_sem_id>(npages);
     }
 
@@ -810,15 +808,17 @@ bool process_cmd(uint32_t& cmd_ptr,
                  uint32_t& downstream_data_ptr,
                  uint32_t& stride) {
 
-    DeviceZoneScopedN("PROCESS-CMD");
     volatile CQPrefetchCmd tt_l1_ptr *cmd = (volatile CQPrefetchCmd tt_l1_ptr *)cmd_ptr;
     bool done = false;
 
     switch (cmd->base.cmd_id) {
     case CQ_PREFETCH_CMD_RELAY_LINEAR:
+        {
+        DeviceZoneScopedN("CQ_PREFETCH_CMD_RELAY_LINEAR");
         DPRINT << "relay linear: " << cmd_ptr << ENDL();
         stride = process_relay_linear_cmd(cmd_ptr, downstream_data_ptr);
         break;
+        }
 
     case CQ_PREFETCH_CMD_RELAY_PAGED:
         DPRINT << "relay dram page: " << cmd_ptr << ENDL();
@@ -829,8 +829,10 @@ bool process_cmd(uint32_t& cmd_ptr,
                 (packed_page_flags >> CQ_PREFETCH_RELAY_PAGED_START_PAGE_SHIFT) &
                 CQ_PREFETCH_RELAY_PAGED_START_PAGE_MASK;
             if (is_dram) {
+                DeviceZoneScopedN("CQ_PREFETCH_CMD_RELAY_PAGED_DRAM");
                 stride = process_relay_paged_cmd<true>(cmd_ptr, downstream_data_ptr, start_page);
             } else {
+                DeviceZoneScopedN("CQ_PREFETCH_CMD_RELAY_PAGED_L1");
                 stride = process_relay_paged_cmd<false>(cmd_ptr, downstream_data_ptr, start_page);
             }
         }
@@ -841,14 +843,17 @@ bool process_cmd(uint32_t& cmd_ptr,
         if (exec_buf) {
             stride = process_relay_inline_exec_buf_cmd(cmd_ptr, downstream_data_ptr);
         } else {
+            DeviceZoneScopedN("CQ_PREFETCH_CMD_RELAY_INLINE");
             stride = process_relay_inline_cmd<cmddat_wrap_enable>(cmd_ptr, downstream_data_ptr);
         }
         break;
 
     case CQ_PREFETCH_CMD_RELAY_INLINE_NOFLUSH:
+        {
+        DeviceZoneScopedN("CQ_PREFETCH_CMD_RELAY_INLINE_NOFLUSH");
         DPRINT << "inline no flush" << ENDL();
         stride = process_relay_inline_noflush_cmd(cmd_ptr, downstream_data_ptr);
-        break;
+        break;}
 
     case CQ_PREFETCH_CMD_EXEC_BUF:
         DPRINT << "exec buf: " << cmd_ptr << ENDL();
@@ -867,6 +872,9 @@ bool process_cmd(uint32_t& cmd_ptr,
         break;
 
     case CQ_PREFETCH_CMD_STALL:
+        {
+        DeviceZoneScopedN("CQ_PREFETCH_CMD_STALL");
+        }
         //DPRINT << "stall" << ENDL();
         stride = process_stall(cmd_ptr);
         break;

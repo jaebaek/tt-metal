@@ -2101,7 +2101,7 @@ class ResNet(nn.Module):
 
         return x
 
-    def forward(self, x: tt_lib.tensor) -> tt_lib.tensor:
+    def forward(self, x: tt_lib.tensor, write_event=None, op_event=None) -> tt_lib.tensor:
         if not self.sharded:
             original_A_cl_host_shape = x.get_legacy_shape()
             x = x.reshape(
@@ -2144,7 +2144,11 @@ class ResNet(nn.Module):
             mem_config = tt_lib.tensor.MemoryConfig(
                 tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED, tt_lib.tensor.BufferType.L1, shard_spec
             )
+            if write_event is not None:
+                tt_lib.device.WaitForEvent(self.device, 0, write_event)
             x = tt_lib.tensor.interleaved_to_sharded(x, mem_config)
+            if op_event is not None:
+                tt_lib.device.RecordEvent(self.device, 0, op_event)
 
         x = self.conv1(x)
         # Relu is fused with conv1

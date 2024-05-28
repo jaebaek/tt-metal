@@ -734,35 +734,43 @@ static inline bool process_cmd_d(uint32_t& cmd_ptr) {
 
     switch (cmd->base.cmd_id) {
     case CQ_DISPATCH_CMD_WRITE_LINEAR:
+        {
+        DeviceZoneScopedN("CQ_DISPATCH_CMD_WRITE_LINEAR");
         DEBUG_STATUS("DWB");
         DPRINT << "cmd_write\n";
         process_write();
         DEBUG_STATUS("DWD");
-        break;
+        break;}
 
     case CQ_DISPATCH_CMD_WRITE_LINEAR_H:
+        {
+        DeviceZoneScopedN("CQ_DISPATCH_CMD_WRITE_LINEAR_H");
         DPRINT << "cmd_write_linear_h\n";
         if (is_h_variant) {
             process_write();
         } else {
             relay_write_h();
         }
-        break;
+        break;}
 
     case CQ_DISPATCH_CMD_WRITE_LINEAR_H_HOST:
+        {
+        DeviceZoneScopedN("CQ_DISPATCH_CMD_WRITE_LINEAR_H_HOST");
         DPRINT << "cmd_write_linear_h_host\n";
         if (is_h_variant) {
             process_write_host_h();
         } else {
             process_write_host_d();
         }
-        break;
+        break;}
 
     case CQ_DISPATCH_CMD_WRITE_PAGED:
         DPRINT << "cmd_write_paged is_dram: " << (uint32_t) cmd->write_paged.is_dram << ENDL();
         if (cmd->write_paged.is_dram) {
+            DeviceZoneScopedN("CQ_DISPATCH_CMD_WRITE_PAGED_DRAM");
             process_write_paged<true>();
         } else {
+            DeviceZoneScopedN("CQ_DISPATCH_CMD_WRITE_PAGED_L1");
             process_write_paged<false>();
         }
         break;
@@ -772,17 +780,22 @@ static inline bool process_cmd_d(uint32_t& cmd_ptr) {
             DPRINT << "cmd_write_packed" << ENDL();
             uint32_t flags = cmd->write_packed.flags;
             if (flags & CQ_DISPATCH_CMD_PACKED_WRITE_FLAG_MCAST) {
+                DeviceZoneScopedN("CQ_DISPATCH_CMD_WRITE_PACKED_MCAST");
                 process_write_packed<true, CQDispatchWritePackedMulticastSubCmd>(flags);
             } else {
+                DeviceZoneScopedN("CQ_DISPATCH_CMD_WRITE_PACKED_UCAST");
                 process_write_packed<false, CQDispatchWritePackedUnicastSubCmd>(flags);
             }
         }
         break;
 
     case CQ_DISPATCH_CMD_WAIT:
+        {
+        DeviceZoneScopedN("CQ_DISPATCH_CMD_WAIT");
         DPRINT << "cmd_wait" << ENDL();
         process_wait();
         break;
+        }
 
     case CQ_DISPATCH_CMD_GO:
         DPRINT << "cmd_go" << ENDL();
