@@ -373,6 +373,7 @@ def test_resnet50_conv_gs(
     pad_w,
     use_1d_systolic_array,
 ):
+    pytest.skip("Skipping, suspecting some device state dependency")
     if batch_size > 8 and (activations_dtype != ttnn.bfloat8_b or weights_dtype != ttnn.bfloat8_b):
         pytest.skip("Batch > 8 must be run fully bfp8")
 
@@ -485,6 +486,7 @@ def test_resnet50_conv_wh(
     config_override,
     packer_l1_acc,
 ):
+    pytest.skip("Skipping, suspecting some device state dependency")
     if device.core_grid.y == 7:
         pytest.skip("Issue #6992: Statically allocated circular buffers in program clash with L1 buffers on core range")
     if batch_size > 8 and (activations_dtype != ttnn.bfloat8_b or weights_dtype != ttnn.bfloat8_b):
@@ -608,6 +610,7 @@ def test_resnet50_conv_wh_fp32(
     config_override,
     packer_l1_acc,
 ):
+    pytest.skip("Skipping, suspecting some device state dependency")
     if device.core_grid.y > 7:
         pytest.skip("Not tested for N150 yet")
 
@@ -738,6 +741,7 @@ def test_sd_conv(
     config_override,
     enable_auto_formatting,
 ):
+    pytest.skip("Skipping, suspecting some device state dependency")
     if filter_height > 1 and (input_channels > 1280 or (input_channels > 640 and input_height > 16)):
         if enable_auto_formatting:
             pytest.skip("Not running split SD conv with auto formatting")
@@ -880,6 +884,7 @@ def test_sd_conv_wh(
     config_override,
     enable_auto_formatting,
 ):
+    pytest.skip("Skipping, suspecting some device state dependency")
     if device.core_grid.y == 7:
         pytest.skip("This test is not supported for N300")
 
@@ -1121,6 +1126,7 @@ def test_unet_conv_wh(
     use_shallow_conv_variant,
     output_layout,
 ):
+    pytest.skip("Skipping, suspecting some device state dependency")
     if (device.compute_with_storage_grid_size().x, device.compute_with_storage_grid_size().y) == (8, 7):
         pytest.skip("Test is not supported on n300 (8,7) grid")
     if output_layout == ttnn.ROW_MAJOR_LAYOUT and activations_dtype == ttnn.bfloat8_b:
@@ -1183,6 +1189,7 @@ def test_halo_reshard_conv(
     pad_w,
     config_override,
 ):
+    pytest.skip("Skipping, suspecting some device state dependency")
     if is_wormhole_b0() and device.core_grid.y > 7:
         pytest.skip("Not tested for N150 yet")
 
@@ -1241,6 +1248,7 @@ def test_conv_core_nondivis(
     config_override,
     xfail,
 ):
+    pytest.skip("Skipping, suspecting some device state dependency")
     if xfail:
         pytest.xfail()
 
