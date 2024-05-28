@@ -503,6 +503,8 @@ Tensor relational operations
 
 .. autofunction:: tt_lib.tensor.eq
 
+.. autofunction:: tt_lib.tensor.eqi
+
 .. autofunction:: tt_lib.tensor.ne
 
 .. autofunction:: tt_lib.tensor.unary_ne

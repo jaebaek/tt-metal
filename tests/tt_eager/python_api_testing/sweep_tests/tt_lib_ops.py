@@ -1254,6 +1254,24 @@ def eltwise_unary_lt(
 
 
 @setup_host_and_device
+def eltwise_unary_eqi(
+    x,
+    *args,
+    value,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttl.tensor.eqi(t0, value, output_mem_config=output_mem_config)
+
+    return tt2torch_tensor(t1)
+
+
+@setup_host_and_device
 def full_like(
     x,
     *args,
@@ -2355,6 +2373,7 @@ eltwise_min = make_binary_op(ttl.tensor.min)
 eltwise_max = make_binary_op(ttl.tensor.max)
 eltwise_ne = make_binary_op(ttl.tensor.ne)
 eltwise_eq = make_binary_op(ttl.tensor.eq)
+eltwise_eqi = make_binary_op(ttl.tensor.eqi)
 eltwise_gt = make_binary_op(ttl.tensor.gt)
 eltwise_lt = make_binary_op(ttl.tensor.lt)
 eltwise_gte = make_binary_op(ttl.tensor.gte)
