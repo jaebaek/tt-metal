@@ -209,12 +209,18 @@ def set_prefill_config(model_config, seq_len, dram_memcfg):
     model_config["MLP_PADDING_VALUE"] = 4608
     model_config["MLP_GRID_SIZE"] = (8, 8)
 
-    default_kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
-        math_fidelity=ttnn.experimental.tensor.MathFidelity.HiFi2,
-        math_approx_mode=False,
-        fp32_dest_acc_en=False,
-        packer_l1_acc=True,
-    )
+    if is_wormhole_b0():
+        default_kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+            math_fidelity=ttnn.experimental.tensor.MathFidelity.HiFi2,
+            math_approx_mode=False,
+            fp32_dest_acc_en=False,
+            packer_l1_acc=True,
+        )
+    else:
+        default_kernel_config = ttnn.experimental.tensor.GrayskullComputeKernelConfig(
+            math_fidelity=ttnn.experimental.tensor.MathFidelity.LoFi,
+            math_approx_mode=True,
+        )
     model_config["MLP_KERNEL_CONFIG"] = default_kernel_config
 
     mm_h_to_4h_prog_cfg = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(

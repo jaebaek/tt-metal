@@ -4,7 +4,7 @@
 
 import torch
 import ttnn
-from models.demos.falcon7b.tt.model_utils import get_weights_cached
+from models.demos.falcon7b.tt.model_utils import get_falcon_default_core_grid, get_weights_cached
 from torch import nn
 
 
@@ -194,7 +194,7 @@ class TtFalconMLPPrefill(nn.Module):
                         self.dense_h_to_4h_weights[device_id],
                         memory_config=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_MEMCFG"],
                         dtype=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_DTYPE"],
-                        core_grid=ttnn.CoreGrid(y=7, x=8),
+                        core_grid=get_falcon_default_core_grid(x[device_id].device()),
                         use_1d_systolic_array=True,
                         compute_kernel_config=self.model_config["MLP_KERNEL_CONFIG"],
                         activation="gelu",
@@ -207,7 +207,7 @@ class TtFalconMLPPrefill(nn.Module):
                     self.dense_4h_to_h_weights[device_id],
                     memory_config=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_MEMCFG"],
                     dtype=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_DTYPE"],
-                    core_grid=ttnn.CoreGrid(y=7, x=8),
+                    core_grid=get_falcon_default_core_grid(hidden_states[device_id].device()),
                     use_1d_systolic_array=True,
                     compute_kernel_config=self.model_config["MLP_KERNEL_CONFIG"],
                 )

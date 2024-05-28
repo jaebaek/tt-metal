@@ -80,3 +80,11 @@ def get_weights_cached(
         ttnn.experimental.tensor.dump_tensor(str(path), weights_host)
 
     return weights
+
+
+# TODO: Remove this once there are no more hangs on 8x8 (Issue #6795)
+def get_falcon_default_core_grid(device):
+    grid_size = device.compute_with_storage_grid_size()
+    if device.arch() == ttnn.experimental.device.Arch.WORMHOLE_B0 and grid_size.y >= 8:
+        return ttnn.CoreGrid(y=7, x=grid_size.x)
+    return ttnn.CoreGrid(y=grid_size.y, x=grid_size.x)

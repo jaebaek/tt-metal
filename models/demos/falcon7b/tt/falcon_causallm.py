@@ -8,7 +8,7 @@ import torch
 import ttnn
 from models.demos.falcon7b.tt.falcon_lm_head import falcon_lm_head_matmul_2d
 from models.demos.falcon7b.tt.falcon_model import TtFalconModelShared
-from models.demos.falcon7b.tt.model_utils import get_weights_cached
+from models.demos.falcon7b.tt.model_utils import get_falcon_default_core_grid, get_weights_cached
 from models.utility_functions import torch_tensors_to_tt_tensors
 
 
@@ -125,7 +125,7 @@ class TtFalconCausalLM(TtFalconModelShared):
                         self.lm_head_weights[device_id],
                         memory_config=self.model_config["LM_HEAD_MM_OUTPUT_MEMCFG"],
                         dtype=self.model_config["LM_HEAD_MM_OUTPUT_DTYPE"],
-                        core_grid=ttnn.CoreGrid(y=7, x=8),
+                        core_grid=get_falcon_default_core_grid(hidden_states[device_id].device()),
                         use_1d_systolic_array=True,
                         compute_kernel_config=self.model_config["LM_HEAD_KERNEL_CONFIG"],
                     )
