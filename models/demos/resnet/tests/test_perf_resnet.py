@@ -9,7 +9,7 @@ from transformers import AutoImageProcessor
 import pytest
 import tt_lib
 
-from models.utility_functions import is_e75
+from models.utility_functions import is_e75, divup
 from models.utility_functions import profiler
 from models.utility_functions import disable_persistent_kernel_cache, skip_for_wormhole_b0
 from models.perf.perf_utils import prep_perf_report
@@ -76,12 +76,28 @@ def run_perf_resnet(
         profiler.end(cpu_key)
 
         tt_inputs = tt_resnet50.preprocessing(inputs)
-        interleaved_mem_config_DRAM = tt_lib.tensor.MemoryConfig(
-            memory_layout=tt_lib.tensor.TensorMemoryLayout.INTERLEAVED,
-            buffer_type=tt_lib.tensor.BufferType.DRAM,
+        input_shape = tt_inputs.get_legacy_shape()
+        shard_spec = tt_lib.tensor.ShardSpec(
+            tt_lib.tensor.CoreRangeSet(
+                {
+                    tt_lib.tensor.CoreRange(
+                        tt_lib.tensor.CoreCoord(0, 0),
+                        tt_lib.tensor.CoreCoord(7, 0),
+                    )
+                }
+            ),
+            [
+                divup(tt_inputs.volume() // input_shape[3], 8),
+                input_shape[3],
+            ],
+            tt_lib.tensor.ShardOrientation.ROW_MAJOR,
+            False,
+        )
+        sharded_mem_config_DRAM = tt_lib.tensor.MemoryConfig(
+            tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED, tt_lib.tensor.BufferType.DRAM, shard_spec
         )
         tt_image_res = tt_lib.tensor.allocate_tensor_on_device(
-            tt_inputs.shape, tt_inputs.dtype, tt_inputs.layout, device, interleaved_mem_config_DRAM
+            tt_inputs.shape, tt_inputs.dtype, tt_inputs.layout, device, sharded_mem_config_DRAM
         )
         op_event = tt_lib.device.CreateEvent()
         write_event = tt_lib.device.CreateEvent()
