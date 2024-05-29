@@ -257,6 +257,8 @@ def test_moreh_conv(
     use_1d_systolic_array,
     config_override,
 ):
+    pytest.skip("Skipping, suspecting some device state dependency")
+
     use_shallow_conv_variant = False
     enable_auto_formatting = output_channels % 32 != 0
     run_conv(

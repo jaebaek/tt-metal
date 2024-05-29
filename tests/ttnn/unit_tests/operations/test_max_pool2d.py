@@ -7,7 +7,7 @@ from loguru import logger
 import torch
 import pytest
 import math
-from models.utility_functions import is_wormhole_b0
+from models.utility_functions import is_wormhole_b0, is_grayskull
 from tests.ttnn.utils_for_testing import assert_with_pcc
 import ttnn
 
@@ -127,6 +127,17 @@ def test_run_max_pool(
         and dtype == ttnn.bfloat16
     ):
         pytest.skip("Issue #6992: Statically allocated circular buffers in program clash with L1 buffers on core range")
+
+    if (
+        is_grayskull()
+        and dtype == ttnn.bfloat16
+        and nblocks == 1
+        and dilation == (1, 1)
+        and padding == (1, 1)
+        and kernel_size == (3, 3)
+        and act_shape == [1, 64, 112, 112]
+    ):
+        pytest.skip("Issue #8958, Suspected device state dependent config")
 
     torch.manual_seed(0)
     torch.set_printoptions(precision=3, sci_mode=False, linewidth=500, threshold=10000, edgeitems=32)

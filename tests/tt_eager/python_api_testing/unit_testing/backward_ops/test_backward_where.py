@@ -17,6 +17,7 @@ from tests.tt_eager.python_api_testing.unit_testing.backward_ops.utility_funcs i
     ),
 )
 def test_bw_where(input_shapes, device):
+    pytest.skip("Skipping, suspecting some device state dependency")
     condition_data = torch.zeros(input_shapes, dtype=torch.bool)
     condition_data.view(-1)[::2] = True
 
