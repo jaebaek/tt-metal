@@ -133,7 +133,7 @@ class TtFalconCausalLM(TtFalconModelShared):
                 ]
         else:
             lm_logits = [
-                tt_lib.tensor.falcon_lm_head_matmul(
+                ttnn.experimental.tensor.falcon_lm_head_matmul(
                     hidden_states[device_id],
                     self.lm_head_weights[device_id],
                     bias=None,
