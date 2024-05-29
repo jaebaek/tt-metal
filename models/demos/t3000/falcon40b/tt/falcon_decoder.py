@@ -169,49 +169,6 @@ class TtFalconDecoderLayer:
 
         self.layernorm_eps = config.layer_norm_epsilon
 
-        ln_no_weights_str = f"{layer_name}.ln_no.weight"
-        ln_no_bias_str = f"{layer_name}.ln_no.bias"
-
-        ln_no_weights_path = (
-            tt_cache_path / f"{ln_no_weights_str}_rm_{self.model_config['LN_MLP_WEIGHTS_DTYPE'].name}_fused.bin"
-        )
-        if (ln_no_weights_path).exists():
-            ln_no_gamma_host = tt_lib.tensor.load_tensor(str(ln_no_weights_path))
-            self.ln_no_gamma = [
-                ln_no_gamma_host.to(device, self.model_config["LN_MLP_WEIGHTS_MEMCFG"]) for device in devices
-            ]
-        else:
-            ln_no_gamma_host = tt_lib.tensor.Tensor(
-                torch.ones(self.state_dict[ln_mlp_weights_str].reshape([1, 1, -1, 32]).shape),
-                self.model_config["LN_MLP_WEIGHTS_DTYPE"],
-            )
-            self.ln_no_gamma = [
-                ln_no_gamma_host.to(device, self.model_config["LN_MLP_WEIGHTS_MEMCFG"]) for device in devices
-            ]
-            tt_lib.tensor.dump_tensor(
-                str(ln_no_weights_path),
-                ln_no_gamma_host,
-            )
-
-        ln_no_bias_path = tt_cache_path / f"{ln_no_bias_str}_rm_{self.model_config['LN_MLP_BIAS_DTYPE'].name}_fused.bin"
-        if (ln_no_bias_path).exists():
-            ln_no_beta_host = tt_lib.tensor.load_tensor(str(ln_no_bias_path))
-            self.ln_no_beta = [
-                ln_no_beta_host.to(device, self.model_config["LN_MLP_BIAS_MEMCFG"]) for device in devices
-            ]
-        else:
-            ln_no_beta_host = tt_lib.tensor.Tensor(
-                torch.zeros(self.state_dict[ln_mlp_bias_str].reshape([1, 1, -1, 32]).shape),
-                self.model_config["LN_MLP_BIAS_DTYPE"],
-            )
-            self.ln_no_beta = [
-                ln_no_beta_host.to(device, self.model_config["LN_MLP_BIAS_MEMCFG"]) for device in devices
-            ]
-            tt_lib.tensor.dump_tensor(
-                str(ln_no_bias_path),
-                ln_no_beta_host,
-            )
-
     def set_model_config(self, model_config):
         self.model_config = model_config
         self.self_attn.set_model_config(model_config)

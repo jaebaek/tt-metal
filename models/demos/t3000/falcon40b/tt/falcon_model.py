@@ -219,24 +219,6 @@ class TtFalconModelShared:
                     self.model_config["LN_MLP_OUTPUT_DTYPE"],
                 )
 
-            # Tilize on device for better perf TODO
-            # tt_attention_mask = [
-            #     torch2tt_tensor(
-            #         attention_mask_bool_chunks[i],
-            #         self.devices[i],
-            #         tt_layout=tt_lib.tensor.Layout.ROW_MAJOR,
-            #         tt_memory_config=attention_mask_memconfig,
-            #         tt_dtype=self.model_config["BFLOAT16_DTYPE"],  # subsequent tilize op excepts bfloat16 inputs
-            #     )
-            #     for i in range(len(self.devices))
-            # ]
-            # for i in range(self.num_devices):
-            #     tt_attention_mask[i] = tt_lib.tensor.tilize(
-            #         tt_attention_mask[i],
-            #         output_mem_config=attention_mask_memconfig,
-            #         output_dtype=self.model_config["ATTN_MASK_DTYPE"],
-            #     )
-
         elif llm_mode == "decode":
             assert batch_size % 32 == 0, "For decode, batch_size must be multiple of 32!"
             assert sequence_size == 1, "For decode, q_len must be 1!"
