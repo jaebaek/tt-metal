@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "tlb_config.hpp"
-#include "device_data.hpp"
 
+#include "device_data.hpp"
 #include "third_party/umd/device/blackhole_implementation.h"
 #include "third_party/umd/device/grayskull_implementation.h"
 #include "third_party/umd/device/wormhole_implementation.h"
@@ -108,13 +108,12 @@ static constexpr uint32_t DYNAMIC_TLB_BASE_INDEX = DEVICE_DATA.MEM_LARGE_READ_TL
 static constexpr uint32_t DYNAMIC_TLB_2M_SIZE = tt::umd::blackhole::DYNAMIC_TLB_2M_SIZE;
 static constexpr uint32_t DYNAMIC_TLB_16M_SIZE = 0;
 
-int32_t get_static_tlb_index(CoreCoord target) {
-    return -1;
-}
+int32_t get_static_tlb_index(CoreCoord target) { return -1; }
 
 }  // namespace blackhole
 
-void configure_static_tlbs(tt::ARCH arch, chip_id_t mmio_device_id, const metal_SocDescriptor &sdesc, tt_device &device_driver) {
+void configure_static_tlbs(
+    tt::ARCH arch, chip_id_t mmio_device_id, const metal_SocDescriptor &sdesc, tt_device &device_driver) {
     using get_static_tlb_index_ptr = std::int32_t (*)(tt_xy_pair);
     get_static_tlb_index_ptr get_static_tlb_index;
     uint32_t DYNAMIC_TLB_BASE_INDEX, DYNAMIC_TLB_COUNT, DYNAMIC_TLB_16M_SIZE, DYNAMIC_TLB_2M_SIZE;
@@ -159,7 +158,10 @@ void configure_static_tlbs(tt::ARCH arch, chip_id_t mmio_device_id, const metal_
     uint64_t peer_dram_offset = DEVICE_DATA.DRAM_CHANNEL_0_PEER2PEER_REGION_START;
     for (uint32_t tlb_id = DYNAMIC_TLB_BASE_INDEX; tlb_id < DYNAMIC_TLB_BASE_INDEX + DYNAMIC_TLB_COUNT; tlb_id++) {
         device_driver.configure_tlb(
-            mmio_device_id, CoreCoord(DEVICE_DATA.DRAM_CHANNEL_0_X, DEVICE_DATA.DRAM_CHANNEL_0_Y), tlb_id, peer_dram_offset);
+            mmio_device_id,
+            CoreCoord(DEVICE_DATA.DRAM_CHANNEL_0_X, DEVICE_DATA.DRAM_CHANNEL_0_Y),
+            tlb_id,
+            peer_dram_offset);
         // Align address space of 16MB TLB to 16MB boundary
         peer_dram_offset += DYNAMIC_TLB_16M_SIZE;
     }
@@ -168,7 +170,7 @@ void configure_static_tlbs(tt::ARCH arch, chip_id_t mmio_device_id, const metal_
 
 std::unordered_map<std::string, std::int32_t> get_dynamic_tlb_config() {
     std::unordered_map<std::string, std::int32_t> dynamic_tlb_config;
-    dynamic_tlb_config["REG_TLB"] = DEVICE_DATA.REG_TLB;
+    dynamic_tlb_config["REG_TLB"] = tt::umd::blackhole::REG_TLB;
     return dynamic_tlb_config;
 }
 

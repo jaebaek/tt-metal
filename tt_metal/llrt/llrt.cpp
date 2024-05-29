@@ -3,15 +3,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "llrt.hpp"
+
+#include <fmt/ranges.h>
+
+#include <mutex>
+#include <unordered_set>
+
+#include "dev_msgs.h"
 #include "hostdevcommon/common_runtime_address_map.h"
 #include "hostdevcommon/common_values.hpp"
-
 #include "jit_build/settings.hpp"
-
-#include <unordered_set>
-#include <mutex>
-#include <fmt/ranges.h>
-#include "dev_msgs.h"
 
 namespace tt {
 
@@ -54,7 +55,6 @@ struct HexNameToMemVectorCache {
 };
 
 ll_api::memory get_risc_binary(string path) {
-
     if (HexNameToMemVectorCache::inst().exists(path)) {
         return HexNameToMemVectorCache::inst().get(path);
     }
@@ -73,8 +73,7 @@ ll_api::memory get_risc_binary(string path) {
 // Return the code size in 16 byte units
 // This matches what the fw needs for datamovement
 // and...squeezes more data into the launch message (2^20=1M)
-uint16_t get_binary_code_size16(const ll_api::memory& mem, int riscv_id) {
-
+uint16_t get_binary_code_size16(const ll_api::memory &mem, int riscv_id) {
     uint64_t range_min, range_max;
     switch (riscv_id) {
         case 0:
@@ -111,7 +110,6 @@ uint16_t get_binary_code_size16(const ll_api::memory& mem, int riscv_id) {
     uint64_t min = std::numeric_limits<decltype(min)>::max();
     uint64_t max = 0;
     mem.process_spans([&](std::vector<uint32_t>::const_iterator mem_ptr, uint64_t addr, uint32_t len_words) {
-
         uint32_t len_bytes = len_words * sizeof(uint32_t);
         // Only use the addresses within the firmware code range
         if (addr >= range_min && addr + len_bytes <= range_max) {
@@ -131,13 +129,16 @@ uint16_t get_binary_code_size16(const ll_api::memory& mem, int riscv_id) {
 // NOC coord is also synonymous to routing / physical coord
 // dram_channel id (0..7) for GS is also mapped to NOC coords in the SOC descriptor
 
-void write_hex_vec_to_core(chip_id_t chip, const CoreCoord &core, const std::vector<uint32_t>& hex_vec, uint64_t addr, bool small_access) {
+void write_hex_vec_to_core(
+    chip_id_t chip, const CoreCoord &core, const std::vector<uint32_t> &hex_vec, uint64_t addr, bool small_access) {
     // the API is named "write_core", and its overloaded variant is taking (chip, core) pair, ie. it can write to
     // core's L1
-    tt::Cluster::instance().write_core(hex_vec.data(), hex_vec.size() * sizeof(uint32_t), tt_cxy_pair(chip, core), addr, small_access);
+    tt::Cluster::instance().write_core(
+        hex_vec.data(), hex_vec.size() * sizeof(uint32_t), tt_cxy_pair(chip, core), addr, small_access);
 }
 
-std::vector<std::uint32_t> read_hex_vec_from_core(chip_id_t chip, const CoreCoord &core, uint64_t addr, uint32_t sz_bytes) {
+std::vector<std::uint32_t> read_hex_vec_from_core(
+    chip_id_t chip, const CoreCoord &core, uint64_t addr, uint32_t sz_bytes) {
     vector<std::uint32_t> read_hex_vec;
     tt::Cluster::instance().read_core(read_hex_vec, sz_bytes, tt_cxy_pair(chip, core), addr);
     return read_hex_vec;
@@ -149,18 +150,19 @@ CoreCoord logical_core_from_ethernet_core(chip_id_t chip_id, const CoreCoord &ph
 }
 
 void write_launch_msg_to_core(chip_id_t chip, const CoreCoord core, launch_msg_t *msg) {
-
     bool is_eth_core = is_ethernet_core(core, chip);
     bool is_active_eth_core = false;
     bool is_inactive_eth_core = false;
 
     // Determine whether an ethernet core is active or idle. Their host handshake interfaces are different.
     if (is_eth_core) {
-        auto active_eth_cores =  tt::Cluster::instance().get_active_ethernet_cores(chip);
-        auto inactive_eth_cores =  tt::Cluster::instance().get_inactive_ethernet_cores(chip);
-        is_active_eth_core = active_eth_cores.find(logical_core_from_ethernet_core(chip, core)) != active_eth_cores.end();
-        is_inactive_eth_core = inactive_eth_cores.find(logical_core_from_ethernet_core(chip, core)) != inactive_eth_cores.end();
-        //we should not be operating on any reserved cores here.
+        auto active_eth_cores = tt::Cluster::instance().get_active_ethernet_cores(chip);
+        auto inactive_eth_cores = tt::Cluster::instance().get_inactive_ethernet_cores(chip);
+        is_active_eth_core =
+            active_eth_cores.find(logical_core_from_ethernet_core(chip, core)) != active_eth_cores.end();
+        is_inactive_eth_core =
+            inactive_eth_cores.find(logical_core_from_ethernet_core(chip, core)) != inactive_eth_cores.end();
+        // we should not be operating on any reserved cores here.
         assert(is_active_eth_core or is_inactive_eth_core);
     }
 
@@ -204,7 +206,6 @@ void set_config_for_circular_buffer(
     uint32_t addr_in_bytes,
     uint32_t size_in_bytes,
     uint32_t num_pages) {
-
     uint32_t page_size = size_in_bytes / num_pages;
     circular_buffer_config_vec.at(UINT32_WORDS_PER_CIRCULAR_BUFFER_CONFIG * circular_buffer_index) =
         addr_in_bytes >> 4;  // convert to addr in 16B words
@@ -214,12 +215,13 @@ void set_config_for_circular_buffer(
     circular_buffer_config_vec.at(UINT32_WORDS_PER_CIRCULAR_BUFFER_CONFIG * circular_buffer_index + 3) = page_size >> 4;
 }
 
-void write_circular_buffer_config_vector_to_core(chip_id_t chip, const CoreCoord &core, CircularBufferConfigVec circular_buffer_config_vec) {
+void write_circular_buffer_config_vector_to_core(
+    chip_id_t chip, const CoreCoord &core, CircularBufferConfigVec circular_buffer_config_vec) {
     write_hex_vec_to_core(chip, core, circular_buffer_config_vec, CIRCULAR_BUFFER_CONFIG_BASE);
 }
 
-ll_api::memory read_mem_from_core(chip_id_t chip, const CoreCoord &core, const ll_api::memory& mem, uint64_t local_init_addr) {
-
+ll_api::memory read_mem_from_core(
+    chip_id_t chip, const CoreCoord &core, const ll_api::memory &mem, uint64_t local_init_addr) {
     ll_api::memory read_mem;
     read_mem.fill_from_mem_template(mem, [&](std::vector<uint32_t>::iterator mem_ptr, uint64_t addr, uint32_t len) {
         uint64_t relo_addr = relocate_dev_addr(addr, local_init_addr);
@@ -246,11 +248,7 @@ void program_risc_startup_addr(chip_id_t chip_id, const CoreCoord &core) {
     uint32_t jal_offset_bits_10_to_1 = (firmware_base & 0x7fe) << 20;
     uint32_t jal_offset_bit_11 = (firmware_base & 0x800) << 9;
     uint32_t jal_offset_bits_19_to_12 = (firmware_base & 0xff000) << 0;
-    uint32_t jal_offset =
-        jal_offset_bit_20 |
-        jal_offset_bits_10_to_1 |
-        jal_offset_bit_11 |
-        jal_offset_bits_19_to_12;
+    uint32_t jal_offset = jal_offset_bit_20 | jal_offset_bits_10_to_1 | jal_offset_bit_11 | jal_offset_bits_19_to_12;
     jump_to_fw.push_back(jal_offset | opcode);
     write_hex_vec_to_core(chip_id, core, jump_to_fw, 0);
 }
@@ -269,11 +267,12 @@ bool test_load_write_read_risc_binary(ll_api::memory &mem, chip_id_t chip_id, co
         case 6: local_init_addr = MEM_IERISC_INIT_LOCAL_L1_BASE; break;
     }
 
-    log_debug(tt::LogLLRuntime, "hex_vec size = {}, size_in_bytes = {}", mem.size(), mem.size()*sizeof(uint32_t));
+    log_debug(tt::LogLLRuntime, "hex_vec size = {}, size_in_bytes = {}", mem.size(), mem.size() * sizeof(uint32_t));
     mem.process_spans([&](std::vector<uint32_t>::const_iterator mem_ptr, uint64_t addr, uint32_t len_words) {
         uint64_t relo_addr = relocate_dev_addr(addr, local_init_addr);
 
-        tt::Cluster::instance().write_core(&*mem_ptr, len_words * sizeof(uint32_t), tt_cxy_pair(chip_id, core), relo_addr);
+        tt::Cluster::instance().write_core(
+            &*mem_ptr, len_words * sizeof(uint32_t), tt_cxy_pair(chip_id, core), relo_addr);
     });
 
     log_debug(tt::LogLLRuntime, "wrote hex to core {}", core.str().c_str());
@@ -281,7 +280,15 @@ bool test_load_write_read_risc_binary(ll_api::memory &mem, chip_id_t chip_id, co
     if (std::getenv("TT_METAL_KERNEL_READBACK_ENABLE") != nullptr) {
         tt::Cluster::instance().l1_barrier(chip_id);
         ll_api::memory read_mem = read_mem_from_core(chip_id, core, mem, local_init_addr);
-        log_debug(tt::LogLLRuntime, "read hex back from the core");
+        TT_ASSERT(
+            mem == read_mem,
+            "Binary readback from device {} core {} does not match the binary written!",
+            chip_id,
+            core.str())
+        // std::vector<uint32_t> read_mem_vec = read_mem.data();
+        // for (const auto &val : read_mem_vec) {
+        //     std::cout << std::hex << val << std::dec << std::endl;
+        // }
         return mem == read_mem;
     }
 
@@ -289,7 +296,6 @@ bool test_load_write_read_risc_binary(ll_api::memory &mem, chip_id_t chip_id, co
 }
 
 bool test_load_write_read_trisc_binary(ll_api::memory &mem, chip_id_t chip_id, const CoreCoord &core, int triscv_id) {
-
     assert(triscv_id >= 0 and triscv_id <= 2);
     return test_load_write_read_risc_binary(mem, chip_id, core, triscv_id + 2);
 }
@@ -305,25 +311,40 @@ static bool check_if_riscs_on_specified_core_done(chip_id_t chip_id, const CoreC
     bool is_active_eth_core = false;
     bool is_inactive_eth_core = false;
 
-        // Determine whether an ethernet core is active or idle. Their host handshake interfaces are different.
+    // Determine whether an ethernet core is active or idle. Their host handshake interfaces are different.
     if (is_eth_core) {
-        auto active_eth_cores =  tt::Cluster::instance().get_active_ethernet_cores(chip_id);
-        auto inactive_eth_cores =  tt::Cluster::instance().get_inactive_ethernet_cores(chip_id);
-        is_active_eth_core = active_eth_cores.find(logical_core_from_ethernet_core(chip_id, core)) != active_eth_cores.end();
-        is_inactive_eth_core = inactive_eth_cores.find(logical_core_from_ethernet_core(chip_id, core)) != inactive_eth_cores.end();
-        //we should not be operating on any reserved cores here.
+        auto active_eth_cores = tt::Cluster::instance().get_active_ethernet_cores(chip_id);
+        auto inactive_eth_cores = tt::Cluster::instance().get_inactive_ethernet_cores(chip_id);
+        is_active_eth_core =
+            active_eth_cores.find(logical_core_from_ethernet_core(chip_id, core)) != active_eth_cores.end();
+        is_inactive_eth_core =
+            inactive_eth_cores.find(logical_core_from_ethernet_core(chip_id, core)) != inactive_eth_cores.end();
+        // we should not be operating on any reserved cores here.
         assert(is_active_eth_core or is_inactive_eth_core);
     }
 
-    uint64_t run_mailbox_addr = is_active_eth_core ? GET_ETH_MAILBOX_ADDRESS_HOST(launch.run) :
-                              is_inactive_eth_core ? GET_IERISC_MAILBOX_ADDRESS_HOST(launch.run) : GET_MAILBOX_ADDRESS_HOST(launch.run);
+    uint64_t run_mailbox_addr = is_active_eth_core     ? GET_ETH_MAILBOX_ADDRESS_HOST(launch.run)
+                                : is_inactive_eth_core ? GET_IERISC_MAILBOX_ADDRESS_HOST(launch.run)
+                                                       : GET_MAILBOX_ADDRESS_HOST(launch.run);
 
     std::function<bool(uint64_t)> get_mailbox_is_done = [&](uint64_t run_mailbox_address) {
         constexpr int RUN_MAILBOX_BOGUS = 3;
         std::vector<uint32_t> run_mailbox_read_val = {RUN_MAILBOX_BOGUS};
         // read a single uint32_t even though launch.run is smaller than that
+        uint32_t addr_reading_from = (uint32_t)(run_mailbox_address & ~0x3);
         run_mailbox_read_val = read_hex_vec_from_core(chip_id, core, run_mailbox_address & ~0x3, sizeof(uint32_t));
+
+        std::vector<uint32_t> l1_unreserved_base_val = {RUN_MAILBOX_BOGUS};
+        l1_unreserved_base_val = read_hex_vec_from_core(chip_id, core, L1_UNRESERVED_BASE, sizeof(uint32_t));
+
         uint8_t run = run_mailbox_read_val[0] >> (8 * (offsetof(launch_msg_t, run) & 3));
+        log_info(
+            "Got {}, run state is {}, run msg done is {} from {}, l1 unreserved base {}",
+            run,
+            run_state,
+            RUN_MSG_DONE,
+            addr_reading_from,
+            l1_unreserved_base_val[0]);
         if (run != run_state && run != RUN_MSG_DONE) {
             fprintf(
                 stderr,
@@ -340,13 +361,17 @@ static bool check_if_riscs_on_specified_core_done(chip_id_t chip_id, const CoreC
     return get_mailbox_is_done(run_mailbox_addr);
 }
 
-void wait_until_cores_done(chip_id_t device_id,
-                           int run_state,
-                           std::unordered_set<CoreCoord>& not_done_phys_cores) {
-
+void wait_until_cores_done(chip_id_t device_id, int run_state, std::unordered_set<CoreCoord> &not_done_phys_cores) {
+    auto start = std::chrono::high_resolution_clock::now();
     // poll the cores until the set of not done cores is empty
     int loop_count = 1;
     while (!not_done_phys_cores.empty()) {
+        auto now = std::chrono::high_resolution_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start).count();
+        if (elapsed > 3000) {
+            std::string cores = fmt::format("{}", fmt::join(not_done_phys_cores, ", "));
+            TT_THROW("Timeout waiting for cores to finish: {}", cores);
+        }
         // Print not-done cores
         if (loop_count % 1000 == 0) {
             string not_done_cores_str = "Not done phys cores: ";
@@ -356,13 +381,13 @@ void wait_until_cores_done(chip_id_t device_id,
             log_debug(tt::LogMetal, not_done_cores_str.c_str());
         }
 
-        for (auto it = not_done_phys_cores.begin(); it != not_done_phys_cores.end(); ) {
+        for (auto it = not_done_phys_cores.begin(); it != not_done_phys_cores.end();) {
             const auto &phys_core = *it;
 
             bool is_done = llrt::internal_::check_if_riscs_on_specified_core_done(device_id, phys_core, run_state);
 
             if (is_done) {
-                log_debug(tt::LogMetal, "Phys cores just done: {}", phys_core.str());
+                log_info(tt::LogMetal, "Phys cores just done: {}", phys_core.str());
                 it = not_done_phys_cores.erase(it);
             } else {
                 ++it;

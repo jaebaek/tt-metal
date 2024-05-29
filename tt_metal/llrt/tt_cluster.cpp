@@ -332,6 +332,7 @@ int Cluster::get_device_aiclk(const chip_id_t &chip_id) const {
 void Cluster::deassert_risc_reset_at_core(const tt_cxy_pair &physical_chip_coord) const {
     const metal_SocDescriptor &soc_desc = this->get_soc_desc(physical_chip_coord.chip);
     tt_cxy_pair virtual_chip_coord = soc_desc.convert_to_umd_coordinates(physical_chip_coord);
+    log_info("Physical coord: {} - virtual coord: {}", physical_chip_coord.str(), virtual_chip_coord.str());
     this->get_driver(virtual_chip_coord.chip).deassert_risc_reset_at_core(virtual_chip_coord);
 }
 

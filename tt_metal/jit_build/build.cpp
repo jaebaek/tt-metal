@@ -61,8 +61,8 @@ void JitBuildEnv::init(uint32_t build_key, tt::ARCH arch) {
         case ARCH::WORMHOLE_B0: common_flags = "-mwormhole -march=rv32imw -mtune=rvtt-b1 -mabi=ilp32 "; break;
         case ARCH::BLACKHOLE:
             // TODO (abhullar/pgkeller): Update this to be BH specific SFPI version has been updated
-            common_flags = "-mwormhole -march=rv32imw -mtune=rvtt-b1 -mabi=ilp32 ";
-            // common_flags = "-mblackhole -march=rv32iml -mtune=rvtt-b1 -mabi=ilp32 ";
+            // common_flags = "-mwormhole -march=rv32imw -mtune=rvtt-b1 -mabi=ilp32 ";
+            common_flags = "-mblackhole -march=rv32iml -mtune=rvtt-b1 -mabi=ilp32 ";
             break;
         default: TT_ASSERT(false, "Invalid arch"); break;
     }
