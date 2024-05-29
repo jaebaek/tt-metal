@@ -8,7 +8,7 @@ from torchvision import models
 import pytest
 import tt_lib
 
-from models.utility_functions import is_e75, skip_for_wormhole_b0
+from models.utility_functions import is_e75, skip_for_wormhole_b0, divup
 
 from models.demos.resnet.tt.metalResnetBlock50 import ResNet, Bottleneck
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
@@ -185,6 +185,28 @@ def test_run_resnet50_inference(
 
         torch_output = torch_resnet50(image).unsqueeze(1).unsqueeze(1)
         tt_image = tt_resnet50.preprocessing(image)
+        if sharded:
+            input_shape = tt_image.get_legacy_shape()
+            shard_spec = tt_lib.tensor.ShardSpec(
+                tt_lib.tensor.CoreRangeSet(
+                    {
+                        tt_lib.tensor.CoreRange(
+                            tt_lib.tensor.CoreCoord(0, 0),
+                            tt_lib.tensor.CoreCoord(7, 0),
+                        )
+                    }
+                ),
+                [
+                    divup(tt_image.volume() // input_shape[3], 8),
+                    input_shape[3],
+                ],
+                tt_lib.tensor.ShardOrientation.ROW_MAJOR,
+                False,
+            )
+            mem_config = tt_lib.tensor.MemoryConfig(
+                tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED, tt_lib.tensor.BufferType.DRAM, shard_spec
+            )
+            tt_image = tt_image.to(device, mem_config)
         tt_output = tt_resnet50(tt_image)
         tt_output = tt_output.cpu().to_torch().to(torch.float)
 

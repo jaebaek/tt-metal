@@ -2116,7 +2116,7 @@ class ResNet(nn.Module):
                 original_A_cl_host_shape[2],
                 original_A_cl_host_shape[3],
             )
-        elif x.storage_type() != tt_lib.tensor.StorageType.DEVICE:
+        else:
             x_shape = x.get_legacy_shape()
             shard_spec = tt_lib.tensor.ShardSpec(
                 self.shard_grid,
@@ -2130,23 +2130,15 @@ class ResNet(nn.Module):
             mem_config = tt_lib.tensor.MemoryConfig(
                 tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED, tt_lib.tensor.BufferType.L1, shard_spec
             )
-            x = x.to(self.device, mem_config)
-        else:
-            shard_spec = tt_lib.tensor.ShardSpec(
-                self.shard_grid,
-                [
-                    x.get_legacy_shape()[2] // self.first_conv_num_cores_nhw,
-                    x.get_legacy_shape()[3],
-                ],
-                tt_lib.tensor.ShardOrientation.ROW_MAJOR,
-                False,
-            )
-            mem_config = tt_lib.tensor.MemoryConfig(
-                tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED, tt_lib.tensor.BufferType.L1, shard_spec
-            )
             if write_event is not None:
                 tt_lib.device.WaitForEvent(self.device, 0, write_event)
-            x = tt_lib.tensor.interleaved_to_sharded(x, mem_config)
+            if x.storage_type() != tt_lib.tensor.StorageType.DEVICE:
+                x = x.to(self.device, mem_config)
+            elif x.is_sharded():
+                if x.memory_config() != mem_config:
+                    x = tt_lib.tensor.reshard(x, mem_config)
+            else:
+                x = tt_lib.tensor.interleaved_to_sharded(x, mem_config)
             if op_event is not None:
                 tt_lib.device.RecordEvent(self.device, 0, op_event)
 
