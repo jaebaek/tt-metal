@@ -585,7 +585,7 @@ class TestParametrized:
         "llm_mode, num_devices, num_layers, batch, seq_len, kv_cache_len, model_config_str, expected_output_pcc, expected_k_cache_pcc, expected_v_cache_pcc, expected_inference_time, async_mode",
         (
             ("prefill", 4, 32, 1, 128, 0, "BFLOAT16-DRAM", 0.98, 0.99, 0.97, 0.1, False),
-            ("prefill", 4, 32, 1, 256, 0, "BFLOAT16-DRAM", 0.99, 0.99, 0.97, 0.18, False),  # Issue 7816 Inference time
+            ("prefill", 4, 32, 1, 256, 0, "BFLOAT16-DRAM", 0.99, 0.99, 0.97, 0.18, False),  # Issue 7816 Inference time 
             ("prefill", 4, 32, 1, 1024, 0, "BFLOAT16-DRAM", 0.99, 0.99, 0.98, 0.5, False),
             ("prefill", 4, 32, 1, 2048, 0, "BFLOAT16-DRAM", 0.99, 0.99, 0.98, 1.1, False),
             ("decode", 4, 32, 32, 1, 1024, "BFLOAT16-L1_SHARDED", 0.87, 0.91, 0.91, 0.21, False),
