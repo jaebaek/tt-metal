@@ -45,12 +45,17 @@ class PytorchDistributedLayernorm(torch.nn.Module):
             meanxs.append(meanx_local)
             meanx2s.append(meanx2_local)
 
-        # AllReduce count, meanx, meanx2
         count = torch.torch.FloatTensor(counts).sum(dim=0)
-        meanx = [meanxs[i] * counts[i] / count for i in range(num_chunks)]  # Weighting by chunk size
-        mean = torch.stack(meanx, dim=0).sum(dim=0)
-        meanx2 = [meanx2s[i] * counts[i] / count for i in range(num_chunks)]  # Weighting by chunk size
-        meanx2 = torch.stack(meanx2, dim=0).sum(dim=0)
+        meanxs = [meanxs[i] * counts[i] for i in range(num_chunks)]  # Weighting by chunk size
+        meanx2s = [meanx2s[i] * counts[i] for i in range(num_chunks)]  # Weighting by chunk size
+
+        # AllGather meanx, meanx2
+        meanxs = torch.stack(meanxs, dim=0)
+        meanx2s = torch.stack(meanx2s, dim=0)
+
+        # Reduce
+        mean = meanxs.sum(dim=0) / count
+        meanx2 = meanx2s.sum(dim=0) / count
         var = meanx2 - torch.square(mean)
 
         # Distributed processing
