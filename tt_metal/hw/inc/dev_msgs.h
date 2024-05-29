@@ -12,8 +12,9 @@
 
 #include "noc/noc_parameters.h"
 
-#define GET_ETH_MAILBOX_ADDRESS_HOST(x) ((uint64_t)&(((mailboxes_t *)eth_l1_mem::address_map::ERISC_MEM_MAILBOX_BASE)->x))
-#define GET_IERISC_MAILBOX_ADDRESS_HOST(x) ((uint64_t)&(((mailboxes_t *)MEM_IERISC_MAILBOX_BASE)->x))
+#define GET_ETH_MAILBOX_ADDRESS_HOST(x) \
+    ((uint64_t) & (((mailboxes_t *)eth_l1_mem::address_map::ERISC_MEM_MAILBOX_BASE)->x))
+#define GET_IERISC_MAILBOX_ADDRESS_HOST(x) ((uint64_t) & (((mailboxes_t *)MEM_IERISC_MAILBOX_BASE)->x))
 #if defined(COMPILE_FOR_ERISC)
 #define GET_MAILBOX_ADDRESS_HOST(x) GET_ETH_MAILBOX_ADDRESS_HOST(x)
 #define GET_MAILBOX_ADDRESS_DEV(x) (&(((mailboxes_t tt_l1_ptr *)eth_l1_mem::address_map::ERISC_MEM_MAILBOX_BASE)->x))
@@ -21,18 +22,18 @@
 #define GET_MAILBOX_ADDRESS_HOST(x) GET_IERISC_MAILBOX_ADDRESS_HOST(x)
 #define GET_MAILBOX_ADDRESS_DEV(x) (&(((mailboxes_t tt_l1_ptr *)MEM_IERISC_MAILBOX_BASE)->x))
 #else
-#define GET_MAILBOX_ADDRESS_HOST(x) ((uint64_t)&(((mailboxes_t *)MEM_MAILBOX_BASE)->x))
+#define GET_MAILBOX_ADDRESS_HOST(x) ((uint64_t) & (((mailboxes_t *)MEM_MAILBOX_BASE)->x))
 #define GET_MAILBOX_ADDRESS_DEV(x) (&(((mailboxes_t tt_l1_ptr *)MEM_MAILBOX_BASE)->x))
 #endif
 
 // Messages for host to tell brisc to go
 constexpr uint32_t RUN_MSG_INIT = 0x40;
-constexpr uint32_t RUN_MSG_GO   = 0x80;
+constexpr uint32_t RUN_MSG_GO = 0x80;
 constexpr uint32_t RUN_MSG_DONE = 0;
 
 // 0x80808000 is a micro-optimization, calculated with 1 riscv insn
 constexpr uint32_t RUN_SYNC_MSG_INIT = 0x40;
-constexpr uint32_t RUN_SYNC_MSG_GO   = 0x80;
+constexpr uint32_t RUN_SYNC_MSG_GO = 0x80;
 constexpr uint32_t RUN_SYNC_MSG_DONE = 0;
 constexpr uint32_t RUN_SYNC_MSG_ALL_TRISCS_GO = 0x80808000;
 constexpr uint32_t RUN_SYNC_MSG_ALL_GO = 0x80808080;
@@ -52,26 +53,26 @@ struct launch_msg_t {  // must be cacheline aligned
     volatile uint16_t brisc_watcher_kernel_id;
     volatile uint16_t ncrisc_watcher_kernel_id;
     volatile uint16_t triscs_watcher_kernel_id;
-    volatile uint16_t ncrisc_kernel_size16; // size in 16 byte units
+    volatile uint16_t ncrisc_kernel_size16;  // size in 16 byte units
 
     // TODO(agrebenisan): This must be added in to launch_msg_t
     // volatile uint16_t dispatch_core_x;
     // volatile uint16_t dispatch_core_y;
-    volatile uint8_t  mode;
-    volatile uint8_t  brisc_noc_id;
-    volatile uint8_t  enable_brisc;
-    volatile uint8_t  enable_ncrisc;
-    volatile uint8_t  enable_triscs;
-    volatile uint8_t  max_cb_index;
-    volatile uint8_t  enable_erisc;
-    volatile uint8_t  run;  // must be in last cacheline of this msg
+    volatile uint8_t mode;
+    volatile uint8_t brisc_noc_id;
+    volatile uint8_t enable_brisc;
+    volatile uint8_t enable_ncrisc;
+    volatile uint8_t enable_triscs;
+    volatile uint8_t max_cb_index;
+    volatile uint8_t enable_erisc;
+    volatile uint8_t run;  // must be in last cacheline of this msg
 };
 
 struct slave_sync_msg_t {
     union {
         volatile uint32_t all;
         struct {
-            volatile uint8_t ncrisc; // ncrisc must come first, see ncrisc-halt.S
+            volatile uint8_t ncrisc;  // ncrisc must come first, see ncrisc-halt.S
             volatile uint8_t trisc0;
             volatile uint8_t trisc1;
             volatile uint8_t trisc2;
@@ -97,11 +98,11 @@ struct debug_sanitize_noc_addr_msg_t {
 
 enum debug_sanitize_noc_invalid_enum {
     // 0 and 1 are a common stray values to write, so don't use those
-    DebugSanitizeNocInvalidOK         = 2,
-    DebugSanitizeNocInvalidL1         = 3,
-    DebugSanitizeNocInvalidUnicast    = 4,
-    DebugSanitizeNocInvalidMulticast  = 5,
-    DebugSanitizeNocInvalidAlignment  = 6,
+    DebugSanitizeNocInvalidOK = 2,
+    DebugSanitizeNocInvalidL1 = 3,
+    DebugSanitizeNocInvalidUnicast = 4,
+    DebugSanitizeNocInvalidMulticast = 5,
+    DebugSanitizeNocInvalidAlignment = 6,
 };
 
 struct debug_assert_msg_t {
@@ -111,13 +112,13 @@ struct debug_assert_msg_t {
 };
 
 enum debug_assert_tripped_enum {
-    DebugAssertOK      = 2,
+    DebugAssertOK = 2,
     DebugAssertTripped = 3,
 };
 
 // XXXX TODO(PGK): why why why do we not have this standardized
 typedef enum debug_sanitize_which_riscv {
-    DebugBrisc  = 0,
+    DebugBrisc = 0,
     DebugNCrisc = 1,
     DebugTrisc0 = 2,
     DebugTrisc1 = 3,
@@ -154,8 +155,12 @@ struct mailboxes_t {
 // Validate assumptions on mailbox layout on host compile
 static_assert((MEM_MAILBOX_BASE + offsetof(mailboxes_t, launch)) % 32 == 0);
 static_assert((eth_l1_mem::address_map::ERISC_MEM_MAILBOX_BASE + offsetof(mailboxes_t, launch)) % 32 == 0);
+#ifdef NCRISC_HAS_IRAM
+// These are only used in ncrisc-halt.S
 static_assert(MEM_MAILBOX_BASE + offsetof(mailboxes_t, slave_sync.ncrisc) == MEM_SLAVE_RUN_MAILBOX_ADDRESS);
-static_assert(MEM_MAILBOX_BASE + offsetof(mailboxes_t, ncrisc_halt.stack_save) == MEM_NCRISC_HALT_STACK_MAILBOX_ADDRESS);
+static_assert(
+    MEM_MAILBOX_BASE + offsetof(mailboxes_t, ncrisc_halt.stack_save) == MEM_NCRISC_HALT_STACK_MAILBOX_ADDRESS);
+#endif
 static_assert(MEM_MAILBOX_BASE + sizeof(mailboxes_t) < MEM_MAILBOX_END);
 #endif
 
@@ -166,7 +171,7 @@ struct eth_word_t {
     uint32_t reserved_1;
 };
 
-enum class SyncCBConfigRegion: uint8_t {
+enum class SyncCBConfigRegion : uint8_t {
     DB_TENSIX = 0,
     TENSIX = 1,
     ROUTER_ISSUE = 2,
