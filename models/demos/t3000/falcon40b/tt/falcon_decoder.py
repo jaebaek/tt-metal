@@ -220,84 +220,6 @@ class TtFalconDecoderLayer:
     def preprocessing(self, llm_mode, batch_size, sequence_size):
         self.self_attn.preprocessing(llm_mode, batch_size, sequence_size)
 
-        # broadcast layernorm gamma and beta along S
-        # repeat_shape = (1, 1, 32, 1)
-        # layernorm_num_cores_x = 8
-        # layernorm_num_cores_y = 8
-
-        # core_range_block_sharded_layernorm = tt_lib.tensor.CoreRangeSet(
-        #     {
-        #         tt_lib.tensor.CoreRange(
-        #             tt_lib.tensor.CoreCoord(0, 0),
-        #             tt_lib.tensor.CoreCoord(layernorm_num_cores_x - 1, layernorm_num_cores_y - 1),
-        #         ),
-        #     }
-        # )
-
-        # memconfig = tt_lib.tensor.MemoryConfig(
-        #     tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-        #     tt_lib.tensor.BufferType.L1,
-        #     tt_lib.tensor.ShardSpec(
-        #         core_range_block_sharded_layernorm,
-        #         [
-        #             32,
-        #             8192 // layernorm_num_cores_x,
-        #         ],
-        #         tt_lib.tensor.ShardOrientation.ROW_MAJOR,
-        #         False,
-        #     ),
-        # )
-
-        repeat_shape = (1, 1, 64, 1)
-        memconfig = self.model_config["DRAM_MEMCFG"]
-
-        # attn
-        self.ln_attn_gamma_for_seqlen = [
-            tt_lib.tensor.repeat(self.ln_attn_gamma[i], repeat_shape, output_mem_config=memconfig)
-            for i in range(len(self.devices))
-        ]
-        for i in range(len(self.devices)):
-            self.ln_attn_gamma_for_seqlen[i] = tt_lib.tensor.tilize(
-                self.ln_attn_gamma_for_seqlen[i],
-                output_mem_config=memconfig,
-                output_dtype=self.model_config["LN_ATTN_WEIGHTS_DTYPE"],
-            )
-        self.ln_attn_beta_for_seqlen = [
-            tt_lib.tensor.repeat(self.ln_attn_beta[i], repeat_shape, output_mem_config=memconfig)
-            for i in range(len(self.devices))
-        ]
-        for i in range(len(self.devices)):
-            self.ln_attn_beta_for_seqlen[i] = tt_lib.tensor.tilize(
-                self.ln_attn_beta_for_seqlen[i],
-                output_mem_config=memconfig,
-                output_dtype=self.model_config["LN_ATTN_BIAS_DTYPE"],
-            )
-
-        repeat_shape = (1, 1, 64, 1)
-        memconfig = self.model_config["DRAM_MEMCFG"]
-
-        # mlp
-        self.ln_mlp_gamma_for_seqlen = [
-            tt_lib.tensor.repeat(self.ln_mlp_gamma[i], repeat_shape, output_mem_config=memconfig)
-            for i in range(len(self.devices))
-        ]
-        for i in range(len(self.devices)):
-            self.ln_mlp_gamma_for_seqlen[i] = tt_lib.tensor.tilize(
-                self.ln_mlp_gamma_for_seqlen[i],
-                output_mem_config=memconfig,
-                output_dtype=self.model_config["LN_MLP_WEIGHTS_DTYPE"],
-            )
-        self.ln_mlp_beta_for_seqlen = [
-            tt_lib.tensor.repeat(self.ln_mlp_beta[i], repeat_shape, output_mem_config=memconfig)
-            for i in range(len(self.devices))
-        ]
-        for i in range(len(self.devices)):
-            self.ln_mlp_beta_for_seqlen[i] = tt_lib.tensor.tilize(
-                self.ln_mlp_beta_for_seqlen[i],
-                output_mem_config=memconfig,
-                output_dtype=self.model_config["LN_MLP_BIAS_DTYPE"],
-            )
-
     def __call__(
         self,
         hidden_states: ttnn.experimental.tensor.Tensor,
@@ -393,16 +315,10 @@ class TtFalconDecoderLayer:
 
         attn_ln_output, mlp_ln_output = fused_partial_layernorm(
             replicated_hidden_states,
-            self.ln_no_gamma,
-            self.ln_no_beta,
-            self.ln_attn_gamma_for_seqlen,
-            self.ln_attn_beta_for_seqlen,
-            # self.ln_attn_gamma,
-            # self.ln_attn_beta,
-            self.ln_mlp_gamma_for_seqlen,
-            self.ln_mlp_beta_for_seqlen,
-            # self.ln_mlp_gamma,
-            # self.ln_mlp_beta,
+            self.ln_attn_gamma,
+            self.ln_attn_beta,
+            self.ln_mlp_gamma,
+            self.ln_mlp_beta,
             self.layernorm_eps,
             self.model_config["layernorm_params"],
             self.model_config["PARTIAL_LN_MEMCFG"],
