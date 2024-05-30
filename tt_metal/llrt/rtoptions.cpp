@@ -75,6 +75,15 @@ RunTimeOptions::RunTimeOptions() {
 
     const char *riscv_debug_info_enabled_str = std::getenv("TT_METAL_RISCV_DEBUG_INFO");
     set_riscv_debug_info_enabled(riscv_debug_info_enabled_str != nullptr);
+
+    const char *num_cqs = getenv("TT_METAL_NUM_HW_CQS");
+    if (num_cqs != nullptr) {
+        try {
+            set_num_hw_cqs(std::stoi(num_cqs));
+        } catch (const std::invalid_argument& ia) {
+            TT_THROW("Invalid TT_METAL_NUM_HW_CQS: {}", num_cqs);
+        }
+    }
 }
 
 const std::string &RunTimeOptions::get_root_dir() {

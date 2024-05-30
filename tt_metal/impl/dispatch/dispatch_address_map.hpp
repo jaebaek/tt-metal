@@ -27,5 +27,7 @@ constexpr static std::uint32_t DISPATCH_L1_UNRESERVED_BASE = (((DISPATCH_MESSAGE
 
 // Host addresses in hugepage for dispatch
 static constexpr uint32_t HOST_CQ_ISSUE_READ_PTR = 0; // this seems to be unused
+static constexpr uint32_t HOST_CQ_ISSUE_WRITE_PTR = 4;
 static constexpr uint32_t HOST_CQ_COMPLETION_WRITE_PTR = 32;
+static constexpr uint32_t HOST_CQ_COMPLETION_READ_PTR = 36;
 static constexpr uint32_t CQ_START = 64;

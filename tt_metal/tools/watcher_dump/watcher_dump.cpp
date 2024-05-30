@@ -2,35 +2,62 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 #include <iostream>
+#include <filesystem>
 #include "tt_metal/host_api.hpp"
 #include "impl/debug/watcher_server.hpp"
+#include "impl/dispatch/command_queue_interface.hpp"
 
 using namespace tt;
 using std::vector;
 using std::string;
 using std::cout, std::endl;
 
-void dump_data(vector<unsigned>& device_ids) {
+string output_dir_name = "generated/watcher/";
+string logfile_name = "cq_dump.txt";
+
+void dump_data(vector<unsigned>& device_ids, bool dump_watcher, bool dump_cqs) {
     // Don't clear L1, this way we can dump the state.
     llrt::OptionsG.set_clear_l1(false);
 
+    std::filesystem::path parent_dir(tt::llrt::OptionsG.get_root_dir() + output_dir_name);
+    std::filesystem::path cq_dir(parent_dir.string() + "command_queue_dump/");
+    std::filesystem::create_directories(cq_dir);
+
+    if (dump_cqs)
+        cout << "Dumping Command Queues into: " << cq_dir.string() << endl;
+    if (dump_watcher)
+        cout << "Dumping Watcher Log into: " << watcher_get_log_file_name() << endl;
+
     // Only look at user-specified devices
     for (unsigned id : device_ids) {
+        string cq_fname = cq_dir.string() + fmt::format("device_{}_completion_q.txt", id);
+        std::ofstream cq_file = std::ofstream(cq_fname);
+        string iq_fname = cq_dir.string() + fmt::format("device_{}_issue_q.txt", id);
+        std::ofstream iq_file = std::ofstream(iq_fname);
         // Minimal setup, since we'll be attaching to a potentially hanging chip.
-        auto* device = tt::tt_metal::CreateDeviceMinimal(id);
+        auto* device = tt::tt_metal::CreateDeviceMinimal(id, llrt::OptionsG.get_num_hw_cqs());
+        if (dump_cqs) {
+            std::unique_ptr<SystemMemoryManager> sysmem_manager = std::make_unique<SystemMemoryManager>(id, tt::llrt::OptionsG.get_num_hw_cqs());
+            sysmem_manager->dump_cqs(cq_file, iq_file);
+        }
         // Watcher attach wthout watcher init - to avoid clearing mailboxes.
-        watcher_attach(device);
+        if (dump_watcher)
+            watcher_attach(device);
     }
 
     // Watcher doesn't have kernel ids since we didn't create them here, need to read from file.
-    watcher_read_kernel_ids_from_file();
-    watcher_dump();
+    if (dump_watcher) {
+        watcher_read_kernel_ids_from_file();
+        watcher_dump();
+    }
 }
 
 void print_usage(const char* exec_name) {
     cout << "Usage: " << exec_name << " [OPTION]" << endl;
     cout << "\t-d=LIST, --devices=LIST: Device IDs of chips to dump, LIST is comma separated list (\"0,2,3\") or \"all\"." << endl;
     cout << "\t-h, --help: Display this message." << endl;
+    cout << "\t-w, --dump-watcher: Dump watcher data, available data depends on whether watcher was enabled for original program." << endl;
+    cout << "\t-c, --dump-cqs: Dump Command Queue data." << endl;
 }
 
 int main(int argc, char *argv[]) {
@@ -43,6 +70,7 @@ int main(int argc, char *argv[]) {
     }
 
     // Go through user args, handle accordingly.
+    bool dump_watcher = false, dump_cqs = false;
     for (int idx = 1; idx < argc; idx++) {
         string s(argv[idx]);
         if (s == "-h" || s == "--help") {
@@ -66,6 +94,10 @@ int main(int argc, char *argv[]) {
                 }
                 device_ids.push_back(stoi(item));
             }
+        } else if (s == "-w" || s == "--dump-watcher") {
+            dump_watcher = true;
+        } else if (s == "-c" || s == "--dump-cqs") {
+            dump_cqs = true;
         } else {
             cout << "Error: unrecognized command line argument: " << s << endl;
             print_usage(argv[0]);
@@ -74,6 +106,6 @@ int main(int argc, char *argv[]) {
     }
 
     // Call dump function with user config.
-    dump_data(device_ids);
+    dump_data(device_ids, dump_watcher, dump_cqs);
     cout << "Watcher dump tool finished." << endl;
 }

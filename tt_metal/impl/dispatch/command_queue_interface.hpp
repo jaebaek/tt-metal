@@ -162,6 +162,18 @@ inline uint32_t get_cq_issue_rd_ptr(chip_id_t chip_id, uint8_t cq_id, uint32_t c
 }
 
 template <bool addr_16B>
+inline uint32_t get_cq_issue_wr_ptr(chip_id_t chip_id, uint8_t cq_id, uint32_t cq_size) {
+    uint32_t recv;
+    chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(chip_id);
+    uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(chip_id);
+    tt::Cluster::instance().read_sysmem(&recv, sizeof(uint32_t), HOST_CQ_ISSUE_WRITE_PTR + get_relative_cq_offset(cq_id, cq_size), mmio_device_id, channel);
+    if (not addr_16B) {
+        return recv << 4;
+    }
+    return recv;
+}
+
+template <bool addr_16B>
 inline uint32_t get_cq_completion_wr_ptr(chip_id_t chip_id, uint8_t cq_id, uint32_t cq_size) {
     uint32_t recv;
     chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(chip_id);
@@ -172,6 +184,18 @@ inline uint32_t get_cq_completion_wr_ptr(chip_id_t chip_id, uint8_t cq_id, uint3
         HOST_CQ_COMPLETION_WRITE_PTR + get_relative_cq_offset(cq_id, cq_size),
         mmio_device_id,
         channel);
+    if (not addr_16B) {
+        return recv << 4;
+    }
+    return recv;
+}
+
+template <bool addr_16B>
+inline uint32_t get_cq_completion_rd_ptr(chip_id_t chip_id, uint8_t cq_id, uint32_t cq_size) {
+    uint32_t recv;
+    chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(chip_id);
+    uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(chip_id);
+    tt::Cluster::instance().read_sysmem(&recv, sizeof(uint32_t), HOST_CQ_COMPLETION_READ_PTR + get_relative_cq_offset(cq_id, cq_size), mmio_device_id, channel);
     if (not addr_16B) {
         return recv << 4;
     }
@@ -252,7 +276,8 @@ struct SystemMemoryCQInterface {
             ((CQ_START + this->command_issue_region_size) + get_absolute_cq_offset(channel, cq_id, cq_size)) >> 4),
         completion_fifo_size(command_completion_region_size >> 4),
         completion_fifo_limit(issue_fifo_limit + completion_fifo_size),
-        offset(get_absolute_cq_offset(channel, cq_id, cq_size)) {
+        offset(get_absolute_cq_offset(channel, cq_id, cq_size)),
+        id(cq_id) {
         TT_ASSERT(
             this->command_completion_region_size % PCIE_ALIGNMENT == 0 and
                 this->command_issue_region_size % PCIE_ALIGNMENT == 0,
@@ -276,6 +301,7 @@ struct SystemMemoryCQInterface {
     static constexpr float default_issue_queue_split = 0.75;
     const uint32_t command_completion_region_size;
     const uint32_t command_issue_region_size;
+    const uint8_t id;
 
     uint32_t issue_fifo_size;
     uint32_t issue_fifo_limit;  // Last possible FIFO address
@@ -379,6 +405,110 @@ class SystemMemoryManager {
         }
         vector<std::mutex> temp_mutexes(num_hw_cqs);
         cq_to_event_locks.swap(temp_mutexes);
+    }
+
+    void dump_cqs(std::ofstream &cq_file, std::ofstream &iq_file) {
+        for (SystemMemoryCQInterface &cq_interface : this->cq_interfaces) {
+            chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->device_id);
+            uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(this->device_id);
+
+            uint32_t completion_write_ptr = get_cq_completion_wr_ptr<true>(this->device_id, cq_interface.id, this->cq_size);
+            uint32_t completion_read_ptr = get_cq_completion_rd_ptr<true>(this->device_id, cq_interface.id, this->cq_size);
+            uint32_t issue_read_ptr = get_cq_issue_rd_ptr<true>(this->device_id, cq_interface.id, this->cq_size);
+            uint32_t issue_write_ptr = get_cq_issue_wr_ptr<true>(this->device_id, cq_interface.id, this->cq_size);
+
+            /*
+            tt::log_info("Device {}: CQ {} has completionQ write_ptr=0x{:08x}, read_ptr=0x{:08x}", this->device_id, cq_interface.id, completion_write_ptr, completion_read_ptr);
+            tt::log_info("Device {}: CQ {} has issueQ write_ptr=0x{:08x}, read_ptr=0x{:08x}", this->device_id, cq_interface.id, issue_write_ptr, issue_read_ptr);
+            tt::log_info("command_completion_region_size=0x{:08x}, command_issue_region_size=0x{:08x}, offset=0x{:08x}",
+                    cq_interface.command_completion_region_size,
+                    cq_interface.command_issue_region_size,
+                    cq_interface.offset);
+            tt::log_info("issue_fifo_size=0x{:08x}, issue_fifo_limit=0x{:08x}, completion_fifo_size=0x{:08x}, completion_fifo_limit=0x{:08x}",
+                    cq_interface.issue_fifo_size,
+                    cq_interface.issue_fifo_limit,
+                    cq_interface.completion_fifo_size,
+                    cq_interface.completion_fifo_limit);
+            */
+
+            // Helper function to print a progess bar
+            int prev_bar_position = -1;
+            auto print_progress_bar = [&prev_bar_position](float progress) {
+                int progress_bar_width = 80;
+                int bar_position = static_cast<int>(progress * progress_bar_width);
+                if (bar_position > prev_bar_position) {
+                    std::cout << "[";
+                    std::cout << string(bar_position, '=') << string(progress_bar_width - bar_position, ' ');
+                    std::cout << "]" << int(progress * 100.0) << " %\r" << std::flush;
+                    prev_bar_position = bar_position;
+                }
+            };
+
+            // Dump completion queue
+            uint32_t completion_q_bytes = cq_interface.completion_fifo_size << 4;
+            TT_ASSERT(completion_q_bytes % dispatch_constants::TRANSFER_PAGE_SIZE == 0);
+            uint32_t base_addr = (cq_interface.issue_fifo_limit << 4);
+            // Read out in 4K pages
+            vector<uint8_t> read_data;
+            read_data.resize(dispatch_constants::TRANSFER_PAGE_SIZE);
+            cq_file << fmt::format("Device {}, CQ {}, Completion Queue:\n", this->device_id, cq_interface.id) << std::hex;
+            tt::log_info("Reading Device {} CQ {}, Completion Queue...", this->device_id, cq_interface.id);
+            for (uint32_t page_offset = 0; page_offset < completion_q_bytes; page_offset += dispatch_constants::TRANSFER_PAGE_SIZE) {
+                uint32_t page_addr = base_addr + page_offset;
+                print_progress_bar((float) page_offset / completion_q_bytes + 0.005);
+
+                // Print in 16B per line
+                tt::Cluster::instance().read_sysmem(read_data.data(), read_data.size(), page_addr, mmio_device_id, channel);
+                TT_ASSERT(read_data.size() % 16 == 0);
+                for (uint32_t line_offset = 0; line_offset < read_data.size(); line_offset += 16) {
+                    uint32_t line_addr = page_addr + line_offset;
+                    cq_file << "0x" << std::setfill('0') << std::setw(8) << line_addr << ": ";
+                    for (uint32_t idx = 0; idx < 16; idx++) {
+                        uint8_t val = read_data[line_offset + idx];
+                        cq_file << " " << std::setfill('0') << std::setw(2) << +read_data[line_offset + idx];
+                    }
+                    if (line_addr == completion_write_ptr << 4)
+                        cq_file << fmt::format(" << write_ptr (0x{:08x})", completion_write_ptr << 4);
+                    if (line_addr == completion_read_ptr << 4)
+                        cq_file << fmt::format(" << read_ptr (0x{:08x})", completion_read_ptr << 4);
+                    cq_file << std::endl;
+                }
+            }
+            std::cout << std::endl;
+
+            // Dump issue queue
+            prev_bar_position = -1;
+            uint32_t issue_q_bytes = cq_interface.issue_fifo_size << 4;
+            uint32_t issue_q_base_addr = cq_interface.offset + CQ_START;
+            iq_file << fmt::format("Device {}, CQ {}, Issue Queue:\n", this->device_id, cq_interface.id) << std::hex;
+            tt::log_info("Reading Device {} CQ {}, Issue Queue...", this->device_id, cq_interface.id);
+            for (uint32_t page_offset = 0; page_offset < issue_q_bytes; page_offset += dispatch_constants::TRANSFER_PAGE_SIZE) {
+                uint32_t page_addr = issue_q_base_addr + page_offset;
+                print_progress_bar((float) page_offset / issue_q_bytes + 0.005);
+
+                // Print in 16B per line
+                tt::Cluster::instance().read_sysmem(read_data.data(), read_data.size(), page_addr, mmio_device_id, channel);
+                TT_ASSERT(read_data.size() % 16 == 0);
+                for (uint32_t line_offset = 0; line_offset < read_data.size(); line_offset += 16) {
+                    uint32_t line_addr = page_addr + line_offset;
+                    // Issue Q may no be divisible by page size, so break early if we go past the end.
+                    if (line_addr + 16 >= issue_q_base_addr + issue_q_bytes)
+                        break;
+
+                    iq_file << "0x" << std::setfill('0') << std::setw(8) << line_addr << ": ";
+                    for (uint32_t idx = 0; idx < 16; idx++) {
+                        uint8_t val = read_data[line_offset + idx];
+                        iq_file << " " << std::setfill('0') << std::setw(2) << +read_data[line_offset + idx];
+                    }
+                    if (line_addr == issue_write_ptr << 4)
+                        iq_file << fmt::format(" << write_ptr (0x{:08x})", issue_write_ptr << 4);
+                    if (line_addr == issue_read_ptr << 4)
+                        iq_file << fmt::format(" << read_ptr (0x{:08x})", issue_read_ptr << 4);
+                    iq_file << std::endl;
+                }
+            }
+            std::cout << std::endl;
+        }
     }
 
     uint32_t get_next_event(const uint8_t cq_id) {
@@ -545,6 +675,17 @@ class SystemMemoryManager {
         } else {
             cq_interface.issue_fifo_wr_ptr += push_size_16B;
         }
+
+        // Also store this data in hugepages, so if a hang happens we can see what was written by host.
+        chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->device_id);
+        uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(this->device_id);
+        tt::Cluster::instance().write_sysmem(
+            &cq_interface.issue_fifo_wr_ptr,
+            sizeof(uint32_t),
+            HOST_CQ_ISSUE_WRITE_PTR + get_relative_cq_offset(cq_id, this->cq_size),
+            mmio_device_id,
+            channel
+        );
     }
 
     void completion_queue_wait_front(const uint8_t cq_id, volatile bool &exit_condition) const {
@@ -568,6 +709,17 @@ class SystemMemoryManager {
             cq_interface.completion_fifo_rd_ptr | (cq_interface.completion_fifo_rd_toggle << 31);
         this->fast_write_callable(
             this->completion_byte_addrs[cq_id], 4, (uint8_t *)&read_ptr_and_toggle, this->m_dma_buf_size);
+
+        // Also store this data in hugepages in case we hang and can't get it from the device.
+        chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->device_id);
+        uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(this->device_id);
+        tt::Cluster::instance().write_sysmem(
+            &read_ptr_and_toggle,
+            sizeof(uint32_t),
+            HOST_CQ_COMPLETION_READ_PTR + get_relative_cq_offset(cq_id, this->cq_size),
+            mmio_device_id,
+            channel
+        );
     }
 
     void wrap_issue_queue_wr_ptr(const uint8_t cq_id) {
