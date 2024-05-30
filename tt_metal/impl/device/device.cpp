@@ -217,7 +217,7 @@ void Device::initialize_firmware(CoreCoord phys_core, launch_msg_t *launch_msg) 
         }
     } else {
         llrt::program_risc_startup_addr(this->id(), phys_core);
-        for (int riscv_id = 0; riscv_id < 1 /*5*/; riscv_id++) {
+        for (int riscv_id = 0; riscv_id < 5; riscv_id++) {
             ll_api::memory binary_mem =
                 llrt::get_risc_binary(firmware_build_states_[riscv_id]->get_target_out_path(""));
             uint32_t kernel_size16 = llrt::get_binary_code_size16(binary_mem, riscv_id);
@@ -256,83 +256,58 @@ void Device::initialize_and_launch_firmware() {
     CoreCoord grid_size = this->logical_grid_size();
     std::unordered_set<CoreCoord> not_done_cores;
 
-    for (uint32_t y = 0; y < 1 /*grid_size.y*/; y++) {
-        for (uint32_t x = 0; x < 1 /*grid_size.x*/; x++) {
+    for (uint32_t y = 0; y < grid_size.y; y++) {
+        for (uint32_t x = 0; x < grid_size.x; x++) {
             CoreCoord logical_core(x, y);
             if (!this->storage_only_cores_.count(logical_core)) {
                 CoreCoord worker_core = this->worker_core_from_logical_core(logical_core);
                 this->initialize_firmware(worker_core, &launch_msg);
+                // std::cout << "HERE!" << std::endl;
                 not_done_cores.insert(worker_core);
             }
         }
     }
 
     // Load erisc app base FW to eth cores
-    // for (const auto &eth_core : this->get_active_ethernet_cores()) {
-    //     CoreCoord phys_eth_core = this->ethernet_core_from_logical_core(eth_core);
-    //     this->initialize_firmware(phys_eth_core, &launch_msg);
-    // }
+    for (const auto &eth_core : this->get_active_ethernet_cores()) {
+        CoreCoord phys_eth_core = this->ethernet_core_from_logical_core(eth_core);
+        this->initialize_firmware(phys_eth_core, &launch_msg);
+    }
 
-    // for (const auto &eth_core : this->get_inactive_ethernet_cores()) {
-    //     CoreCoord phys_eth_core = this->ethernet_core_from_logical_core(eth_core);
-    //     this->initialize_firmware(phys_eth_core, &launch_msg);
-    //     not_done_cores.insert(phys_eth_core);
-    // }
+    for (const auto &eth_core : this->get_inactive_ethernet_cores()) {
+        CoreCoord phys_eth_core = this->ethernet_core_from_logical_core(eth_core);
+        this->initialize_firmware(phys_eth_core, &launch_msg);
+        not_done_cores.insert(phys_eth_core);
+    }
 
     // Barrier between L1 writes above and deassert below
     tt::Cluster::instance().l1_barrier(this->id());
 
     // Deassert worker cores
     for (const auto &worker_core : not_done_cores) {
-        log_info("Deasserting risc reset for core {}", worker_core.str());
         tt::Cluster::instance().deassert_risc_reset_at_core(tt_cxy_pair(this->id(), worker_core));
     }
-
-    tt::Cluster::instance().l1_barrier(this->id());
-    for (const auto &worker_core : not_done_cores) {
-        // Read addr where we deassert risc reset
-        uint32_t reg_val;
-        tt::Cluster::instance().read_reg(&reg_val, tt_cxy_pair(this->id(), worker_core), 4289798576);
-        std::cout << "Deassert risc reset val: " << std::hex << reg_val << std::dec << std::endl;
-    }
-
-    // for (const auto& worker_core : not_done_cores) {
-    //     std::vector<uint32_t> deaddead_insn = {
-    //         0xdeade7b7,
-    //         0x0001a737,
-    //         0xead78793,
-    //         0x34f72023,
-    //         0x00000513,
-    //         0x00008067,
-    //         0x00000000,
-    //         0x00000000,
-    //         0x0000006f,
-    //         0x00000013,
-    //         0x00000013,
-    //         0x00000013,
-    //         0x00b50863,
-    //         0x00052023,
-    //         0x00450513,
-    //         0xff5ff06f,
-    //         0x00008067,
-    //         0x00000000,
-    //         0x00000000,
-    //         0x00000000
-    //     };
-    //     llrt::write_hex_vec_to_core(this->id(), worker_core, deaddead_insn, 0);
-
-    //     tt::Cluster::instance().l1_barrier(this->id());
-    //     std::vector<uint32_t> jump_to_fw_rdbk = {39};
-    //     jump_to_fw_rdbk = llrt::read_hex_vec_from_core(this->id(), worker_core, L1_UNRESERVED_BASE,
-    //     sizeof(uint32_t)); std::cout << "L1 unreserved base holds " << std::hex << jump_to_fw_rdbk[0] << std::dec <<
-    //     std::endl;
-    // }
 
     // Wait until fw init is done, ensures the next launch msg doesn't get
     // written while fw is still in init
     log_info("Waiting for firmware init complete");
     llrt::internal_::wait_until_cores_done(this->id(), RUN_MSG_INIT, not_done_cores);
     log_info("Firmware init complete");
+
+    // sleep(5);
+
+    // for (uint32_t y = 0; y < grid_size.y; y++) {
+    //     for (uint32_t x = 0; x < grid_size.x; x++) {
+    //         CoreCoord logical_core(x, y);
+    //         if (!this->storage_only_cores_.count(logical_core)) {
+    //             CoreCoord worker_core = this->worker_core_from_logical_core(logical_core);
+    //             uint32_t l1_unreserved_base_val;
+    //             tt::Cluster::instance().read_core(&l1_unreserved_base_val, sizeof(uint32_t), tt_cxy_pair(this->id(),
+    //             worker_core), L1_UNRESERVED_BASE); std::cout << "L1 unreserved base " << std::hex <<
+    //             l1_unreserved_base_val << std::dec << std::endl;
+    //         }
+    //     }
+    // }
 }
 
 void Device::clear_l1_state() {

@@ -285,10 +285,6 @@ bool test_load_write_read_risc_binary(ll_api::memory &mem, chip_id_t chip_id, co
             "Binary readback from device {} core {} does not match the binary written!",
             chip_id,
             core.str())
-        // std::vector<uint32_t> read_mem_vec = read_mem.data();
-        // for (const auto &val : read_mem_vec) {
-        //     std::cout << std::hex << val << std::dec << std::endl;
-        // }
         return mem == read_mem;
     }
 
@@ -334,17 +330,7 @@ static bool check_if_riscs_on_specified_core_done(chip_id_t chip_id, const CoreC
         uint32_t addr_reading_from = (uint32_t)(run_mailbox_address & ~0x3);
         run_mailbox_read_val = read_hex_vec_from_core(chip_id, core, run_mailbox_address & ~0x3, sizeof(uint32_t));
 
-        std::vector<uint32_t> l1_unreserved_base_val = {RUN_MAILBOX_BOGUS};
-        l1_unreserved_base_val = read_hex_vec_from_core(chip_id, core, L1_UNRESERVED_BASE, sizeof(uint32_t));
-
         uint8_t run = run_mailbox_read_val[0] >> (8 * (offsetof(launch_msg_t, run) & 3));
-        log_info(
-            "Got {}, run state is {}, run msg done is {} from {}, l1 unreserved base {}",
-            run,
-            run_state,
-            RUN_MSG_DONE,
-            addr_reading_from,
-            l1_unreserved_base_val[0]);
         if (run != run_state && run != RUN_MSG_DONE) {
             fprintf(
                 stderr,
@@ -387,7 +373,7 @@ void wait_until_cores_done(chip_id_t device_id, int run_state, std::unordered_se
             bool is_done = llrt::internal_::check_if_riscs_on_specified_core_done(device_id, phys_core, run_state);
 
             if (is_done) {
-                log_info(tt::LogMetal, "Phys cores just done: {}", phys_core.str());
+                log_debug(tt::LogMetal, "Phys cores just done: {}", phys_core.str());
                 it = not_done_phys_cores.erase(it);
             } else {
                 ++it;
