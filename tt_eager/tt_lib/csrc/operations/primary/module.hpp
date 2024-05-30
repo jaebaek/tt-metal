@@ -11,6 +11,7 @@
 #include "tt_dnn/op_library/bmm/bmm_op.hpp"
 #include "tt_dnn/op_library/groupnorm/groupnorm_op.hpp"
 #include "tt_dnn/op_library/layernorm/layernorm_op.hpp"
+#include "tt_dnn/op_library/layernorm_distributed/layernorm_part2_op.hpp"
 #include "tt_dnn/op_library/moreh_adam/moreh_adam_op.hpp"
 #include "tt_dnn/op_library/moreh_adamw/moreh_adamw_op.hpp"
 #include "tt_dnn/op_library/moreh_arange/moreh_arange_op.hpp"
@@ -504,6 +505,36 @@ void py_module(py::module& m_primary) {
         py::arg("compute_kernel_config").noconvert() = std::nullopt,
         R"doc(
             Performs a rmsnorm(a+b)*gamma + beta operation.
+        )doc");
+
+    m_primary.def(
+        "layernorm_part2",
+        tt::operations::primary::layernorm_part2,
+        py::arg("input").noconvert(),
+        py::arg("stats").noconvert(),
+        py::arg("eps").noconvert(),
+        py::arg("gamma").noconvert() = std::nullopt,
+        py::arg("beta").noconvert() = std::nullopt,
+        py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        // py::arg("program_config").noconvert() = LayerNormDefaultProgramConfig{},
+        py::arg("compute_kernel_config").noconvert() = std::nullopt,
+        R"doc(
+            TODO
+        )doc");
+
+    m_primary.def(
+        "rmsnorm_part2",
+        tt::operations::primary::rmsnorm_part2,
+        py::arg("input").noconvert(),
+        py::arg("stats").noconvert(),
+        py::arg("eps").noconvert(),
+        py::arg("gamma").noconvert() = std::nullopt,
+        py::arg("beta").noconvert() = std::nullopt,
+        py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        // py::arg("program_config").noconvert() = LayerNormDefaultProgramConfig{},
+        py::arg("compute_kernel_config").noconvert() = std::nullopt,
+        R"doc(
+            TODO
         )doc");
 
     // prod along all dimensions

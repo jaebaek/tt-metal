@@ -1,0 +1,437 @@
+// SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
+//
+// SPDX-License-Identifier: Apache-2.0
+
+#include "tt_eager/tt_dnn/op_library/layernorm/layernorm_op.hpp"
+#include "tt_eager/tt_dnn/op_library/layernorm_distributed/layernorm_part2_op.hpp"
+#include "tt_eager/tt_dnn/op_library/work_split.hpp"
+#include "tt_dnn/op_library/math.hpp"
+
+#include "tt_metal/host_api.hpp"
+#include "tt_metal/common/constants.hpp"
+#include "tt_metal/detail/util.hpp"
+
+#include <optional>
+#include <variant>
+
+using uint32_t = std::uint32_t;
+using namespace tt::constants;
+using namespace tt::tt_metal;
+
+namespace tt {
+
+namespace tt_metal {
+
+inline bool is_dram(const Tensor& input_tensor) { return input_tensor.memory_config().buffer_type == BufferType::DRAM; }
+inline bool is_dram(const std::optional<const Tensor> input_tensor) {
+     return input_tensor.has_value() ? is_dram(input_tensor.value()) : true;
+}
+inline bool is_dram(const Buffer* b) { return b->buffer_type() == BufferType::DRAM; }
+
+// computes layernorm(a)*gamma + beta
+operation::ProgramWithCallbacks layernorm_part2_multi_core(
+    const Tensor &a,
+    const Tensor &stats,
+    const std::optional<const Tensor> gamma,
+    const std::optional<const Tensor> beta,
+    Tensor& output,
+    LayerNormType norm_type,
+    float eps,
+    DeviceComputeKernelConfig compute_kernel_config
+) {
+    const bool is_rmsnorm = norm_type == LayerNormType::RMSNORM;
+    const auto shape = a.get_legacy_shape();
+    const uint32_t W = shape[-1], H = shape[-2];
+    const uint32_t HW = H*W;
+    const uint32_t NC = a.volume() / HW;
+
+
+    // Kernels are configured to support BFLOAT8_B, but bad pcc so we need mixed precision support in compute
+    const auto& a_dtype = a.get_dtype();
+
+    const uint32_t Wt = W/TILE_WIDTH;
+    const uint32_t Ht = H/TILE_HEIGHT;
+    const uint32_t stats_tiles_cols = stats.get_legacy_shape()[-1] / TILE_WIDTH;
+    const uint32_t tile_cols_per_device = is_rmsnorm ? 1 : 2;
+    const uint32_t num_devices = stats_tiles_cols / tile_cols_per_device;
+    TT_FATAL(num_devices > 0, "Number of devices must be greater than 0");
+    TT_FATAL(num_devices * tile_cols_per_device == stats_tiles_cols, "Number of devices must divide number of stats tiles");
+
+    uint32_t num_tile_rows = NC * Ht;
+
+    log_debug("is_rmsnorm: {}", is_rmsnorm);
+    log_debug("W: {}", W);
+    log_debug("H: {}", H);
+    log_debug("num_tile_rows: {}", num_tile_rows);
+    log_debug("Wt: {}", Wt);
+    log_debug("Ht: {}", Ht);
+    log_debug("stats_tiles_cols: {}", stats_tiles_cols);
+    log_debug("num_devices: {}", num_devices);
+
+
+    ////////////////////////////////////////////////////////////////////////////
+    //                       Device Setup
+    //////////////////////////////////////////////////////////////////////////
+    Device *device = a.device();
+
+    ////////////////////////////////////////////////////////////////////////////
+    //                Circular Buffer Data Format Setup
+    //////////////////////////////////////////////////////////////////////////
+    MathFidelity math_fidelity;
+    bool math_approx_mode;
+    bool fp32_dest_acc_en;
+
+    std::visit([&](auto&& compute_kernel_config) {
+        using T = std::decay_t<decltype(compute_kernel_config)>;
+        if constexpr (std::is_same_v<T, GrayskullComputeKernelConfig>) {
+            TT_ASSERT(device->arch() == ARCH::GRAYSKULL, "kernel config is not for graykull");
+            math_fidelity = compute_kernel_config.math_fidelity;
+            math_approx_mode = compute_kernel_config.math_approx_mode;
+            fp32_dest_acc_en = false;
+        } else if constexpr (std::is_same_v<T, WormholeComputeKernelConfig>) {
+            TT_ASSERT(device->arch() == ARCH::WORMHOLE_B0, "kernel config is not for wormhole_b0");
+            math_fidelity = compute_kernel_config.math_fidelity;
+            math_approx_mode = compute_kernel_config.math_approx_mode;
+            fp32_dest_acc_en = tt_metal::datatype_to_dataformat_converter(a.get_dtype()) == tt::DataFormat::Float32 ? true : compute_kernel_config.fp32_dest_acc_en;
+        } else {
+            TT_FATAL("arch not supported");
+        }
+
+    }, compute_kernel_config);
+
+    uint32_t block_size = fp32_dest_acc_en ? find_max_divisor(Wt, 4) : find_max_divisor(Wt, 8);
+
+    tt::DataFormat in_data_format = tt_metal::datatype_to_dataformat_converter(a.get_dtype());
+    tt::DataFormat out_data_format = tt_metal::datatype_to_dataformat_converter(output.get_dtype());
+    tt::DataFormat cb_data_format = fp32_dest_acc_en ? tt::DataFormat::Float32 : tt::DataFormat::Float16_b;
+    tt::DataFormat gamma_cb_data_format = gamma.has_value() ? tt_metal::datatype_to_dataformat_converter(gamma.value().get_dtype()) : tt::DataFormat::Float16_b;
+    tt::DataFormat beta_cb_data_format = beta.has_value() ? tt_metal::datatype_to_dataformat_converter(beta.value().get_dtype()) : tt::DataFormat::Float16_b;
+    uint32_t in_single_tile_size = tt_metal::detail::TileSize(in_data_format);
+    uint32_t single_tile_size = tt_metal::detail::TileSize(cb_data_format);
+    uint32_t out_single_tile_size = tt_metal::detail::TileSize(out_data_format);
+    uint32_t bfloat16_tile_size = tt_metal::detail::TileSize(tt::DataFormat::Float16_b);
+    uint32_t gamma_single_tile_size = tt_metal::detail::TileSize(gamma_cb_data_format);
+    uint32_t beta_single_tile_size = tt_metal::detail::TileSize(beta_cb_data_format);
+
+    log_debug("in_data_format: {}", in_data_format);
+    log_debug("out_data_format: {}", out_data_format);
+    log_debug("cb_data_format: {}", cb_data_format);
+    log_debug("gamma_cb_data_format: {}", gamma_cb_data_format);
+    log_debug("beta_cb_data_format: {}", beta_cb_data_format);
+    log_debug("math_fidelity: {}", math_fidelity);
+    log_debug("math_approx_mode: {}", math_approx_mode);
+    log_debug("fp32_dest_acc_en: {}", fp32_dest_acc_en);
+
+    tt::DataFormat inb_data_format = tt::DataFormat::Invalid;
+    uint32_t inb_single_tile_size = 0;
+
+    auto a_addr = a.buffer()->address();
+    auto stats_addr = stats.buffer()->address();
+    auto gamma_dram_addr = gamma.has_value() ? gamma.value().buffer()->address() : 0;
+    TT_FATAL(gamma_dram_addr != 0, "Gamma must be provided");
+    auto beta_dram_addr = beta.has_value() ? beta.value().buffer()->address() : 0;
+    auto dst_addr = output.buffer()->address();
+
+    uint32_t num_tiles = a.volume()/TILE_HW;
+    uint32_t num_gamma_tiles = gamma.has_value() ? gamma.value().volume()/TILE_HW : 0;
+    uint32_t num_beta_tiles = beta.has_value() ? beta.value().volume()/TILE_HW : 0;
+
+    // For bert, tensor is packed as RM with width 32
+    if (gamma.has_value() and gamma.value().get_layout() == Layout::ROW_MAJOR) {
+        num_gamma_tiles = gamma.has_value() ? gamma.value().volume()/TILE_WIDTH : 0;
+    }
+    if (beta.has_value() and beta.value().get_layout() == Layout::ROW_MAJOR) {
+        num_beta_tiles = beta.has_value() ? beta.value().volume()/TILE_WIDTH : 0;
+    }
+
+    log_debug("num_gamma_tiles: {}", num_gamma_tiles);
+    log_debug("num_beta_tiles: {}", num_beta_tiles);
+
+
+    ////////////////////////////////////////////////////////////////////////////
+    //                         Parameters Setup
+    ////////////////////////////////////////////////////////////////////////////
+    // These tile capacity counts for CBs need to match the number of tiles expected by the kernel (softmax.cpp)
+    // TODO(AP): this will not work for all Wts possibly, but should work for Wt=8, 12, 16, 32
+    // TODO(AP): can also add support for block_size=7 -> 63, 28
+    // uint32_t WtB    =  div_up(Wt, block_size)*block_size; // Wt padded to be divisible by block size
+    // uint32_t in0_t  =  WtB; // cb_x for no pre-add variant, x=a+b for fused pre-add, extra space for some buffering
+
+    /*
+    in0_cb: a
+    in1_cb: stats
+    in2_cb: gamma
+    in3_cb: beta
+    in4_cb: epsilon
+    in5_cb: 1/row_size (reduction scalar)
+
+    intermediate CBs are packed such that in layernorm, first tile is for x**2 stats, second tile is for x stats
+    in RMSNorm, only first tile has valid data.
+
+    intermed0_cb: [mean(x**2), mean(x)] # reduce with reduce_scalar
+    intermed1_cb: mean(x)**2
+    intermed2_cb: var = mean(x**2) - mean(x)**2
+    intermed3_cb: var + epsilon # RMSNorm takes mean(x**2) instead of var
+    intermed4_cb: 1/sqrt(var + epsilon)
+    intermed5_cb: x - mean(x)
+    intermed6_cb: (x - mean(x)) * 1/sqrt(var + epsilon) # RMSNorm takes x instead of (x - mean(x))
+    intermed7_cb: (x - mean(x)) * 1/sqrt(var + epsilon) * gamma
+    out0_cb: (x - mean(x)) * 1/sqrt(var + epsilon) * gamma + beta # RMSNorm doesn't include beta
+
+    */
+
+    const uint32_t in0_tiles = Wt;
+    const uint32_t in1_tiles = stats_tiles_cols;
+    const uint32_t in2_tiles = Wt;
+    const uint32_t in3_tiles = Wt;
+    const uint32_t in4_tiles = 1; // epsilon
+    const uint32_t in5_tiles = 1; // reduce scalar
+
+    const uint32_t intermed0_tiles = tile_cols_per_device;
+    const uint32_t intermed1_tiles = 1;
+    const uint32_t intermed2_tiles = 1;
+    const uint32_t intermed3_tiles = 1;
+    const uint32_t intermed4_tiles = 1;
+    const uint32_t intermed5_tiles = Wt;
+    const uint32_t intermed6_tiles = Wt;
+    const uint32_t intermed7_tiles = Wt;
+    uint32_t out0_tiles = Wt;
+
+    TT_ASSERT(W <= TILE_WIDTH*in0_tiles && "W exceeds the maximum supported size of tile buffer (kernel limitation right now).");
+    TT_ASSERT(in0_tiles % block_size == 0 && "Size of buffer must be divisible by the size of block used by the reader and compute kernel.");
+    TT_ASSERT(in2_tiles % block_size == 0 && "Size of buffer must be divisible by the size of block used by the reader and compute kernel.");
+    TT_ASSERT(in3_tiles % block_size == 0 && "Size of buffer must be divisible by the size of block used by the reader and compute kernel.");
+    TT_ASSERT(out0_tiles % block_size == 0 && "Size of buffer must be divisible by the size of block used by the reader and compute kernel.");
+    TT_ASSERT(intermed5_tiles % block_size == 0 && "Size of buffer must be divisible by the size of block used by the reader and compute kernel.");
+    TT_ASSERT(intermed6_tiles % block_size == 0 && "Size of buffer must be divisible by the size of block used by the reader and compute kernel.");
+    TT_ASSERT(intermed7_tiles % block_size == 0 && "Size of buffer must be divisible by the size of block used by the reader and compute kernel.");
+
+
+    auto grid_size = device->compute_with_storage_grid_size();
+    auto [num_cores, all_cores, core_group_1, core_group_2, num_tile_rows_per_core_group_1, num_tile_rows_per_core_group_2] = split_work_to_cores(grid_size, num_tile_rows, true);
+
+    log_debug("num_cores: {}", num_cores);
+    log_debug("grid_size: {}", grid_size);
+    log_debug("core_group_1: {}", core_group_1.str());
+    log_debug("num_tile_rows_per_core_group_1: {}", num_tile_rows_per_core_group_1);
+    log_debug("core_group_2: {}", core_group_2.str());
+    log_debug("num_tile_rows_per_core_group_2: {}", num_tile_rows_per_core_group_2);
+    TT_FATAL(false, "quitting early");
+
+    ////////////////////////////////////////////////////////////////////////////
+    //                      Application Setup
+    ////////////////////////////////////////////////////////////////////////////
+    Program program = CreateProgram();
+
+    // std::vector<uint32_t> reader_compile_time_args = {
+    //     // interleaved accessor args
+    //     (std::uint32_t) is_dram(a),
+    //     (std::uint32_t) is_dram(b),
+    //     (std::uint32_t) is_dram(gamma),
+    //     (std::uint32_t) is_dram(beta),
+    //     (std::uint32_t) block_size
+    // };
+
+    // if (gamma.has_value() and gamma.value().get_layout() == Layout::ROW_MAJOR) {
+    //     auto gamma_stick_size = gamma.value().get_legacy_shape()[-1] * gamma.value().element_size();
+    //     bool gamma_stick_size_is_power_of_two = is_power_of_two_at_least_32(gamma_stick_size);
+    //     reader_compile_time_args.push_back((std::uint32_t) gamma_stick_size_is_power_of_two);
+    //     if (gamma_stick_size_is_power_of_two) {
+    //         uint32_t gamma_log2_stick_size = gamma_stick_size_is_power_of_two ? (std::uint32_t)log2(gamma_stick_size) : 0;
+    //         reader_compile_time_args.push_back((std::uint32_t) gamma_log2_stick_size);
+    //     } else {
+    //         reader_compile_time_args.push_back(gamma_stick_size);
+    //     }
+    // } else if (beta.has_value() and beta.value().get_layout() == Layout::ROW_MAJOR) {
+    //     auto beta_stick_size = beta.value().get_legacy_shape()[-1] * beta.value().element_size();
+    //     bool beta_stick_size_is_power_of_two = is_power_of_two_at_least_32(beta_stick_size);
+    //     reader_compile_time_args.push_back((std::uint32_t) beta_stick_size_is_power_of_two);
+    //     if (beta_stick_size_is_power_of_two) {
+    //         uint32_t beta_log2_stick_size = beta_stick_size_is_power_of_two ? (std::uint32_t)log2(beta_stick_size) : 0;
+    //         reader_compile_time_args.push_back((std::uint32_t) beta_log2_stick_size);
+    //     } else {
+    //         reader_compile_time_args.push_back(beta_stick_size);
+    //     }
+    // } else {
+    //     reader_compile_time_args.push_back(0);
+    //     reader_compile_time_args.push_back(0);
+    // }
+
+    // std::vector<uint32_t> writer_compile_time_args = {
+    //     // interleaved accessor args
+    //     (std::uint32_t) is_dram(output),
+    //     (std::uint32_t) block_size
+    // };
+
+
+    // bool tile_dtype_is_bfloat16 = a.get_dtype() == tt::tt_metal::DataType::BFLOAT16;
+    // std::map<string, string> reader_defines;
+    // std::map<string, string> compute_defines;
+    // if (b) {
+    //     reader_defines["FUSE_PRE_ADD"] = "1";
+    //     compute_defines["FUSE_PRE_ADD"] = "1";
+    // }
+    // if (gamma.has_value()) {
+    //     reader_defines["FUSE_GAMMA"] = "1";
+    // }
+    // if (beta.has_value()) {
+    //     reader_defines["FUSE_BETA"] = "1";
+    // }
+
+    // if (rms_norm) {
+    //     compute_defines["RMSNORM"] = "1";
+    // }
+
+    // auto use_row_major_kernel = (gamma.has_value() and gamma.value().get_layout() == Layout::ROW_MAJOR) or (beta.has_value() and beta.value().get_layout() == Layout::ROW_MAJOR);
+    // auto reader_kernels_id = CreateKernel(
+    //     program,
+    //     use_row_major_kernel ? "tt_eager/tt_dnn/op_library/layernorm/kernels/dataflow/reader_unary_interleaved_ln_rm_gb.cpp" : "tt_eager/tt_dnn/op_library/layernorm/kernels/dataflow/reader_unary_interleaved_ln.cpp",
+    //     all_cores,
+    //     tt_metal::ReaderDataMovementConfig(reader_compile_time_args, reader_defines)
+    // );
+
+    // auto writer_kernels_id = CreateKernel(
+    //     program,
+    //     "tt_eager/tt_dnn/op_library/layernorm/kernels/dataflow/writer_unary_interleaved_start_id_blocked.cpp",
+    //     all_cores,
+    //     tt_metal::WriterDataMovementConfig(writer_compile_time_args)
+    // );
+
+    // vector<uint32_t> compute_args = { Wt, block_size, gamma.has_value(), beta.has_value(), fp32_dest_acc_en };
+
+    // auto compute_kernels_id = CreateKernel(
+    //     program,
+    //     "tt_eager/tt_dnn/op_library/layernorm/kernels/compute/layernorm.cpp",
+    //     all_cores,
+    //     tt_metal::ComputeConfig{.math_fidelity = math_fidelity, .fp32_dest_acc_en = fp32_dest_acc_en, .math_approx_mode = math_approx_mode, .compile_args = compute_args, .defines = compute_defines}
+    // );
+
+    // // Create circular buffers
+    // CircularBufferConfig cb_src0_config = CircularBufferConfig(in0_t*in_single_tile_size, {{CB::c_in0, in_data_format}}).set_page_size(CB::c_in0, in_single_tile_size);
+    // CreateCircularBuffer( program, all_cores, cb_src0_config );
+    // CircularBufferConfig cb_out0_config = CircularBufferConfig(out0_t*out_single_tile_size, {{CB::c_out0, out_data_format}}).set_page_size(CB::c_out0, out_single_tile_size);
+    // CreateCircularBuffer( program, all_cores, cb_out0_config );
+    // if (!rms_norm) {
+    //     CircularBufferConfig cb_intermed1_config = CircularBufferConfig(im1_t*single_tile_size, {{CB::c_intermed1, cb_data_format}}).set_page_size(CB::c_intermed1, single_tile_size);
+    //     CreateCircularBuffer( program, all_cores,  cb_intermed1_config );
+    // }
+    // CircularBufferConfig cb_in2_config = CircularBufferConfig(in2_t*bfloat16_tile_size, {{CB::c_in2, DataFormat::Float16_b}}).set_page_size(CB::c_in2, bfloat16_tile_size);
+    // CreateCircularBuffer( program, all_cores, cb_in2_config );
+    // CircularBufferConfig cb_in3_config = CircularBufferConfig(in3_t*bfloat16_tile_size, {{CB::c_in3, DataFormat::Float16_b}}).set_page_size(CB::c_in3, bfloat16_tile_size);
+    // CreateCircularBuffer( program, all_cores, cb_in3_config );
+    // CircularBufferConfig cb_intermed2_config = CircularBufferConfig(im2_t*single_tile_size, {{CB::c_intermed2, cb_data_format}}).set_page_size(CB::c_intermed2, single_tile_size);
+    // CreateCircularBuffer( program, all_cores, cb_intermed2_config );
+    // if (!(rms_norm && !b.has_value())) {
+    //     CircularBufferConfig cb_intermed0_config = CircularBufferConfig(im0_t*single_tile_size, {{CB::c_intermed0, cb_data_format}}).set_page_size(CB::c_intermed0, single_tile_size);
+    //     CreateCircularBuffer( program, all_cores, cb_intermed0_config );
+    // }
+    // CircularBufferConfig c_intermed3_config = CircularBufferConfig(im3_t*single_tile_size, {{CB::c_intermed3, cb_data_format}}).set_page_size(CB::c_intermed3, single_tile_size);
+    // CreateCircularBuffer( program, all_cores, c_intermed3_config );
+    // CircularBufferConfig c_intermed4_config = CircularBufferConfig(im4_t*single_tile_size, {{CB::c_intermed4, cb_data_format}}).set_page_size(CB::c_intermed4, single_tile_size);
+    // CreateCircularBuffer( program, all_cores, c_intermed4_config );
+    // if (gamma.has_value() || beta.has_value()) {
+    //     CircularBufferConfig c_intermed5_config = CircularBufferConfig(im5_t*single_tile_size, {{CB::c_intermed5, cb_data_format}}).set_page_size(CB::c_intermed5, single_tile_size);
+    //     CreateCircularBuffer( program, all_cores, c_intermed5_config );
+    // }
+    // if (gamma.has_value()) {
+    //     CircularBufferConfig c_in5_config = CircularBufferConfig(in5_t * gamma_single_tile_size, {{CB::c_in5, gamma_cb_data_format}})
+    //         .set_page_size(CB::c_in5, gamma_single_tile_size);
+    //     CreateCircularBuffer( program, all_cores, c_in5_config );
+    // }
+    // if (beta.has_value()) {
+    //     CircularBufferConfig c_in6_config = CircularBufferConfig(in6_t * beta_single_tile_size, {{CB::c_in6, beta_cb_data_format}})
+    //         .set_page_size(CB::c_in6, beta_single_tile_size);
+    //     CreateCircularBuffer( program, all_cores, c_in6_config );
+    // }
+    // if (b) {
+    //     // x = a+b in this notation
+    //     // result = ln(x)*gamma + beta
+    //     // if there's no pre-add we use cb_in0 for x, otherwise a is pre-buffered into in0, added into im6, then im6 is used as x
+    //     // b is buffered into c_in1
+    //     if (!rms_norm) {
+    //         CircularBufferConfig c_intermed6_config = CircularBufferConfig(im6_t*single_tile_size, {{CB::c_intermed6, cb_data_format}}).set_page_size(CB::c_intermed6, single_tile_size);
+    //         CreateCircularBuffer( program, all_cores, c_intermed6_config );
+    //     }
+    //     // c_in1 is input buffer for b
+    //     CircularBufferConfig c_in1_config = CircularBufferConfig(in1_t*inb_single_tile_size, {{CB::c_in1, inb_data_format}}).set_page_size(CB::c_in1, inb_single_tile_size);
+    //     CreateCircularBuffer( program, all_cores, c_in1_config);
+    // }
+
+    // uint32_t curr_row = 0;
+    // float winv = 1.0f / W; // bcast-w scaler
+    // bfloat16 bfloat_winv_value = bfloat16(winv);
+    // uint32_t packed_winv_value = pack_two_bfloat16_into_uint32({bfloat_winv_value, bfloat_winv_value});
+    // union { float f; uint32_t u; } e; e.f = eps; // epsilon
+    // for (uint32_t i = 0; i < num_cores; ++i) {
+    //     CoreCoord core = {i % grid_size.x, i / grid_size.x};
+
+    //     uint32_t num_tile_rows_per_core = 0;
+    //     if (core_group_1.core_coord_in_core_ranges(core)) {
+    //         num_tile_rows_per_core = num_tile_rows_per_core_group_1;
+    //     } else if (core_group_2.core_coord_in_core_ranges(core)) {
+    //         num_tile_rows_per_core = num_tile_rows_per_core_group_2;
+    //     } else {
+    //         TT_ASSERT(false, "Core not in specified core ranges");
+    //     }
+
+    //     uint32_t tile_offset = curr_row * Wt;
+
+    //     SetRuntimeArgs(program, reader_kernels_id, core,
+    //         { a_addr, num_tile_rows_per_core, Wt, tile_offset, packed_winv_value, e.u, // 0-5
+    //         gamma_dram_addr, beta_dram_addr, b_dram_addr } // 6-8
+    //     );
+    //     SetRuntimeArgs(program, compute_kernels_id, core, { num_tile_rows_per_core });
+    //     SetRuntimeArgs(program, writer_kernels_id, core, { dst_addr, num_tile_rows_per_core * Wt, tile_offset } );
+    //     curr_row += num_tile_rows_per_core;
+    // }
+
+    auto override_runtime_args_callback = [
+            // reader_kernel_id=reader_kernels_id,
+            // writer_kernel_id=writer_kernels_id,
+            // num_cores,
+            // grid_size
+        ]
+    (
+        const Program &program,
+        const std::vector<Buffer*>& input_buffers,
+        const std::vector<Buffer*>& output_buffers
+    ) {
+
+        // auto src_a_dram_buffer = input_buffers.at(0);
+        // auto src_b_dram_buffer = input_buffers.at(1);
+        // auto gamma_dram_buffer = input_buffers.at(2);
+        // auto beta_dram_buffer = input_buffers.at(3);
+
+        // auto dst_dram_buffer = output_buffers.at(0);
+
+        // for (uint32_t i = 0; i < num_cores; ++i) {
+        //     CoreCoord core = {i % grid_size.x, i / grid_size.x};
+
+        //     {
+        //         auto &runtime_args = GetRuntimeArgs(program, reader_kernel_id, core);
+        //         runtime_args[0] = src_a_dram_buffer->address();
+        //         if (src_b_dram_buffer != nullptr) {
+        //             runtime_args[8] = src_b_dram_buffer->address();
+        //         }
+        //         if (gamma_dram_buffer != nullptr) {
+        //             runtime_args[6] = gamma_dram_buffer->address();
+        //         }
+        //         if (beta_dram_buffer != nullptr) {
+        //             runtime_args[7] = beta_dram_buffer->address();
+        //         }
+        //     }
+
+        //     {
+        //         auto &runtime_args = GetRuntimeArgs(program, writer_kernel_id, core);
+        //         runtime_args[0] = dst_dram_buffer->address();
+        //     }
+        // }
+    };
+
+    return {std::move(program), override_runtime_args_callback};
+}
+
+
+}  // namespace tt_metal
+
+}  // namespace tt
