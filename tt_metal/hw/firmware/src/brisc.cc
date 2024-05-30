@@ -290,6 +290,12 @@ inline __attribute__((always_inline)) void wait_for_ncrisc_to_halt() {
 #endif
 }
 
+inline __attribute__((always_inline)) void reset_ncrisc_with_iram() {
+#ifdef NCRISC_HAS_IRAM
+    assert_just_ncrisc_reset();
+#endif
+}
+
 inline void set_ncrisc_kernel_resume_deassert_address() {
 #ifdef NCRISC_HAS_IRAM
     volatile tt_reg_ptr uint32_t* cfg_regs = core.cfg_regs_base(0);
@@ -328,91 +334,82 @@ int main() {
 
     disable_lowcache();
 
-    // int32_t num_words = ((uint)__ldm_data_end - (uint)__ldm_data_start) >> 2;
-    // l1_to_local_mem_copy((uint*)__ldm_data_start, (uint tt_l1_ptr*)MEM_BRISC_INIT_LOCAL_L1_BASE, num_words);
+    int32_t num_words = ((uint)__ldm_data_end - (uint)__ldm_data_start) >> 2;
+    l1_to_local_mem_copy((uint*)__ldm_data_start, (uint tt_l1_ptr*)MEM_BRISC_INIT_LOCAL_L1_BASE, num_words);
 
-    // risc_init();
-    // device_setup();
-    // noc_init();
+    risc_init();
+    device_setup();
+    noc_init();
 
-    // uint32_t addr = L1_UNRESERVED_BASE;
-    // for (int i = 0; i < 256; i++) {
-    //     volatile tt_l1_ptr uint32_t* dummy_address = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(addr);
-    //     *dummy_address = 0xDEADDEAD;
-    //     addr += 32;
-    // }
-    volatile tt_l1_ptr uint32_t* dummy_address = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(L1_UNRESERVED_BASE);
-    *dummy_address = 0xDEADDEAD;
+    // Set ncrisc's resume address to 0 so we know when ncrisc has overwritten it
+    mailboxes->ncrisc_halt.resume_addr = 0;
+    mailboxes->slave_sync.ncrisc = RUN_SYNC_MSG_GO;
+    deassert_ncrisc_trisc();
 
-    // // Set ncrisc's resume address to 0 so we know when ncrisc has overwritten it
-    // mailboxes->ncrisc_halt.resume_addr = 0;
-    // mailboxes->slave_sync.ncrisc = RUN_SYNC_MSG_GO;
-    // deassert_ncrisc_trisc();
-    // // When NCRISC has IRAM, it needs to be halted before data can be copied from L1 to IRAM
-    // // This routine allows us to resume NCRISC after the copy is done
-    // set_ncrisc_kernel_resume_deassert_address();
+    // When NCRISC has IRAM, it needs to be halted before data can be copied from L1 to IRAM
+    // This routine allows us to resume NCRISC after the copy is done
+    set_ncrisc_kernel_resume_deassert_address();
+    // Wait for ncrisc to halt
+    wait_for_ncrisc_to_halt();
 
-    // // Wait for ncrisc to halt
-    // wait_for_ncrisc_to_halt();
+    mailboxes->launch.run = RUN_MSG_DONE;
 
-    // mailboxes->launch.run = RUN_MSG_DONE;
+    while (1) {
+        init_sync_registers();
+        reset_ncrisc_with_iram();
 
-    // while (1) {
-    //     init_sync_registers();
-    //     assert_just_ncrisc_reset();
+        DEBUG_STATUS("GW");
+        while (mailboxes->launch.run != RUN_MSG_GO);
+        DEBUG_STATUS("GD");
 
-    //     DEBUG_STATUS("GW");
-    //     while (mailboxes->launch.run != RUN_MSG_GO);
-    //     DEBUG_STATUS("GD");
+        {
+            DeviceZoneScopedMainN("BRISC-FW");
 
-    //     {
-    //         DeviceZoneScopedMainN("BRISC-FW");
+            // Copies from L1 to IRAM on chips where NCRISC has IRAM
+            l1_to_ncrisc_iram_copy(mailboxes->launch.ncrisc_kernel_size16, ncrisc_kernel_start_offset16);
 
-    //         // Copies from L1 to IRAM on chips where NCRISC has IRAM
-    //         l1_to_ncrisc_iram_copy(mailboxes->launch.ncrisc_kernel_size16, ncrisc_kernel_start_offset16);
+            // Invalidate the i$ now the kernels have loaded and before running
+            volatile tt_reg_ptr uint32_t* cfg_regs = core.cfg_regs_base(0);
+            cfg_regs[RISCV_IC_INVALIDATE_InvalidateAll_ADDR32] = RISCV_IC_BRISC_MASK | RISCV_IC_TRISC_ALL_MASK;
 
-    //         // Invalidate the i$ now the kernels have loaded and before running
-    //         volatile tt_reg_ptr uint32_t* cfg_regs = core.cfg_regs_base(0);
-    //         cfg_regs[RISCV_IC_INVALIDATE_InvalidateAll_ADDR32] = RISCV_IC_BRISC_MASK | RISCV_IC_TRISC_ALL_MASK;
+            run_triscs();
 
-    //         run_triscs();
+            noc_index = mailboxes->launch.brisc_noc_id;
 
-    //         noc_index = mailboxes->launch.brisc_noc_id;
+            setup_cb_read_write_interfaces(0, num_cbs_to_early_init, true, true);
+            finish_ncrisc_copy_and_run();
 
-    //         setup_cb_read_write_interfaces(0, num_cbs_to_early_init, true, true);
-    //         finish_ncrisc_copy_and_run();
+            // Run the BRISC kernel
+            DEBUG_STATUS("R");
+            if (mailboxes->launch.enable_brisc) {
+                setup_cb_read_write_interfaces(num_cbs_to_early_init, mailboxes->launch.max_cb_index, true, true);
+                kernel_init();
+            } else {
+                // This was not initialized in kernel_init
+                noc_local_state_init(noc_index);
+            }
+            DEBUG_STATUS("D");
 
-    //         // Run the BRISC kernel
-    //         DEBUG_STATUS("R");
-    //         if (mailboxes->launch.enable_brisc) {
-    //             setup_cb_read_write_interfaces(num_cbs_to_early_init, mailboxes->launch.max_cb_index, true, true);
-    //             kernel_init();
-    //         } else {
-    //             // This was not initialized in kernel_init
-    //             noc_local_state_init(noc_index);
-    //         }
-    //         DEBUG_STATUS("D");
+            wait_ncrisc_trisc();
 
-    //         wait_ncrisc_trisc();
+            mailboxes->launch.run = RUN_MSG_DONE;
 
-    //         mailboxes->launch.run = RUN_MSG_DONE;
-
-    //         // Notify dispatcher core that it has completed
-    //         if (mailboxes->launch.mode == DISPATCH_MODE_DEV) {
-    //             uint64_t dispatch_addr =
-    //                 NOC_XY_ADDR(NOC_X(DISPATCH_CORE_X), NOC_Y(DISPATCH_CORE_Y), DISPATCH_MESSAGE_ADDR);
-    //             DEBUG_SANITIZE_NOC_ADDR(dispatch_addr, 4);
-    //             noc_fast_atomic_increment(
-    //                 noc_index,
-    //                 NCRISC_AT_CMD_BUF,
-    //                 dispatch_addr,
-    //                 NOC_UNICAST_WRITE_VC,
-    //                 1,
-    //                 31 /*wrap*/,
-    //                 false /*linked*/);
-    //         }
-    //     }
-    // }
+            // Notify dispatcher core that it has completed
+            if (mailboxes->launch.mode == DISPATCH_MODE_DEV) {
+                uint64_t dispatch_addr =
+                    NOC_XY_ADDR(NOC_X(DISPATCH_CORE_X), NOC_Y(DISPATCH_CORE_Y), DISPATCH_MESSAGE_ADDR);
+                DEBUG_SANITIZE_NOC_ADDR(dispatch_addr, 4);
+                noc_fast_atomic_increment(
+                    noc_index,
+                    NCRISC_AT_CMD_BUF,
+                    dispatch_addr,
+                    NOC_UNICAST_WRITE_VC,
+                    1,
+                    31 /*wrap*/,
+                    false /*linked*/);
+            }
+        }
+    }
 
     return 0;
 }
