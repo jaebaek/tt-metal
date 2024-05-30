@@ -250,7 +250,7 @@ class Device {
     uint8_t num_hw_cqs_;
 
     vector<std::unique_ptr<Program, tt::tt_metal::detail::ProgramDeleter>> command_queue_programs;
-    bool using_fast_dispatch = false;
+    bool using_fast_dispatch;
     program_cache::detail::ProgramCache program_cache;
 
     // Program cache interface. Syncrhonize with worker worker threads before querying or
@@ -264,9 +264,9 @@ class Device {
         log_info(tt::LogMetal, "Disabling and clearing program cache on device {}", this->id_);
         this->synchronize();
         if (this->program_cache.is_enabled()) {
-            program_cache.clear();
             program_cache.disable();
         }
+        program_cache.clear();
     }
     std::size_t num_program_cache_entries() {
         this->synchronize();
