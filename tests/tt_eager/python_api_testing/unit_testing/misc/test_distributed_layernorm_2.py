@@ -43,6 +43,13 @@ def reference_part2(x, gamma, beta, epsilon, stats_gathered, n_devices, is_rmsno
 
 
 def run_layernorm_part_2(inp_shape, n_devices, is_rmsnorm, dtype, device):
+    kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+        math_fidelity=ttnn.experimental.tensor.MathFidelity.HiFi4,  # Highest fidelity
+        math_approx_mode=False,
+        fp32_dest_acc_en=False,
+        packer_l1_acc=False,
+    )
+
     torch.manual_seed(1234)
     tile_cols_per_device = 1 if is_rmsnorm else 2  # layernorm has 2 stats to distribute
 
@@ -77,7 +84,37 @@ def run_layernorm_part_2(inp_shape, n_devices, is_rmsnorm, dtype, device):
             inp_chunked[d], gamma_chunked[d], beta_chunked[d], epsilon, stats_tiles, n_devices, is_rmsnorm
         )
 
-        passing, output_str = comp_allclose(ref_chunks[d], lnp2_out, rtol=1e-03, atol=1e-06)
+        tt_inp = ttnn.as_tensor(
+            inp_chunked[d], dtype=dtype, device=device, layout=ttnn.TILE_LAYOUT, memory_config=ttnn.DRAM_MEMORY_CONFIG
+        )
+        tt_gamma = ttnn.as_tensor(
+            gamma_chunked[d].reshape(1, 1, -1, 32),
+            dtype=dtype,
+            device=device,
+            layout=ttnn.ROW_MAJOR_LAYOUT,
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
+        )
+        tt_beta = ttnn.as_tensor(
+            beta_chunked[d].reshape(1, 1, -1, 32),
+            dtype=dtype,
+            device=device,
+            layout=ttnn.ROW_MAJOR_LAYOUT,
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
+        )
+        tt_stats = ttnn.as_tensor(
+            stats_tiles, dtype=dtype, device=device, layout=ttnn.TILE_LAYOUT, memory_config=ttnn.DRAM_MEMORY_CONFIG
+        )
+
+        if is_rmsnorm:
+            tt_lnp2_out = ttnn.experimental.operations.primary.rmsnorm_part2(tt_inp, tt_stats, epsilon, tt_gamma)
+        else:
+            tt_lnp2_out = ttnn.experimental.operations.primary.layernorm_part2(
+                tt_inp, tt_stats, epsilon, tt_gamma, tt_beta, compute_kernel_config=kernel_config
+            )
+
+        tt_lnp2_out_cpu = ttnn.to_torch(tt_lnp2_out)
+
+        passing, output_str = comp_allclose(ref_chunks[d], tt_lnp2_out_cpu, rtol=1e-01, atol=1e-02)
         logger.debug(f"Out passing={passing}")
         logger.debug(f"Output pcc={output_str}")
 

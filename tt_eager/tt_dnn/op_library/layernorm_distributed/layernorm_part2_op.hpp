@@ -102,6 +102,7 @@ struct make_layernorm_part2 {
         // const LayerNormProgramConfig& program_config = LayerNormDefaultProgramConfig{},
         std::optional<const DeviceComputeKernelConfig> compute_kernel_config = std::nullopt) const {
         std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({a}))};
+        log_debug("layernorm_part2: before launch_op");
         operation::launch_op(
             [eps, mem_config,
             // program_config,
@@ -111,7 +112,7 @@ struct make_layernorm_part2 {
                 const auto& gamma = optional_input_tensors.at(0);
                 const auto& beta = optional_input_tensors.at(1);
                 auto arch = a.storage_type() == StorageType::DEVICE ? a.device()->arch() : AutoFormat::GetDefaultDevice()->arch();
-                auto kernel_config_val = init_device_compute_kernel_config(arch, compute_kernel_config, MathFidelity::HiFi4, true, false, false);
+                auto kernel_config_val = init_device_compute_kernel_config(arch, compute_kernel_config, MathFidelity::HiFi4, false, false, false);
                 return operation::run(
                         LayerNormPart2{
                             .norm_type = layernorm_type,
@@ -121,7 +122,7 @@ struct make_layernorm_part2 {
                             .compute_kernel_config = kernel_config_val},
                         {a, stats},
                         {gamma, beta});
-            }, {a}, output_tensors, {gamma, beta});
+            }, {a, stats}, output_tensors, {gamma, beta});
         return output_tensors.at(0);
     }
 };
