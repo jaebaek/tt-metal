@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -7,7 +7,6 @@
 #include "tt_eager/tt_dnn/kernels/dataflow/generate_reduce_scaler.hpp"
 #include "tt_eager/tt_dnn/kernels/dataflow/generate_bcast_scalar.hpp"
 #include "debug/assert.h"
-#include "debug/dprint.h"
 
 void kernel_main() {
     const uint32_t src_addr  = get_arg_val<uint32_t>(0);
@@ -37,7 +36,7 @@ void kernel_main() {
     constexpr bool stats_is_dram = get_compile_time_arg_val(1) == 1;
     constexpr bool gamma_is_dram = get_compile_time_arg_val(2) == 1;
     constexpr bool beta_is_dram = get_compile_time_arg_val(3) == 1;
-    constexpr uint32_t blk = get_compile_time_arg_val(4); // needed for correctness of softmax/LN kernels
+    constexpr uint32_t blk = get_compile_time_arg_val(4);
     constexpr uint32_t stats_tiles_cols = get_compile_time_arg_val(5);
 
     const InterleavedAddrGenFast<src0_is_dram> src_a = {
@@ -52,39 +51,22 @@ void kernel_main() {
         .data_format = stats_data_format
     };
 
-    // #define stick_size_is_pow2 get_compile_time_arg_val(6) == 1
+
     constexpr bool stick_size_is_pow2 = get_compile_time_arg_val(6) == 1;
     ASSERT(stick_size_is_pow2);
-    // #if (stick_size_is_pow2)
     const uint32_t log_base_2_of_page_size = get_compile_time_arg_val(7);
-    // #else
-    // const uint32_t page_size = get_compile_time_arg_val(6);
     #ifdef FUSE_GAMMA
-    // #if (stick_size_is_pow2)
     const InterleavedPow2AddrGen<gamma_is_dram> addrg = {
         .bank_base_address = gamma_addr,
         .log_base_2_of_page_size = log_base_2_of_page_size
     };
-    // #else
-    // const InterleavedAddrGen<gamma_is_dram> addrg = {
-    //     .bank_base_address = gamma_addr,
-    //     .page_size = page_size
-    // };
-    // #endif
     const uint32_t gamma_tile_bytes = get_tile_size(cb_gamma);
     #endif
     #ifdef FUSE_BETA
-    // #if (stick_size_is_pow2)
     const InterleavedPow2AddrGen<beta_is_dram> addrb = {
         .bank_base_address = beta_addr,
         .log_base_2_of_page_size = log_base_2_of_page_size
     };
-    // #else
-    // const InterleavedAddrGen<beta_is_dram> addrb = {
-    //     .bank_base_address = beta_addr,
-    //     .page_size = page_size
-    // };
-    // #endif
     const uint32_t beta_tile_bytes = get_tile_size(cb_beta);
     #endif
 
@@ -96,20 +78,19 @@ void kernel_main() {
     const uint32_t eps = get_arg_val<uint32_t>(6);
     generate_bcast_col_scalar(cb_eps, eps);
 
-    // read a ublock of tiles from src to CB, and then push the ublock to unpacker
-    uint32_t offs = 0;
+    uint32_t inp_tile_idx = tile_offset;
+    uint32_t stats_tile_idx = stats_tile_offset;
 
     for (uint32_t ncht = 0; ncht < NCHt; ncht++) {
-        DPRINT << "Reader: ncht = " << ncht << ENDL();
         // Read stats tiles
         cb_reserve_back(cb_stats, stats_tiles_cols);
         uint32_t stats_wr_ptr = get_write_ptr(cb_stats);
-        const uint32_t stats_start_tile_idx = stats_tile_offset + ncht * stats_tiles_cols;
         for (uint32_t st = 0; st < stats_tiles_cols; ++st) {
-            noc_async_read_tile(stats_start_tile_idx + st, src_stats, stats_wr_ptr);
+            noc_async_read_tile(stats_tile_idx, src_stats, stats_wr_ptr);
             stats_wr_ptr += stats_tile_bytes;
-            noc_async_read_barrier();
+            stats_tile_idx++;
         }
+        noc_async_read_barrier();
         cb_push_back(cb_stats, stats_tiles_cols);
 
         // read input tiles
@@ -118,8 +99,9 @@ void kernel_main() {
             uint32_t inp_wr_ptr = get_write_ptr(cb_inp);
 
             for (uint32_t r = 0; r<blk; r++) {
-                noc_async_read_tile(offs+wt+r+tile_offset, src_a, inp_wr_ptr);
+                noc_async_read_tile(inp_tile_idx, src_a, inp_wr_ptr);
                 inp_wr_ptr += src0_tile_bytes;
+                inp_tile_idx++;
             }
             noc_async_read_barrier();
             cb_push_back(cb_inp, blk);
@@ -163,6 +145,5 @@ void kernel_main() {
             } // wt loop
         }
         #endif
-        offs += Wt;
     } // ncht loop
 }

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -108,31 +108,6 @@ operation::ProgramWithCallbacks LayerNormPart2::create_program(
     return layernorm_part2_multi_core(
         a, stats, gamma, beta, output_tensor, this->norm_type, this->eps, this->compute_kernel_config
     );
-
-    // return std::visit(
-    //     [&](const auto& program_config) -> operation::ProgramWithCallbacks {
-    //         using ProgramConfigType = std::decay_t<decltype(program_config)>;
-    //         if constexpr (
-    //             std::is_same_v<ProgramConfigType, LayerNormShardedMultiCoreProgramConfig>
-    //         ) {
-    //             uint32_t num_cores_x = program_config.compute_with_storage_grid_size.x;
-    //             uint32_t num_cores_y = program_config.compute_with_storage_grid_size.y;
-    //             CoreCoord grid_size = CoreCoord(num_cores_x, num_cores_y);
-
-    //             return layernorm_multi_core_sharded(
-    //                                         a, b, gamma, beta, output_tensor, this->norm_type, this->eps,
-    //                                         program_config.compute_with_storage_grid_size,
-    //                                         program_config.subblock_w,
-    //                                         program_config.block_h,
-    //                                         program_config.block_w,
-    //                                         this->compute_kernel_config
-    //                                         );
-    //         } else {
-    //             return layernorm_multi_core(a, b, gamma, beta, output_tensor, this->norm_type, this->eps, this->compute_kernel_config);
-    //         }
-    //     },
-    //     this->program_config
-    // );
 }
 
 tt::stl::reflection::Attributes LayerNormPart2::attributes() const {

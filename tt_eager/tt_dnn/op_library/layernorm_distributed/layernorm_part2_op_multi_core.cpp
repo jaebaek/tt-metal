@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -151,12 +151,6 @@ operation::ProgramWithCallbacks layernorm_part2_multi_core(
     ////////////////////////////////////////////////////////////////////////////
     //                         Parameters Setup
     ////////////////////////////////////////////////////////////////////////////
-    // These tile capacity counts for CBs need to match the number of tiles expected by the kernel (softmax.cpp)
-    // TODO(AP): this will not work for all Wts possibly, but should work for Wt=8, 12, 16, 32
-    // TODO(AP): can also add support for block_size=7 -> 63, 28
-    // uint32_t WtB    =  div_up(Wt, block_size)*block_size; // Wt padded to be divisible by block size
-    // uint32_t in0_t  =  WtB; // cb_x for no pre-add variant, x=a+b for fused pre-add, extra space for some buffering
-
     /*
     in0_cb: a
     in1_cb: stats
@@ -240,25 +234,7 @@ operation::ProgramWithCallbacks layernorm_part2_multi_core(
         // if (gamma_stick_size_is_power_of_two) {
         uint32_t gamma_log2_stick_size = gamma_stick_size_is_power_of_two ? (std::uint32_t)log2(gamma_stick_size) : 0;
         reader_compile_time_args.push_back((std::uint32_t) gamma_log2_stick_size);
-        // } else {
-        //     reader_compile_time_args.push_back(gamma_stick_size);
-        // }
-        // TODO: only allow power of 2 gammas?
     }
-    // else if (beta.has_value() and beta.value().get_layout() == Layout::ROW_MAJOR) {
-    //     auto beta_stick_size = beta.value().get_legacy_shape()[-1] * beta.value().element_size();
-    //     bool beta_stick_size_is_power_of_two = is_power_of_two_at_least_32(beta_stick_size);
-    //     reader_compile_time_args.push_back((std::uint32_t) beta_stick_size_is_power_of_two);
-    //     if (beta_stick_size_is_power_of_two) {
-    //         uint32_t beta_log2_stick_size = beta_stick_size_is_power_of_two ? (std::uint32_t)log2(beta_stick_size) : 0;
-    //         reader_compile_time_args.push_back((std::uint32_t) beta_log2_stick_size);
-    //     } else {
-    //         reader_compile_time_args.push_back(beta_stick_size);
-    //     }
-    // } else {
-    //     reader_compile_time_args.push_back(0);
-    //     reader_compile_time_args.push_back(0);
-    // }
 
     std::vector<uint32_t> writer_compile_time_args = {
         // interleaved accessor args

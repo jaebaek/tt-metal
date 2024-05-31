@@ -1,9 +1,8 @@
-// SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 
 #include "dataflow_api.h"
-#include "debug/dprint.h"
 
 void kernel_main() {
     const uint32_t dst_addr  = get_arg_val<uint32_t>(0);
@@ -26,7 +25,6 @@ void kernel_main() {
 
     uint32_t tile_id = tile_offset;
     for (uint32_t i = 0; i<num_tiles; i += blk) {
-        DPRINT << "Writing " << blk << " tiles starting from " << tile_id << ENDL();
         cb_wait_front(cb_out, blk);
         uint32_t l1_read_addr = get_read_ptr(cb_out);
         for (uint32_t j = 0; j<blk; j++) {
