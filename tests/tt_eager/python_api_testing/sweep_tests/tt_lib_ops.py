@@ -1159,6 +1159,24 @@ def eltwise_unary_ne(
 
 
 @setup_host_and_device
+def eltwise_unary_nei(
+    x,
+    *args,
+    value,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttl.tensor.nei(t0, value, output_mem_config=output_mem_config)
+
+    return tt2torch_tensor(t1)
+
+
+@setup_host_and_device
 def repeat_interleave(
     x,
     *args,
@@ -2354,6 +2372,7 @@ eltwise_atan2 = make_binary_op(ttl.tensor.atan2)
 eltwise_min = make_binary_op(ttl.tensor.min)
 eltwise_max = make_binary_op(ttl.tensor.max)
 eltwise_ne = make_binary_op(ttl.tensor.ne)
+eltwise_nei = make_binary_op(ttl.tensor.nei)
 eltwise_eq = make_binary_op(ttl.tensor.eq)
 eltwise_gt = make_binary_op(ttl.tensor.gt)
 eltwise_lt = make_binary_op(ttl.tensor.lt)

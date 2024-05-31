@@ -492,6 +492,10 @@ op_map = {
         "tt_op": tt_lib_ops.eltwise_unary_ne,
         "pytorch_op": pytorch_ops.unary_ne,
     },
+    "eltwise-unary_nei": {
+        "tt_op": tt_lib_ops.eltwise_unary_nei,
+        "pytorch_op": pytorch_ops.unary_nei,
+    },
     "eltwise-erf": {
         "tt_op": tt_lib_ops.eltwise_erf,
         "pytorch_op": pytorch_ops.erf,
@@ -596,6 +600,10 @@ op_map = {
     "eltwise-ne": {
         "tt_op": tt_lib_ops.eltwise_ne,
         "pytorch_op": pytorch_ops.ne,
+    },
+    "eltwise-nei": {
+        "tt_op": tt_lib_ops.eltwise_nei,
+        "pytorch_op": pytorch_ops.nei,
     },
     "eltwise-bias_gelu": {
         "tt_op": tt_lib_ops.eltwise_bias_gelu,

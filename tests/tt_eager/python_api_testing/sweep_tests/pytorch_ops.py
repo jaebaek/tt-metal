@@ -952,6 +952,15 @@ def ne(x, y, *args, **kwargs):
         return x != y
 
 
+def nei(x, y, *args, **kwargs):
+    return x.copy_(x != y)
+
+
+def unary_nei(x, *args, **kwargs):
+    value = kwargs.pop("value")
+    return x.copy_(x != value)
+
+
 def unary_gt(x, *args, **kwargs):
     value = kwargs.pop("value")
     result = torch.gt(x, value)
