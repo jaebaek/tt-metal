@@ -928,6 +928,15 @@ def gte(x, y, *args, **kwargs):
         return x >= y
 
 
+def gei(x, y, *args, **kwargs):
+    return x.ge_(y)
+
+
+def unary_gei(x, *args, **kwargs):
+    value = kwargs.pop("value")
+    return x.ge_(value)
+
+
 def gt(x, y, *args, **kwargs):
     if "scalar" in kwargs:
         scalar = kwargs.pop("scalar")

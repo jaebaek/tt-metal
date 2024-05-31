@@ -621,6 +621,14 @@ op_map = {
         "tt_op": tt_lib_ops.eltwise_gte,
         "pytorch_op": pytorch_ops.gte,
     },
+    "eltwise-gei": {
+        "tt_op": tt_lib_ops.eltwise_gei,
+        "pytorch_op": pytorch_ops.gei,
+    },
+    "eltwise-unary_gei": {
+        "tt_op": tt_lib_ops.eltwise_unary_gei,
+        "pytorch_op": pytorch_ops.unary_gei,
+    },
     "eltwise-lte": {
         "tt_op": tt_lib_ops.eltwise_lte,
         "pytorch_op": pytorch_ops.lte,

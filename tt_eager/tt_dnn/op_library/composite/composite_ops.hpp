@@ -195,7 +195,17 @@ Tensor div_no_nan(
     float value,
     const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG);
 
-// xlogy(x,y))=x*log(y)
+Tensor gei(
+    Tensor& input_a,
+    Tensor& input_b,
+    std::optional<MemoryConfig> output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG);
+
+Tensor gei(
+    Tensor& input_a,
+    float value,
+    std::optional<MemoryConfig> output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG);
+
+// xlogy(x,y)=x*log(y)
 Tensor xlogy(
     const Tensor& input_a,
     const Tensor& input_b,
