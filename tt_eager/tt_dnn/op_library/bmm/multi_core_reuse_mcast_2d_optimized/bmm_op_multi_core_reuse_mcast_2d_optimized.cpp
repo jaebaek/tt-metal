@@ -27,7 +27,6 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     bool fp32_dest_acc_en,
     bool math_approx_mode,
     bool packer_l1_acc,
-    CoreCoord core_range,
     uint32_t B,
     uint32_t M,
     uint32_t N,
@@ -113,46 +112,53 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
 
     uint32_t start_core_x = 0;
     uint32_t start_core_y = 0;
-    uint32_t num_cores_c = core_range.x;
-    uint32_t num_cores_r = core_range.y;
+
+    uint32_t num_blocks_y = (M - 1) / per_core_M + 1;
+    uint32_t num_blocks_x = (N - 1) / per_core_N + 1;
+    if (transpose_mcast) {
+        std::swap(num_blocks_x, num_blocks_y);
+    }
+    uint32_t num_cores_with_work_c = num_blocks_x;
+    uint32_t num_cores_with_work_r = num_blocks_y;
+
     CoreRange all_cores(
         {(std::size_t)start_core_x, (std::size_t)start_core_y},
-        {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)start_core_y + num_cores_r - 1});
+        {(std::size_t)start_core_x + num_cores_with_work_c - 1, (std::size_t)start_core_y + num_cores_with_work_r - 1});
 
     CoreRange top_left_corner(
         {(std::size_t)start_core_x, (std::size_t)start_core_y}, {(std::size_t)start_core_x, (std::size_t)start_core_y});
 
     CoreRange left_column(
         {(std::size_t)start_core_x, (std::size_t)start_core_y},
-        {(std::size_t)start_core_x, (std::size_t)start_core_y + num_cores_r - 1});
+        {(std::size_t)start_core_x, (std::size_t)start_core_y + num_cores_with_work_r - 1});
 
     CoreRange top_row(
         {(std::size_t)start_core_x, (std::size_t)start_core_y},
-        {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)start_core_y});
+        {(std::size_t)start_core_x + num_cores_with_work_c - 1, (std::size_t)start_core_y});
 
     CoreRange all_except_left_column(
         {(std::size_t)start_core_x + 1, (std::size_t)start_core_y},
-        {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)start_core_y + num_cores_r - 1});
+        {(std::size_t)start_core_x + num_cores_with_work_c - 1, (std::size_t)start_core_y + num_cores_with_work_r - 1});
 
     CoreRange all_except_top_row(
         {(std::size_t)start_core_x, (std::size_t)start_core_y + 1},
-        {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)start_core_y + num_cores_r - 1});
+        {(std::size_t)start_core_x + num_cores_with_work_c - 1, (std::size_t)start_core_y + num_cores_with_work_r - 1});
 
     CoreRange left_column_except_corner(
         {(std::size_t)start_core_x, (std::size_t)start_core_y + 1},
-        {(std::size_t)start_core_x, (std::size_t)start_core_y + num_cores_r - 1});
+        {(std::size_t)start_core_x, (std::size_t)start_core_y + num_cores_with_work_r - 1});
 
     CoreRange top_row_except_corner(
         {(std::size_t)start_core_x + 1, (std::size_t)start_core_y},
-        {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)start_core_y});
+        {(std::size_t)start_core_x + num_cores_with_work_c - 1, (std::size_t)start_core_y});
 
     CoreRange in0_sender = left_column;
     CoreRange in0_sender_in1_receiver = left_column_except_corner;
     CoreRange in1_sender = top_row;
     CoreRange in0_receiver_in1_sender = top_row_except_corner;
 
-    uint32_t in0_end = num_cores_r - 1;
-    uint32_t in1_end = num_cores_c - 1;
+    uint32_t in0_end = num_cores_with_work_r - 1;
+    uint32_t in1_end = num_cores_with_work_c - 1;
 
     // in1 is the reader of weights/output writer, and we choose to make it use the optimized reader noc
     tt_metal::NOC in0_noc = detail::GetPreferredNOCForDRAMWrite(device->arch());
@@ -171,19 +177,19 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     // Not exactly half-half; this seems to get slightly better perf for fused qkv and selfout
     // TODO: Experiment with different splits?
 
-    bool split_half = num_cores_c > 2 && !in0_is_sharded;
-    uint32_t half_core = split_half ? (num_cores_c) / 2 : num_cores_c - 1;
+    bool split_half = num_cores_with_work_c > 2 && !in0_is_sharded;
+    uint32_t half_core = split_half ? (num_cores_with_work_c) / 2 : num_cores_with_work_c - 1;
 
     CoreRange in0_receiver_in1_receiver_left_half(
         {(std::size_t)start_core_x + 1, (std::size_t)start_core_y + 1},
-        {(std::size_t)start_core_x + half_core, (std::size_t)start_core_y + num_cores_r - 1});
+        {(std::size_t)start_core_x + half_core, (std::size_t)start_core_y + num_cores_with_work_r - 1});
 
     CoreRange in0_receiver_in1_receiver_right_half({0, 0}, {0, 0});
 
     if (split_half) {
         in0_receiver_in1_receiver_right_half = {
             {(std::size_t)start_core_x + half_core + 1, (std::size_t)start_core_y + 1},
-            {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)start_core_y + num_cores_r - 1}};
+            {(std::size_t)start_core_x + num_cores_with_work_c - 1, (std::size_t)start_core_y + num_cores_with_work_r - 1}};
     }
 
     // Mcast args
@@ -209,9 +215,9 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         uint32_t num_x, num_y;
         if (transpose_mcast) {
             num_x = 1;
-            num_y = num_cores_r;
+            num_y = num_cores_with_work_r;
         } else {
-            num_x = num_cores_c;
+            num_x = num_cores_with_work_c;
             num_y = 1;
         }
         in0_sender_compile_time_args = {
@@ -648,16 +654,16 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     if (in0_block_sharded) {
         if (transpose_mcast) {
             diff_start_coord = device->worker_core_from_logical_core({0, start_core_y}).y;
-            diff_end_coord = device->worker_core_from_logical_core({0, start_core_y + num_cores_r - 1}).y;
-            in0_mcast_noc_y.reserve(num_cores_r);
-            for (uint32_t core_idx_y = 0; core_idx_y < num_cores_r; ++core_idx_y) {
+            diff_end_coord = device->worker_core_from_logical_core({0, start_core_y + num_cores_with_work_r - 1}).y;
+            in0_mcast_noc_y.reserve(num_cores_with_work_r);
+            for (uint32_t core_idx_y = 0; core_idx_y < num_cores_with_work_r; ++core_idx_y) {
                 in0_mcast_noc_y.push_back(device->worker_core_from_logical_core({0, core_idx_y}).y);
             }
         } else {
             diff_start_coord = device->worker_core_from_logical_core({start_core_x, 0}).x;
-            diff_end_coord = device->worker_core_from_logical_core({start_core_x + num_cores_c - 1, 0}).x;
-            in0_mcast_noc_x.reserve(num_cores_c);
-            for (uint32_t core_idx_x = 0; core_idx_x < num_cores_c; ++core_idx_x) {
+            diff_end_coord = device->worker_core_from_logical_core({start_core_x + num_cores_with_work_c - 1, 0}).x;
+            in0_mcast_noc_x.reserve(num_cores_with_work_c);
+            for (uint32_t core_idx_x = 0; core_idx_x < num_cores_with_work_c; ++core_idx_x) {
                 in0_mcast_noc_x.push_back(device->worker_core_from_logical_core({core_idx_x, 0}).x);
             }
         }
@@ -675,10 +681,10 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     for (const auto& core : cores) {
         CoreCoord left_core = {(std::size_t)start_core_x, (std::size_t)core.y};
         CoreCoord left_core_plus_one = {(std::size_t)start_core_x + 1, (std::size_t)core.y};
-        CoreCoord right_core = {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)core.y};
+        CoreCoord right_core = {(std::size_t)start_core_x + num_cores_with_work_c - 1, (std::size_t)core.y};
         CoreCoord top_core = {(std::size_t)core.x, (std::size_t)start_core_y};
         CoreCoord top_core_plus_one = {(std::size_t)core.x, (std::size_t)start_core_y + 1};
-        CoreCoord bottom_core = {(std::size_t)core.x, (std::size_t)start_core_y + num_cores_r - 1};
+        CoreCoord bottom_core = {(std::size_t)core.x, (std::size_t)start_core_y + num_cores_with_work_r - 1};
 
         auto left_core_physical = device->worker_core_from_logical_core(left_core);
         auto left_core_plus_one_physical = device->worker_core_from_logical_core(left_core_plus_one);
@@ -902,8 +908,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
          in1_receiver_other_cores,
          cb_src2,
          cb_output,
-         num_cores_r,
-         num_cores_c,
+         num_cores_with_work_r,
+         num_cores_with_work_c,
          start_core_x,
          start_core_y,
          transpose_mcast,
@@ -1100,18 +1106,14 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_(
     // Calculate number of blocks along x and y; tensor dims are padded up to 512
     uint32_t num_blocks_y = (Mt - 1) / per_core_M + 1;
     uint32_t num_blocks_x = (Nt - 1) / per_core_N + 1;
-    uint32_t num_blocks_total = num_blocks_y * num_blocks_x;
-    TT_FATAL(
-        num_blocks_total <= num_cores_x * num_cores_y,
-        fmt::format(
-            "Num total blocks must be smaller than num blocks y and num blocks x: {} <= {} * {}",
-            num_blocks_total,
-            num_cores_x,
-            num_cores_y));
     if (transpose_mcast) {
         std::swap(num_blocks_x, num_blocks_y);
     }
-    CoreCoord core_range = bmm_op_utils::get_core_range(num_blocks_y, num_blocks_x, num_cores_y, num_cores_x);
+
+    // TODO: Max used grid can actually exceed mcast receiver grid if in0 is sharded
+    // TODO: Move these validates to op validate and properly check for this
+    TT_FATAL(num_blocks_x <= num_cores_x, "Num output blocks along x must be smaller than number of columns in compute grid!");
+    TT_FATAL(num_blocks_y <= num_cores_y, "Num output blocks along y must be smaller than number of rows in compute grid!");
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Grayskull Device Setup
@@ -1123,14 +1125,13 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_(
     //                      Application Setup
     ////////////////////////////////////////////////////////////////////////////
 
-    if (core_range.x > 1 and core_range.y > 1) {
+    if (num_blocks_x > 1 and num_blocks_y > 1) {
         return reuse_mcast_optimized_helpers::create_program_mcast_in0_in1(
             device,
             math_fidelity,
             fp32_dest_acc_en,
             math_approx_mode,
             packer_l1_acc,
-            core_range,
             B,
             Mt,
             Nt,
@@ -1152,7 +1153,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_(
             bias_data_format,
             output_data_format,
             untilize_out);
-    } else if (core_range.x > 1 or core_range.y > 1) {
+    } else if (num_blocks_x > 1 or num_blocks_y > 1) {
         // Refer to bmm_op_multi_core_reuse_mcast_padding_generalized.cpp
         TT_FATAL(false, "1D mcast for in0 or in1 is not implemented yet.");
     } else {
