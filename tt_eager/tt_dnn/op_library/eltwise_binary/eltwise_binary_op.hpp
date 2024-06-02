@@ -50,7 +50,7 @@ operation::ProgramWithCallbacks eltwise_binary_multi_core(
 struct EltwiseBinary {
     const BinaryOpType op_type;
     const std::optional<std::vector<UnaryWithParam>> fused_activations;
-    const MemoryConfig output_mem_config;
+    const std::optional< MemoryConfig> output_mem_config;
     const DataType output_dtype;
     const bool in_place;
 
@@ -104,9 +104,12 @@ struct make_eltwise_binary {
         const Tensor &input_tensor_a,
         const Tensor &input_tensor_b,
         std::optional<std::vector<UnaryWithParam>> fused_activations = std::nullopt,
-        const MemoryConfig &output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        std::optional<MemoryConfig> output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         std::optional<const DataType> output_dtype = std::nullopt,
         std::optional<Tensor> output_tensor = std::nullopt) const {
+        if(output_tensor.has_value()){
+            output_mem_config = output_tensor.value().memory_config();
+        }
         std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor_a, input_tensor_b}))};
 
         operation::launch_op(
@@ -120,12 +123,12 @@ struct make_eltwise_binary {
                     if (shape_a[0] > shape_b[0])
                     {
                         Shape shape ({shape_a[0],1,1,1});
-                        in_b = repeat(in_b, shape, output_mem_config);
+                        in_b = repeat(in_b, shape, operation::DEFAULT_OUTPUT_MEMORY_CONFIG);
                     }
                     else
                     {
                         Shape shape ({shape_b[0],1,1,1});
-                        in_a = repeat(in_a, shape, output_mem_config);
+                        in_a = repeat(in_a, shape, operation::DEFAULT_OUTPUT_MEMORY_CONFIG);
                     }
                 }
                 TT_FATAL(
@@ -136,7 +139,7 @@ struct make_eltwise_binary {
                         EltwiseBinary{
                             binary_op_type,
                             fused_activations,
-                            output_mem_config,
+                            output_mem_config.value(),
                             output_dtype.value_or(in_a.get_dtype()),
                             false},
                         {in_a, in_b}, {}, {output_tensor});
@@ -178,11 +181,14 @@ inline Tensor add(
     const Tensor &input_tensor_a,
     const Tensor &input_tensor_b,
     std::optional<std::vector<UnaryWithParam>> fused_activations = std::nullopt,
-    const MemoryConfig &output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+    std::optional< MemoryConfig> output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
     std::optional<const DataType> output_dtype = std::nullopt,
     bool in_place = false,
     std::optional<Tensor> output_tensor = std::nullopt) {
     std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor_a, input_tensor_b}))};
+    if(output_tensor.has_value()){
+        output_mem_config = output_tensor.value().memory_config();
+    }
     operation::launch_op(
         [fused_activations, output_mem_config, output_dtype, in_place, output_tensor] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
             auto& input_tensor_a = input_tensors.at(0);
@@ -197,12 +203,12 @@ inline Tensor add(
                 if (shape_a[0] > shape_b[0])
                 {
                     Shape shape ({shape_a[0],1,1,1});
-                    in_b = repeat(input_tensor_b, shape, output_mem_config);
+                    in_b = repeat(input_tensor_b, shape, operation::DEFAULT_OUTPUT_MEMORY_CONFIG);
                 }
                 else
                 {
                     Shape shape ({shape_b[0],1,1,1});
-                    in_a = repeat(input_tensor_a, shape, output_mem_config);
+                    in_a = repeat(input_tensor_a, shape, operation::DEFAULT_OUTPUT_MEMORY_CONFIG);
                 }
             }
             TT_FATAL(
@@ -213,7 +219,7 @@ inline Tensor add(
                 EltwiseBinary{
                     BinaryOpType::ADD,
                     fused_activations,
-                    output_mem_config,
+                    output_mem_config.value(),
                     output_dtype.value_or(in_a.get_dtype()),
                     in_place},
                 {in_a, in_b}, {}, {output_tensor});
