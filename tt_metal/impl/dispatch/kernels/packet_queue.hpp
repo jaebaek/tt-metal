@@ -261,7 +261,7 @@ public:
         else if (this->remote_update_network_type == DispatchRemoteNetworkType::ETH) {
             eth_write_remote_reg(reg_addr, val);
         } else {
-            uint64_t dest_addr = NOC_XY_ADDR(this->remote_x, this->remote_y, reg_addr);
+            uint64_t dest_addr = NOC_XY_ADDR(NOC_X(this->remote_x), NOC_Y(this->remote_y), reg_addr);
             noc_inline_dw_write(dest_addr, val);
         }
     }
@@ -784,7 +784,7 @@ public:
         } else if (this->remote_update_network_type == DispatchRemoteNetworkType::ETH) {
             internal_::eth_send_packet(0, src_addr/PACKET_WORD_SIZE_BYTES, dest_addr/PACKET_WORD_SIZE_BYTES, num_words);
         } else {
-            uint64_t noc_dest_addr = NOC_XY_ADDR(this->remote_x, this->remote_y, dest_addr);
+            uint64_t noc_dest_addr = NOC_XY_ADDR(NOC_X(this->remote_x), NOC_Y(this->remote_y), dest_addr);
             noc_async_write(src_addr, noc_dest_addr, num_words*PACKET_WORD_SIZE_BYTES);
         }
     }
