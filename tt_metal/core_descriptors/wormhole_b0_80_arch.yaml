@@ -12,7 +12,7 @@ galaxy:
 
     compute_with_storage_grid_range: # Logical only start and end [x, y]
       start: [0, 0]
-      end: [7, 7]
+      end: [7, 6]
 
     storage_cores:
       []
@@ -29,7 +29,7 @@ galaxy:
 
     compute_with_storage_grid_range: # Logical only start and end [x, y]
       start: [0, 0]
-      end: [7, 7]
+      end: [7, 6]
 
     storage_cores:
       []
