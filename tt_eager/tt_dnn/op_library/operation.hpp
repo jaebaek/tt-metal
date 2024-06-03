@@ -528,7 +528,9 @@ struct DeviceOperation final {
                const Tensors& input_tensors,
                const OptionalConstTensors& optional_input_tensors,
                const OptionalTensors& optional_output_tensors) -> void {
+                std::cout << "ttnn::CONFIG.enable_fast_runtime_mode " << ttnn::CONFIG.enable_fast_runtime_mode << "\n";
                 if (ttnn::CONFIG.enable_fast_runtime_mode) {
+                    std::cout << "ttnn::CONFIG.enable_fast_runtime_mode " << ttnn::CONFIG.enable_fast_runtime_mode << "\n";
                     return;
                 }
                 const auto& operation = *reinterpret_cast<const std::decay_t<T>*>(&storage);
