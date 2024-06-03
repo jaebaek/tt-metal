@@ -920,6 +920,15 @@ def lt(x, y, *args, **kwargs):
         return x < y
 
 
+def lti(x, y, *args, **kwargs):
+    return x.lt_(y)
+
+
+def unary_lti(x, *args, **kwargs):
+    value = kwargs.pop("value")
+    return x.lt_(value)
+
+
 def gte(x, y, *args, **kwargs):
     if "scalar" in kwargs:
         scalar = kwargs.pop("scalar")

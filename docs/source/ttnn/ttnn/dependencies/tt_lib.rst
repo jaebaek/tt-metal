@@ -499,6 +499,8 @@ Tensor relational operations
 
 .. autofunction:: tt_lib.tensor.lt
 
+.. autofunction:: tt_lib.tensor.lti
+
 .. autofunction:: tt_lib.tensor.lte
 
 .. autofunction:: tt_lib.tensor.eq
