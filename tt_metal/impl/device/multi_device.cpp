@@ -90,14 +90,7 @@ int DeviceMesh::num_devices() const
 }
 
 void DeviceMesh::close_devices() {
-    // TODO: change api to a yield, shouldn't allow closing sub grids in a pool of devices
-    tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
-    for (const auto &[device_id, device] : managed_devices) {
-        if (device->is_initialized()) {
-            tt::tt_metal::detail::DeallocateBuffers(device);
-            device->close();
-        }
-    }
+    tt::tt_metal::detail::CloseDevices(managed_devices);
     mesh_devices.clear();
     managed_devices.clear();
 }
