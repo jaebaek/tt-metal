@@ -115,6 +115,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
 
     uint32_t num_blocks_y = (M - 1) / per_core_M + 1;
     uint32_t num_blocks_x = (N - 1) / per_core_N + 1;
+    uint32_t in0_end = num_blocks_y - 1;  // also used as in1_mcast_num_dests and in1_mcast_num_cores
+    uint32_t in1_end = num_blocks_x - 1;  // also used as in0_mcast_num_dests and in0_mcast_num_cores
     uint32_t num_cores_with_work_c = num_blocks_x;
     uint32_t num_cores_with_work_r = num_blocks_y;
     if (transpose_mcast) {
@@ -173,22 +175,39 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     CoreRange in0_sender_in1_receiver = left_column_except_corner;
     CoreRange in1_sender = top_row;
     CoreRange in0_receiver_in1_sender = top_row_except_corner;
-
-    uint32_t in0_end = num_cores_with_work_r - 1;
-    uint32_t in1_end = num_cores_with_work_c - 1;
-
-    // in1 is the reader of weights/output writer, and we choose to make it use the optimized reader noc
-    tt_metal::NOC in0_noc = detail::GetPreferredNOCForDRAMWrite(device->arch());
-    tt_metal::NOC in1_noc = detail::GetPreferredNOCForDRAMRead(device->arch());
-    tt_metal::NOC in0_split_noc = detail::GetPreferredNOCForDRAMRead(device->arch());
-    tt_metal::NOC in1_split_noc = detail::GetPreferredNOCForDRAMWrite(device->arch());
     if (transpose_mcast) {
         std::swap(in0_sender, in1_sender);
         std::swap(in0_sender_in1_receiver, in0_receiver_in1_sender);
-        std::swap(in0_end, in1_end);
     }
+
+    // Only used for in0 block sharded
+    CoreRange in0_mcast_cores_with_work_and_in_receiver_grid(
+        {(std::size_t)start_core_x, (std::size_t)start_core_y},
+        {(std::size_t)start_core_x, (std::size_t)start_core_y});  // Placeholder
+    CoreRange in0_mcast_cores_without_work_and_not_in_receiver_grid(
+        {(std::size_t)start_core_x, (std::size_t)start_core_y},
+        {(std::size_t)start_core_x, (std::size_t)start_core_y});  // Placeholder
     if (in0_block_sharded) {
-        in0_sender = all_cores;
+        in0_mcast_cores_with_work_and_in_receiver_grid = all_cores_with_work;
+
+        CoreCoord in0_shard_grid = in0_buffer->shard_spec().grid().bounding_box().grid_size();
+        if (transpose_mcast) {
+            uint32_t in0_sender_num_cores_along_width = in0_shard_grid.y;
+            if (in0_sender_num_cores_along_width > num_blocks_x) {
+                in0_mcast_cores_without_work_and_not_in_receiver_grid = CoreRange(
+                    {(std::size_t)start_core_x, (std::size_t)start_core_y + num_cores_with_work_r - 1},
+                    {(std::size_t)start_core_x + num_cores_with_work_c - 1,
+                     (std::size_t)start_core_y + in0_sender_num_cores_along_width - 1});
+            }
+        } else {
+            uint32_t in0_sender_num_cores_along_width = in0_shard_grid.x;
+            if (in0_sender_num_cores_along_width > num_blocks_x) {
+                in0_mcast_cores_without_work_and_not_in_receiver_grid = CoreRange(
+                    {(std::size_t)start_core_x + num_cores_with_work_c - 1, (std::size_t)start_core_y},
+                    {(std::size_t)start_core_x + in0_sender_num_cores_along_width - 1,
+                     (std::size_t)start_core_y + num_cores_with_work_r - 1});
+            }
+        }
     }
 
     // Not exactly half-half; this seems to get slightly better perf for fused qkv and selfout
@@ -206,7 +225,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     if (split_half) {
         in0_receiver_in1_receiver_right_half = {
             {(std::size_t)start_core_x + half_core + 1, (std::size_t)start_core_y + 1},
-            {(std::size_t)start_core_x + num_cores_with_work_c - 1, (std::size_t)start_core_y + num_cores_with_work_r - 1}};
+            {(std::size_t)start_core_x + num_cores_with_work_c - 1,
+             (std::size_t)start_core_y + num_cores_with_work_r - 1}};
     }
 
     // Mcast args
@@ -408,18 +428,35 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         mm_kernel_in1_receiver_writer_other_noc_setup_defines["OUT_SHARDED"] = "1";
     }
 
-    auto mm_kernel_in0_sender_id = tt_metal::CreateKernel(
-        program,
-        in0_block_sharded
-            ? "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/"
-              "reader_bmm_tile_layout_in0_sender_receiver_padding_block_sharded.cpp"
-            : "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in0_sender_padding.cpp",
-        in0_sender,
-        tt_metal::DataMovementConfig{
-            .processor = tt_metal::DataMovementProcessor::RISCV_1,
-            .noc = in0_noc,
-            .compile_args = in0_sender_compile_time_args,
-            .defines = mm_kernel_in0_sender_defines});
+    // in1 is the reader of weights/output writer, and we choose to make it use the optimized reader noc
+    tt_metal::NOC in0_noc = detail::GetPreferredNOCForDRAMWrite(device->arch());
+    tt_metal::NOC in1_noc = detail::GetPreferredNOCForDRAMRead(device->arch());
+    tt_metal::NOC in0_split_noc = detail::GetPreferredNOCForDRAMRead(device->arch());
+    tt_metal::NOC in1_split_noc = detail::GetPreferredNOCForDRAMWrite(device->arch());
+
+    KernelHandle mm_kernel_in0_sender_id = 0;
+    if (in0_block_sharded) {
+        mm_kernel_in0_sender_id = tt_metal::CreateKernel(
+            program,
+            "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/"
+            "reader_bmm_tile_layout_in0_sender_receiver_padding_block_sharded.cpp",
+            in0_mcast_cores_with_work_and_in_receiver_grid,
+            tt_metal::DataMovementConfig{
+                .processor = tt_metal::DataMovementProcessor::RISCV_1,
+                .noc = in0_noc,
+                .compile_args = in0_sender_compile_time_args,
+                .defines = mm_kernel_in0_sender_defines});
+    } else {
+        mm_kernel_in0_sender_id = tt_metal::CreateKernel(
+            program,
+            "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in0_sender_padding.cpp",
+            in0_sender,
+            tt_metal::DataMovementConfig{
+                .processor = tt_metal::DataMovementProcessor::RISCV_1,
+                .noc = in0_noc,
+                .compile_args = in0_sender_compile_time_args,
+                .defines = mm_kernel_in0_sender_defines});
+    }
 
     auto mm_kernel_in1_sender_writer_id = tt_metal::CreateKernel(
         program,
@@ -1129,8 +1166,11 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_(
 
     // TODO: Max used grid can actually exceed mcast receiver grid if in0 is sharded
     // TODO: Move these validates to op validate and properly check for this
-    TT_FATAL(num_blocks_x <= num_cores_x, "Num output blocks along x must be smaller than number of columns in compute grid!");
-    TT_FATAL(num_blocks_y <= num_cores_y, "Num output blocks along y must be smaller than number of rows in compute grid!");
+    TT_FATAL(
+        num_blocks_x <= num_cores_x,
+        "Num output blocks along x must be smaller than number of columns in compute grid!");
+    TT_FATAL(
+        num_blocks_y <= num_cores_y, "Num output blocks along y must be smaller than number of rows in compute grid!");
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Grayskull Device Setup

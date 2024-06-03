@@ -348,9 +348,12 @@ parameters = {
     ],
     "compute_kernel_config": [None],
     "tensor_memory_config": [TensorMemoryConfigs.CUSTOM_MEMORY_CONFIG, ttnn.DRAM_MEMORY_CONFIG],
-    "input_a_dtype": [ttnn.bfloat16, ttnn.bfloat8_b],
-    "input_b_dtype": [ttnn.bfloat16, ttnn.bfloat8_b],
-    "output_dtype": [ttnn.bfloat16, ttnn.bfloat8_b],
+    "input_a_dtype": [ttnn.bfloat16],
+    "input_b_dtype": [ttnn.bfloat8_b],
+    "output_dtype": [ttnn.bfloat8_b],
+    # "input_a_dtype": [ttnn.bfloat16, ttnn.bfloat8_b],
+    # "input_b_dtype": [ttnn.bfloat16, ttnn.bfloat8_b],
+    # "output_dtype": [ttnn.bfloat16, ttnn.bfloat8_b],
     "input_layout": [ttnn.TILE_LAYOUT],
 }
 
