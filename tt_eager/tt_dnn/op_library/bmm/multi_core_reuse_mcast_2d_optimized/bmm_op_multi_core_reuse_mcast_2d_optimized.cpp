@@ -115,13 +115,30 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
 
     uint32_t num_blocks_y = (M - 1) / per_core_M + 1;
     uint32_t num_blocks_x = (N - 1) / per_core_N + 1;
-    if (transpose_mcast) {
-        std::swap(num_blocks_x, num_blocks_y);
-    }
     uint32_t num_cores_with_work_c = num_blocks_x;
     uint32_t num_cores_with_work_r = num_blocks_y;
+    if (transpose_mcast) {
+        std::swap(num_cores_with_work_c, num_cores_with_work_r);
+    }
+
+    // in0 shard grid already accounts for transpose_mcast
+    // ie. If transpose_mcast, in0 width is along y
+    uint32_t num_cores_c = num_cores_with_work_c;
+    uint32_t num_cores_r = num_cores_with_work_r;
+    if (in0_is_sharded) {
+        CoreCoord in0_shard_grid = in0_buffer->shard_spec().grid().bounding_box().grid_size();
+        if (transpose_mcast) {
+            num_cores_r = std::max(num_cores_with_work_r, (uint32_t)in0_shard_grid.y);
+        } else {
+            num_cores_c = std::max(num_cores_with_work_c, (uint32_t)in0_shard_grid.x);
+        }
+    }
 
     CoreRange all_cores(
+        {(std::size_t)start_core_x, (std::size_t)start_core_y},
+        {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)start_core_y + num_cores_r - 1});
+
+    CoreRange all_cores_with_work(
         {(std::size_t)start_core_x, (std::size_t)start_core_y},
         {(std::size_t)start_core_x + num_cores_with_work_c - 1, (std::size_t)start_core_y + num_cores_with_work_r - 1});
 
@@ -501,7 +518,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     auto mm_kernel = tt_metal::CreateKernel(
         program,
         "tt_eager/tt_dnn/op_library/bmm/kernels/compute/bmm_large_block_zm_fused_bias_activation.cpp",
-        all_cores,
+        all_cores_with_work,
         tt_metal::ComputeConfig{
             .math_fidelity = math_fidelity,
             .fp32_dest_acc_en = fp32_dest_acc_en,
@@ -672,7 +689,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         std::swap(diff_start_coord, diff_end_coord);
     }
 
-    const auto& cores = grid_to_cores(all_cores.start, all_cores.end, true);
+    const auto& cores = grid_to_cores(all_cores_with_work.start, all_cores_with_work.end, true);
     const auto& in0_sender_cores = grid_to_cores(in0_sender.start, in0_sender.end, true);
     const auto& in1_sender_cores = grid_to_cores(in1_sender.start, in1_sender.end, true);
     const auto& in1_receiver_cores = corerange_to_cores(in1_receiver, std::nullopt, true);
