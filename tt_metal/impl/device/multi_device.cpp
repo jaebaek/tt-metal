@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <memory>
+#include  <cstdlib>
 
 #include "tt_metal/impl/device/multi_device.hpp"
 #include "tt_metal/host_api.hpp"
@@ -30,8 +31,24 @@ DeviceMesh::DeviceMesh(const DeviceGrid& device_grid, const DeviceIds &device_id
     bool is_galaxy = tt::Cluster::instance().is_galaxy_cluster();
     if (is_galaxy) {
         DeviceIds galaxy_device_ids;
-        for (const auto &[dev_id, dev]: managed_devices) {
-            galaxy_device_ids.emplace_back(dev_id);
+        char *env_var_str = std::getenv("TT_METAL_GALAXY_CHIPS");
+
+        // If the environment variable is not empty, parse it.
+        if (env_var_str != nullptr) {
+            while (env_var_str != nullptr) {
+                uint32_t chip;
+                if (sscanf(env_var_str, "%d", &chip) != 1) {
+                    TT_THROW("Invalid {}", env_var_str);
+                }
+                galaxy_device_ids.push_back(chip);
+                env_var_str = strchr(env_var_str, ',');
+                if (env_var_str != nullptr)
+                    env_var_str++;
+            }
+        } else {
+            for (const auto &[dev_id, dev]: managed_devices) {
+                galaxy_device_ids.emplace_back(dev_id);
+            }
         }
         for (int i = 0; i < num_requested_devices; i++) {
             mesh_devices.emplace_back(device_ids[i], std::unique_ptr<Device>(managed_devices.at(galaxy_device_ids[i])));
