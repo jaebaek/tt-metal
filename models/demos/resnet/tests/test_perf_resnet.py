@@ -159,6 +159,8 @@ def run_perf_resnet(
     device,
     model_version,
 ):
+    if is_e75(device):
+        pytest.skip("Resnet is not supported on E75")
     disable_persistent_kernel_cache()
     if batch_size <= 2:
         pytest.skip("Batch size 1 and 2 are not supported with sharded data")
@@ -280,9 +282,6 @@ def test_perf_2cqs_bare_metal(
     expected_compile_time,
     hf_cat_image_sample_input,
 ):
-    if is_e75(device):
-        pytest.skip("Resnet is not supported on E75")
-
     run_perf_resnet(
         batch_size, expected_inference_time, expected_compile_time, hf_cat_image_sample_input, device, "resnet50_2cqs"
     )
@@ -305,8 +304,6 @@ def test_perf_trace_bare_metal(
     hf_cat_image_sample_input,
     enable_async,
 ):
-    if is_e75(device):
-        pytest.skip("Resnet is not supported on E75")
     device.enable_async(enable_async)
     mode = "async" if enable_async else "sync"
     run_perf_resnet(
