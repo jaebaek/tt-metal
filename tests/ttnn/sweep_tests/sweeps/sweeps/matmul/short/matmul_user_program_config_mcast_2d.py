@@ -22,30 +22,30 @@ parameters = {
     "matmul_specs": [
         # Matmul 2D mcast in0: in0 grid == output grid along tensor width
         # loop along in0 shard width
-        # (
-        #     (1,),
-        #     (5 * 128, 7 * 64, 7 * 96),
-        #     ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
-        #         compute_with_storage_grid_size=(7, 5),
-        #         in0_block_w=1,
-        #         out_subblock_h=1,
-        #         out_subblock_w=1,
-        #         per_core_M=4,
-        #         per_core_N=3,
-        #         transpose_mcast=False,
-        #         fused_activation=None,
-        #     ),
-        #     ttnn.MemoryConfig(
-        #         memory_layout=ttnn.TensorMemoryLayout.BLOCK_SHARDED,
-        #         buffer_type=ttnn.BufferType.L1,
-        #         shard_spec=ttnn.ShardSpec(
-        #             ttnn.CoreRangeSet({ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(6, 4))}),
-        #             (128, 64),
-        #             ttnn.ShardOrientation.ROW_MAJOR,
-        #             False,
-        #         ),
-        #     ),
-        # ),
+        (
+            (1,),
+            (5 * 128, 7 * 64, 7 * 96),
+            ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+                compute_with_storage_grid_size=(7, 5),
+                in0_block_w=1,
+                out_subblock_h=1,
+                out_subblock_w=1,
+                per_core_M=4,
+                per_core_N=3,
+                transpose_mcast=False,
+                fused_activation=None,
+            ),
+            ttnn.MemoryConfig(
+                memory_layout=ttnn.TensorMemoryLayout.BLOCK_SHARDED,
+                buffer_type=ttnn.BufferType.L1,
+                shard_spec=ttnn.ShardSpec(
+                    ttnn.CoreRangeSet({ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(6, 4))}),
+                    (128, 64),
+                    ttnn.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            ),
+        ),
         # # no looping along in0 shard width
         # (
         #     (1,),
@@ -123,31 +123,31 @@ parameters = {
         #     ),
         # ),
         # # Matmul 2D mcast in0: in0 grid > output grid along tensor width
-        # loop along in0 shard width
-        (
-            (1,),
-            (5 * 128, 7 * 64, 4 * 96),
-            ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
-                compute_with_storage_grid_size=(7, 5),
-                in0_block_w=1,
-                out_subblock_h=1,
-                out_subblock_w=1,
-                per_core_M=4,
-                per_core_N=3,
-                transpose_mcast=False,
-                fused_activation=None,
-            ),
-            ttnn.MemoryConfig(
-                memory_layout=ttnn.TensorMemoryLayout.BLOCK_SHARDED,
-                buffer_type=ttnn.BufferType.L1,
-                shard_spec=ttnn.ShardSpec(
-                    ttnn.CoreRangeSet({ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(6, 4))}),
-                    (128, 64),
-                    ttnn.ShardOrientation.ROW_MAJOR,
-                    False,
-                ),
-            ),
-        ),
+        # # loop along in0 shard width
+        # (
+        #     (1,),
+        #     (5 * 128, 7 * 64, 4 * 96),
+        #     ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+        #         compute_with_storage_grid_size=(7, 5),
+        #         in0_block_w=1,
+        #         out_subblock_h=1,
+        #         out_subblock_w=1,
+        #         per_core_M=4,
+        #         per_core_N=3,
+        #         transpose_mcast=False,
+        #         fused_activation=None,
+        #     ),
+        #     ttnn.MemoryConfig(
+        #         memory_layout=ttnn.TensorMemoryLayout.BLOCK_SHARDED,
+        #         buffer_type=ttnn.BufferType.L1,
+        #         shard_spec=ttnn.ShardSpec(
+        #             ttnn.CoreRangeSet({ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(6, 4))}),
+        #             (128, 64),
+        #             ttnn.ShardOrientation.ROW_MAJOR,
+        #             False,
+        #         ),
+        #     ),
+        # ),
         # # no looping along in0 shard width
         # (
         #     (1,),

@@ -123,23 +123,6 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         std::swap(num_cores_with_work_c, num_cores_with_work_r);
     }
 
-    // in0 shard grid already accounts for transpose_mcast
-    // ie. If transpose_mcast, in0 width is along y
-    uint32_t num_cores_c = num_cores_with_work_c;
-    uint32_t num_cores_r = num_cores_with_work_r;
-    if (in0_is_sharded) {
-        CoreCoord in0_shard_grid = in0_buffer->shard_spec().grid().bounding_box().grid_size();
-        if (transpose_mcast) {
-            num_cores_r = std::max(num_cores_with_work_r, (uint32_t)in0_shard_grid.y);
-        } else {
-            num_cores_c = std::max(num_cores_with_work_c, (uint32_t)in0_shard_grid.x);
-        }
-    }
-
-    CoreRange all_cores(
-        {(std::size_t)start_core_x, (std::size_t)start_core_y},
-        {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)start_core_y + num_cores_r - 1});
-
     CoreRange all_cores_with_work(
         {(std::size_t)start_core_x, (std::size_t)start_core_y},
         {(std::size_t)start_core_x + num_cores_with_work_c - 1, (std::size_t)start_core_y + num_cores_with_work_r - 1});
@@ -171,6 +154,9 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         {(std::size_t)start_core_x + 1, (std::size_t)start_core_y},
         {(std::size_t)start_core_x + num_cores_with_work_c - 1, (std::size_t)start_core_y});
 
+    ////////////////////////////////////////////////////////////////////////////
+    //                      INTERLEAVED SENDER/RECEIVER
+    ////////////////////////////////////////////////////////////////////////////
     CoreRange in0_sender = left_column;
     CoreRange in0_sender_in1_receiver = left_column_except_corner;
     CoreRange in1_sender = top_row;
@@ -180,6 +166,11 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         std::swap(in0_sender_in1_receiver, in0_receiver_in1_sender);
     }
 
+    ////////////////////////////////////////////////////////////////////////////
+    //                      IN0 SHARDED SENDER/RECEIVER
+    ////////////////////////////////////////////////////////////////////////////
+    uint32_t num_cores_c = num_cores_with_work_c;
+    uint32_t num_cores_r = num_cores_with_work_r;
     // Only used for in0 block sharded
     CoreRange in0_mcast_cores_with_work_and_in_receiver_grid(
         {(std::size_t)start_core_x, (std::size_t)start_core_y},
@@ -191,28 +182,39 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         in0_mcast_cores_with_work_and_in_receiver_grid = all_cores_with_work;
 
         CoreCoord in0_shard_grid = in0_buffer->shard_spec().grid().bounding_box().grid_size();
+        // in0 shard grid already accounts for transpose_mcast
+        // ie. If transpose_mcast, in0 width is along y
+        uint32_t in0_sender_num_cores_along_width = transpose_mcast ? in0_shard_grid.y : in0_shard_grid.x;
+        if (in0_sender_num_cores_along_width > num_blocks_x) {
+            in0_mcast_cores_without_work_and_not_in_receiver_grid =
+                transpose_mcast ? CoreRange(
+                                      {(std::size_t)start_core_x, (std::size_t)start_core_y + num_blocks_x - 1},
+                                      {(std::size_t)start_core_x + num_blocks_y - 1,
+                                       (std::size_t)start_core_y + in0_sender_num_cores_along_width - 1})
+                                : CoreRange(
+                                      {(std::size_t)start_core_x + num_blocks_x - 1, (std::size_t)start_core_y},
+                                      {(std::size_t)start_core_x + in0_sender_num_cores_along_width - 1,
+                                       (std::size_t)start_core_y + num_blocks_y - 1});
+        }
+
+        // Set in0 sender/receiver cores to be maximum
         if (transpose_mcast) {
-            uint32_t in0_sender_num_cores_along_width = in0_shard_grid.y;
-            if (in0_sender_num_cores_along_width > num_blocks_x) {
-                in0_mcast_cores_without_work_and_not_in_receiver_grid = CoreRange(
-                    {(std::size_t)start_core_x, (std::size_t)start_core_y + num_cores_with_work_r - 1},
-                    {(std::size_t)start_core_x + num_cores_with_work_c - 1,
-                     (std::size_t)start_core_y + in0_sender_num_cores_along_width - 1});
-            }
+            num_cores_r = std::max(num_cores_r, in0_sender_num_cores_along_width);
         } else {
-            uint32_t in0_sender_num_cores_along_width = in0_shard_grid.x;
-            if (in0_sender_num_cores_along_width > num_blocks_x) {
-                in0_mcast_cores_without_work_and_not_in_receiver_grid = CoreRange(
-                    {(std::size_t)start_core_x + num_cores_with_work_c - 1, (std::size_t)start_core_y},
-                    {(std::size_t)start_core_x + in0_sender_num_cores_along_width - 1,
-                     (std::size_t)start_core_y + num_cores_with_work_r - 1});
-            }
+            num_cores_c = std::max(num_cores_c, in0_sender_num_cores_along_width);
         }
     }
 
+    // Used for setting up CBs and semaphores by both in0 interleaved or sharded
+    CoreRange all_cores(
+        {(std::size_t)start_core_x, (std::size_t)start_core_y},
+        {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)start_core_y + num_cores_r - 1});
+
+    ////////////////////////////////////////////////////////////////////////////
+    //       RECEIVER-RECEIVER USED BY BOTH IN0 INTERLEAVED OR SHARDED
+    ////////////////////////////////////////////////////////////////////////////
     // Not exactly half-half; this seems to get slightly better perf for fused qkv and selfout
     // TODO: Experiment with different splits?
-
     bool split_half = num_cores_with_work_c > 2 && !in0_is_sharded;
     uint32_t half_core = split_half ? (num_cores_with_work_c) / 2 : num_cores_with_work_c - 1;
 
