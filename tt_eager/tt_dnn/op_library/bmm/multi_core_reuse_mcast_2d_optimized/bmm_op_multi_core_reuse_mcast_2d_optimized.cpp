@@ -115,8 +115,6 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
 
     uint32_t num_blocks_y = (M - 1) / per_core_M + 1;
     uint32_t num_blocks_x = (N - 1) / per_core_N + 1;
-    uint32_t in0_end = num_blocks_y - 1;  // also used as in1_mcast_num_dests and in1_mcast_num_cores
-    uint32_t in1_end = num_blocks_x - 1;  // also used as in0_mcast_num_dests and in0_mcast_num_cores
     uint32_t num_cores_with_work_c = num_blocks_x;
     uint32_t num_cores_with_work_r = num_blocks_y;
     if (transpose_mcast) {
@@ -251,15 +249,16 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     std::vector<uint32_t> in0_sender_compile_time_args;
 
     if (in0_block_sharded) {
-        uint32_t num_x, num_y;
+        uint32_t num_x = num_blocks_x;
+        uint32_t num_y = 1;
         if (transpose_mcast) {
-            num_x = 1;
-            num_y = num_cores_with_work_r;
-        } else {
-            num_x = num_cores_with_work_c;
-            num_y = 1;
+          std::swap(num_x, num_y);
         }
+
         in0_sender_compile_time_args = {
+            (std::uint32_t)1,  // core_has_output_block_work
+            (std::uint32_t)1,  // core_in_in0_receiver_mcast_grid
+
             (std::uint32_t)in0_block_num_tiles,                         // in0_block_num_tiles
             (std::uint32_t)in0_block_num_tiles * in0_single_tile_size,  // in0_block_size_bytes
             // in0/in1 common args
@@ -267,14 +266,14 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
             // in0 mcast args
             (std::uint32_t)in0_mcast_sender_semaphore,
             (std::uint32_t)in0_mcast_receiver_semaphore,
-            (std::uint32_t)(in1_end),  // in0_mcast_num_dests
-            (std::uint32_t)(in1_end),  // in0_mcast_num_cores includes self
-            (std::uint32_t)(num_x),
-            (std::uint32_t)(num_y),
-            (std::uint32_t)(transpose_mcast),
-            (std::uint32_t)(in0_shard_width_in_tiles),
-            (std::uint32_t)(in0_shard_height_in_tiles),
-            (std::uint32_t)(in0_block_w),
+            (std::uint32_t)num_blocks_x,  // in0_mcast_num_dests
+            (std::uint32_t)num_blocks_x,  // in0_mcast_num_cores
+            (std::uint32_t)num_x,
+            (std::uint32_t)num_y,
+            (std::uint32_t)transpose_mcast,
+            (std::uint32_t)in0_shard_width_in_tiles,
+            (std::uint32_t)in0_shard_height_in_tiles,
+            (std::uint32_t)in0_block_w,
             // batch args
             (std::uint32_t)B  // batch
         };
@@ -296,8 +295,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
             // in0 mcast args
             (std::uint32_t)in0_mcast_sender_semaphore,
             (std::uint32_t)in0_mcast_receiver_semaphore,
-            (std::uint32_t)(in1_end),  // in0_mcast_num_dests
-            (std::uint32_t)(in1_end),  // in0_mcast_num_cores
+            (std::uint32_t)(num_blocks_x - 1),  // in0_mcast_num_dests
+            (std::uint32_t)(num_blocks_x - 1),  // in0_mcast_num_cores
             // batch args
             (std::uint32_t)M * K,  // MtKt
             (std::uint32_t)B       // batch
@@ -322,8 +321,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         // in1 mcast args
         (std::uint32_t)in1_mcast_sender_semaphore,
         (std::uint32_t)in1_mcast_receiver_semaphore,
-        (std::uint32_t)(in0_end),  // in1_mcast_num_dests
-        (std::uint32_t)(in0_end),  // in1_mcast_num_cores
+        (std::uint32_t)(num_blocks_y - 1),  // in1_mcast_num_dests
+        (std::uint32_t)(num_blocks_y - 1),  // in1_mcast_num_cores
         // batch args
         (std::uint32_t)K * N,        // KtNt
         (std::uint32_t)B,            // batch
@@ -441,7 +440,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         mm_kernel_in0_sender_id = tt_metal::CreateKernel(
             program,
             "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/"
-            "reader_bmm_tile_layout_in0_sender_receiver_padding_block_sharded.cpp",
+            "reader_bmm_tile_layout_in0_sender_receiver_padding_width_sharded.cpp",
             in0_mcast_cores_with_work_and_in_receiver_grid,
             tt_metal::DataMovementConfig{
                 .processor = tt_metal::DataMovementProcessor::RISCV_1,
@@ -728,6 +727,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         std::swap(diff_start_coord, diff_end_coord);
     }
 
+    uint32_t in0_end_idx = num_blocks_y - 1;
+    uint32_t in1_end_idx = num_blocks_x - 1;
     const auto& cores = grid_to_cores(all_cores_with_work.start, all_cores_with_work.end, true);
     const auto& in0_sender_cores = grid_to_cores(in0_sender.start, in0_sender.end, true);
     const auto& in1_sender_cores = grid_to_cores(in1_sender.start, in1_sender.end, true);
@@ -810,7 +811,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
                 (std::uint32_t)in0_mcast_end.x,    // in0_mcast_dest_noc_end_x
                 (std::uint32_t)in0_mcast_end.y,    // in0_mcast_dest_noc_end_y
             };
-            if (in0_idx == in0_end) {
+            if (in0_idx == in0_end_idx) {
                 // padding args (READER)
                 mm_in0_sender_args.push_back(last_block_h);  // last_block_h
             } else {
@@ -856,7 +857,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
                 (std::uint32_t)in1_idx * per_core_N + in0_idx * per_core_M * N  // out_tensor_start_tile_id
             };
 
-            if (in1_idx == in1_end) {
+            if (in1_idx == in1_end_idx) {
                 // padding args (READER)
                 mm_in1_sender_writer_args.push_back(last_block_w);
 
@@ -903,7 +904,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
                 (std::uint32_t)in1_idx * per_core_N + in0_idx * per_core_M * N  // out_tensor_start_tile_id
             };
 
-            if (in1_idx == in1_end and in0_idx == in0_end) {
+            if (in1_idx == in1_end_idx and in0_idx == in0_end_idx) {
                 // padding args (WRITER)
                 mm_in1_receiver_writer_args.push_back(last_block_num_nonzero_subblocks_h);
                 mm_in1_receiver_writer_args.push_back(last_subblock_of_last_block_h);
@@ -912,7 +913,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
                 mm_in1_receiver_writer_args.push_back(last_subblock_of_last_block_w);
                 mm_in1_receiver_writer_args.push_back(last_block_padded_subblock_tiles_addr_skip);
                 mm_in1_receiver_writer_args.push_back(last_block_padded_block_tiles_w_skip);
-            } else if (in0_idx == in0_end) {
+            } else if (in0_idx == in0_end_idx) {
                 // padding args (WRITER)
                 mm_in1_receiver_writer_args.push_back(last_block_num_nonzero_subblocks_h);
                 mm_in1_receiver_writer_args.push_back(last_subblock_of_last_block_h);
@@ -921,7 +922,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
                 mm_in1_receiver_writer_args.push_back(out_subblock_w);
                 mm_in1_receiver_writer_args.push_back(0);
                 mm_in1_receiver_writer_args.push_back(0);
-            } else if (in1_idx == in1_end) {
+            } else if (in1_idx == in1_end_idx) {
                 // padding args (WRITER)
                 mm_in1_receiver_writer_args.push_back(per_core_M / out_subblock_h);
                 mm_in1_receiver_writer_args.push_back(out_subblock_h);

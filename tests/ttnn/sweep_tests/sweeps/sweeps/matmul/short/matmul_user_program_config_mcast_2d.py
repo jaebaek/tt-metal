@@ -10,7 +10,7 @@ import torch
 
 import ttnn
 
-from tests.ttnn.utils_for_testing import check_with_pcc
+from tests.ttnn.utils_for_testing import check_with_pcc, assert_with_pcc
 from models.utility_functions import torch_random
 
 
@@ -46,31 +46,31 @@ parameters = {
                 ),
             ),
         ),
-        # # no looping along in0 shard width
-        # (
-        #     (1,),
-        #     (5 * 128, 7 * 64, 7 * 96),
-        #     ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
-        #         compute_with_storage_grid_size=(7, 5),
-        #         in0_block_w=2,
-        #         out_subblock_h=1,
-        #         out_subblock_w=1,
-        #         per_core_M=4,
-        #         per_core_N=3,
-        #         transpose_mcast=False,
-        #         fused_activation=None,
-        #     ),
-        #     ttnn.MemoryConfig(
-        #         memory_layout=ttnn.TensorMemoryLayout.BLOCK_SHARDED,
-        #         buffer_type=ttnn.BufferType.L1,
-        #         shard_spec=ttnn.ShardSpec(
-        #             ttnn.CoreRangeSet({ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(6, 4))}),
-        #             (128, 64),
-        #             ttnn.ShardOrientation.ROW_MAJOR,
-        #             False,
-        #         ),
-        #     ),
-        # ),
+        # no looping along in0 shard width
+        (
+            (1,),
+            (5 * 128, 7 * 64, 7 * 96),
+            ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+                compute_with_storage_grid_size=(7, 5),
+                in0_block_w=2,
+                out_subblock_h=1,
+                out_subblock_w=1,
+                per_core_M=4,
+                per_core_N=3,
+                transpose_mcast=False,
+                fused_activation=None,
+            ),
+            ttnn.MemoryConfig(
+                memory_layout=ttnn.TensorMemoryLayout.BLOCK_SHARDED,
+                buffer_type=ttnn.BufferType.L1,
+                shard_spec=ttnn.ShardSpec(
+                    ttnn.CoreRangeSet({ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(6, 4))}),
+                    (128, 64),
+                    ttnn.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            ),
+        ),
         # # Matmul 2D mcast in0: in0 grid < output grid along tensor width
         # # loop along in0 shard width
         # (
@@ -175,10 +175,10 @@ parameters = {
         # ),
     ],
     "batch_matrix_multiply": [False],
-    # "input_a_memory_config": [TensorMemoryConfigs.CUSTOM_MEMORY_CONFIG, ttnn.L1_MEMORY_CONFIG],
+    "input_a_memory_config": [TensorMemoryConfigs.CUSTOM_MEMORY_CONFIG, ttnn.L1_MEMORY_CONFIG],
     # "input_b_memory_config": [ttnn.DRAM_MEMORY_CONFIG],
     # "output_memory_config": [ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG, ttnn.DRAM_MEMORY_CONFIG],
-    "input_a_memory_config": [TensorMemoryConfigs.CUSTOM_MEMORY_CONFIG],
+    # "input_a_memory_config": [TensorMemoryConfigs.CUSTOM_MEMORY_CONFIG],
     "input_b_memory_config": [ttnn.DRAM_MEMORY_CONFIG],
     "output_memory_config": [ttnn.DRAM_MEMORY_CONFIG],
     "input_a_dtype": [ttnn.bfloat16],
@@ -269,8 +269,7 @@ def run(
     output_tensor = ttnn.to_torch(output_tensor)
     output_b = ttnn.to_torch(input_tensor_b)
 
-    msg, pcc = check_with_pcc(output_b, torch_input_tensor_b, 0.9999)
-    print(msg, pcc)
+    msg, pcc = assert_with_pcc(output_b, torch_input_tensor_b, 0.9999)
 
     expected_pcc = 0.99
     return check_with_pcc(torch_output_tensor, output_tensor, expected_pcc)
