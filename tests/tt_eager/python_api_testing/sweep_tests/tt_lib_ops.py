@@ -1139,6 +1139,24 @@ def eltwise_unary_div_no_nan(
 
 
 @setup_host_and_device
+def eltwise_unary_div_trunc(
+    x,
+    *args,
+    value,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttl.tensor.div_trunc(t0, value, output_mem_config=output_mem_config)
+
+    return tt2torch_tensor(t1)
+
+
+@setup_host_and_device
 def lamb_optimizer(
     x,
     y,
@@ -2479,6 +2497,7 @@ def make_binary_op(ttl_tensor_binop):
 eltwise_add = make_binary_op(ttl.tensor.add)
 eltwise_sub = make_binary_op(ttl.tensor.sub)
 eltwise_mul = make_binary_op(ttl.tensor.mul)
+eltwise_div_trunc = make_binary_op(ttl.tensor.div_trunc)
 eltwise_bias_gelu = make_binary_op(ttl.tensor.bias_gelu)
 eltwise_squared_difference = make_binary_op(ttl.tensor.squared_difference)
 eltwise_hypot = make_binary_op(ttl.tensor.hypot)
