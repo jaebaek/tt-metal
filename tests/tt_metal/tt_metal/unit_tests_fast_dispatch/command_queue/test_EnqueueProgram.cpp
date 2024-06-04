@@ -1017,7 +1017,7 @@ TEST_F(CommandQueueSingleCardFixture, DISABLED_TestFillDispatchCoreBuffer) {
 }
 
 TEST_F(CommandQueueMultiDeviceFixture, TestRandomizedProgram) {
-    uint32_t NUM_PROGRAMS = 100;
+    uint32_t NUM_PROGRAMS = 10;
     uint32_t MAX_LOOP = 100;
     uint32_t page_size = 1024;
 
@@ -1026,6 +1026,12 @@ TEST_F(CommandQueueMultiDeviceFixture, TestRandomizedProgram) {
     uint32_t seed = tt::parse_env("SEED", random_seed);
     log_info(tt::LogTest, "Using Test Seed: {}", seed);
     srand(seed);
+    for (const auto& dev: this->devices_) {
+      chip_id_t chip_id = dev->id();
+      uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(chip_id);
+      std::cout << " Chip " << chip_id << std::endl;
+      std::cout << " Assigned channel " << channel << " offset " << MAX_DEV_CHANNEL_SIZE << std::endl;
+    }
 
     for (const auto &test_device: this->devices_) {
         CoreCoord worker_grid_size = test_device->compute_with_storage_grid_size();

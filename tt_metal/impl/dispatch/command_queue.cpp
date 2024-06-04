@@ -964,7 +964,9 @@ void EnqueueProgramCommand::process() {
     CoreType dispatch_core_type =
         dispatch_core_manager::get(this->device->num_hw_cqs()).get_dispatch_core_type(this->device->id());
     if (total_fetch_size_bytes <= dispatch_constants::get(dispatch_core_type).max_prefetch_command_size()) {
+        std::cout << " EQP one fetch q" << std::endl;
         this->manager.issue_queue_reserve(total_fetch_size_bytes, this->command_queue_id);
+        std::cout << " done one fetch q " << std::endl;
         uint32_t write_ptr = this->manager.get_issue_queue_write_ptr(this->command_queue_id);
 
         this->manager.cq_write(
@@ -982,15 +984,19 @@ void EnqueueProgramCommand::process() {
         this->manager.issue_queue_push_back(total_fetch_size_bytes, this->command_queue_id);
 
         // One fetch queue entry for entire program
+        std::cout << " fqueue reserve back " << std::endl;
         this->manager.fetch_queue_reserve_back(this->command_queue_id);
         this->manager.fetch_queue_write(total_fetch_size_bytes, this->command_queue_id);
     } else {
+        std::cout << " EQP multi fetch q" << std::endl;
+
         this->manager.issue_queue_reserve(preamble_fetch_size_bytes, this->command_queue_id);
         uint32_t write_ptr = this->manager.get_issue_queue_write_ptr(this->command_queue_id);
         this->manager.cq_write(
             cached_program_command_sequence.preamble_command_sequence.data(), preamble_fetch_size_bytes, write_ptr);
         this->manager.issue_queue_push_back(preamble_fetch_size_bytes, this->command_queue_id);
         // One fetch queue entry for just the wait and stall, very inefficient
+        std::cout << " wait for prev done fqueue reserve back " << std::endl;
         this->manager.fetch_queue_reserve_back(this->command_queue_id);
         this->manager.fetch_queue_write(preamble_fetch_size_bytes, this->command_queue_id);
 
@@ -1002,6 +1008,7 @@ void EnqueueProgramCommand::process() {
             this->manager.cq_write(cmds.data(), fetch_size_bytes, write_ptr);
             this->manager.issue_queue_push_back(fetch_size_bytes, this->command_queue_id);
             // One fetch queue entry for each runtime args write location, e.g. BRISC/NCRISC/TRISC/ERISC
+            std::cout << " runtime args fqueue reserve back " << std::endl;
             this->manager.fetch_queue_reserve_back(this->command_queue_id);
             this->manager.fetch_queue_write(fetch_size_bytes, this->command_queue_id);
         }
@@ -1012,6 +1019,7 @@ void EnqueueProgramCommand::process() {
             cached_program_command_sequence.program_command_sequence.data(), program_fetch_size_bytes, write_ptr);
         this->manager.issue_queue_push_back(program_fetch_size_bytes, this->command_queue_id);
         // One fetch queue entry for rest of program commands
+        std::cout << " wait and go fqueue reserve back " << std::endl;
         this->manager.fetch_queue_reserve_back(this->command_queue_id);
         this->manager.fetch_queue_write(program_fetch_size_bytes, this->command_queue_id);
     }
