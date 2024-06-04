@@ -278,6 +278,7 @@ class TtFalconModelShared(torch.nn.Module):
                 layer_past_len=layer_past_len,
                 use_cache=use_cache,
             )
+            return 0, 1
             presents += (layer_output[1],)
             layer_output = layer_output[0]
 

@@ -186,6 +186,7 @@ class TtFalconDecoderLayer(nn.Module):
                 output_attentions=output_attentions,
                 use_cache=use_cache,
             )
+            return 0
             attention_output, layer_present = attn_outputs[0], attn_outputs[1]
             mlp_output = self.mlp_decode(layernorm_output)
 

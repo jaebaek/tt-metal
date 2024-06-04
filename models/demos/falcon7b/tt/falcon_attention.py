@@ -8,6 +8,7 @@ from torch import nn
 from typing import List, Optional, Tuple
 
 import ttnn
+import tt_lib
 
 from models.utility_functions import (
     tt2torch_tensor,
@@ -664,6 +665,22 @@ class TtFalconAttentionDecode(nn.Module):
         assert layer_past is not None
         assert layer_past_len <= self.max_position_embeddings
 
+        query_layer_early_allocation = torch_tensors_to_tt_tensors(
+            [torch.randn((batch, 1, self.padded_local_heads, self.head_dim))],
+            tt_lib.tensor.Layout.ROW_MAJOR,
+            tt_lib.tensor.DataType.BFLOAT16,
+            self.model_config["ATTN_BATCH_SHARDED_MEMCFG"](self.padded_local_heads, self.head_dim),
+            self.devices,
+        )
+        key_layer_transposed_early_allocation = torch_tensors_to_tt_tensors(
+            [torch.randn((batch, 1, self.head_dim, padded_layer_past_len))],
+            tt_lib.tensor.Layout.ROW_MAJOR,
+            tt_lib.tensor.DataType.BFLOAT16,
+            # tt_lib.tensor.DataType.BFLOAT8_B,
+            self.model_config["ATTN_BATCH_SHARDED_MEMCFG"](self.head_dim, padded_layer_past_len),
+            self.devices,
+        )
+
         #################
         ### FUSED QKV ###
         #################
@@ -704,6 +721,7 @@ class TtFalconAttentionDecode(nn.Module):
         for i in range(self.num_devices):
             # Update kv_cache in place
             ttnn.experimental.tensor.update_cache(layer_past[i][0], key_layer[i], layer_past_len)
+            key_layer[i].deallocate(True)
         for i in range(self.num_devices):
             # key and value layers will have kv_seq_len padded to nearest 32
             key_layer[i] = ttnn.experimental.tensor.unpad(
@@ -720,6 +738,7 @@ class TtFalconAttentionDecode(nn.Module):
                     sharded_mem_config=self.model_config["ATTN_BATCH_SHARDED_MEMCFG"](
                         padded_layer_past_len, self.head_dim
                     ),
+                    # output_dtype=ttnn.experimental.tensor.DataType.BFLOAT8_B,
                 )
 
             # Pad and transpose Q for batched matmul
@@ -744,6 +763,7 @@ class TtFalconAttentionDecode(nn.Module):
                     self.head_dim,  # Batch must be in dim 0 to match K cache
                 )
 
+            query_layer_early_allocation[0].deallocate(True)
             for i in range(self.num_devices):
                 query_layer[i] = ttnn.experimental.tensor.interleaved_to_sharded(
                     query_layer[i],
@@ -755,6 +775,7 @@ class TtFalconAttentionDecode(nn.Module):
         ######################
         ### PRE-SOFTMAX MM ###
         ######################
+        key_layer_transposed_early_allocation[0].deallocate(True)
         key_layer_transposed = []
         for i in range(self.num_devices):
             key_layer_transposed.append(
@@ -776,6 +797,27 @@ class TtFalconAttentionDecode(nn.Module):
 
         attn_weights = []
         if self.model_config["l1_sharded"]:
+            # tt_lib.device.Synchronize(self.devices[0])
+            # tt_lib.device.DumpDeviceMemoryState(self.devices[0], "0")
+            # breakpoint()
+            # a = torch_tensors_to_tt_tensors(
+            #     [torch.randn((1, 1, 32, 32))],
+            #     tt_lib.tensor.Layout.TILE,
+            #     tt_lib.tensor.DataType.BFLOAT16,  # subsequent tilize op excepts bfloat16 inputs
+            #     self.model_config["CREATE_QKV_HEADS_OUTPUT_MEMCFG"],
+            #     self.devices,
+            # )
+            # b = torch_tensors_to_tt_tensors(
+            #     [torch.randn((1, 1, 32, 32))],
+            #     tt_lib.tensor.Layout.TILE,
+            #     tt_lib.tensor.DataType.BFLOAT16,  # subsequent tilize op excepts bfloat16 inputs
+            #     self.model_config["CREATE_QKV_HEADS_OUTPUT_MEMCFG"],
+            #     self.devices,
+            # )
+            # dummy_op = ttnn.experimental.tensor.add(a[0],b[0],
+            #             output_mem_config=self.model_config["PRE_SOFTMAX_MASK_OUTPUT_MEMCFG"],
+            # )
+            # return 0
             for i, device in enumerate(self.devices):
                 attn_weights.append(
                     ttnn.experimental.operations.primary.matmul(
@@ -793,6 +835,8 @@ class TtFalconAttentionDecode(nn.Module):
                 )
                 query_layer[i].deallocate()
                 key_layer_transposed[i].deallocate(True)
+            # return 0
+            # breakpoint()
         elif is_wormhole_b0():
             for i, device in enumerate(self.devices):
                 attn_weights.append(

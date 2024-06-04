@@ -135,6 +135,8 @@ def get_model_config(model_config_str, prefill_seq_len=0):
     # Use BFP4_B for attention mask in optimized prefill
     model_config["ATTN_MASK_OPTIMIZED_PREFILL_DTYPE"] = BFP4_DTYPE
 
+    # model_config["FUSED_QKV_MM_OUTPUT_DTYPE"] = BFP8_DTYPE
+
     # Matmul Weights must always be BFP8_B
     # Override defaults for certain configs
     for key in model_config.keys():
@@ -142,8 +144,10 @@ def get_model_config(model_config_str, prefill_seq_len=0):
             model_config[key] = BFP8_DTYPE
 
     if model_config_str in ("BFLOAT16-L1", "BFLOAT16-L1_SHARDED"):
-        model_config["ROTARY_EMBEDDING_OUTPUT_MEMCFG"] = L1_MEMCFG
-        model_config["K_CACHE_SLICE_OUTPUT_MEMCFG"] = L1_MEMCFG
+        # model_config["ROTARY_EMBEDDING_OUTPUT_MEMCFG"] = L1_MEMCFG
+        if not model_config["l1_sharded"]:
+            model_config["ROTARY_EMBEDDING_OUTPUT_MEMCFG"] = L1_MEMCFG
+            model_config["K_CACHE_SLICE_OUTPUT_MEMCFG"] = L1_MEMCFG
         model_config["V_CACHE_SLICE_OUTPUT_MEMCFG"] = L1_MEMCFG
         model_config["K_TRANSPOSED_OUTPUT_MEMCFG"] = L1_MEMCFG
         model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"] = L1_MEMCFG
