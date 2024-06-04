@@ -529,8 +529,8 @@ namespace tt::tt_metal::detail{
                 "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
         )doc");
 
-    m_tensor.def("repeat_bw", &tt::tt_metal::repeat_bw,
-            py::arg("grad").noconvert(), py::arg("input").noconvert(), py::arg("shape"), py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, R"doc(
+    m_tensor.def("repeat_bw",  py::overload_cast<const Tensor&, const Tensor&, const Shape&, const MemoryConfig&, const std::vector<bool>&, std::optional<Tensor>>(&repeat_bw),
+            py::arg("grad").noconvert(), py::arg("input").noconvert(), py::arg("shape"), py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, py::arg("are_required_outputs").noconvert() = std::vector<bool>{true}, py::arg("input_grad").noconvert() = std::nullopt, R"doc(
                     Returns a new tensor filled with repetition of input ``input`` tensor according to number of times specified in ``shape``. The rank of ``shape`` should be same as rank of tensor ``input_a``.
                     The limitation in our implementation is N and C should be 1 and the repeat is of any number for such dim, other should be 1.
 
@@ -543,6 +543,27 @@ namespace tt::tt_metal::detail{
                         "input", "Input tensor for which repetition is computed", "Tensor", "Tensor of shape [1, Z, Y, X]", "Yes"
                         "shape", "Shape value", "Shape", "The number of times to repeat this tensor along each dimension", "Yes"
                         "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
+                        "are_required_outputs", "Are Required Outputs", " Bool", "Default value is True", "No"
+                        "input_grad", "Optional Output Tensor", "Tensor", "Default value is None", "No"
+                )doc");
+
+    m_tensor.def("repeat_bw",  py::overload_cast<uint8_t, const Tensor&, const Tensor&, const Shape&, const MemoryConfig&, const std::vector<bool>&, std::optional<Tensor>>(&repeat_bw),
+            py::arg("cq_id").noconvert() = 0, py::arg("grad").noconvert(), py::arg("input").noconvert(), py::arg("shape"), py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, py::arg("are_required_outputs").noconvert() = std::vector<bool>{true}, py::arg("input_grad").noconvert() = std::nullopt, R"doc(
+                    Returns a new tensor filled with repetition of input ``input`` tensor according to number of times specified in ``shape``. The rank of ``shape`` should be same as rank of tensor ``input_a``.
+                    The limitation in our implementation is N and C should be 1 and the repeat is of any number for such dim, other should be 1.
+
+                    Output tensor will have BFLOAT16 data type.
+
+                    .. csv-table::
+                        :header: "Argument", "Description", "Data type", "Valid range", "Required"
+
+                        "queue_id", "queue_id", "uint8_t", "Default is 0", "No"
+                        "grad", "Gradient tensor", "Tensor", "Tensor of shape [W, Z, Y, X]", "Yes"
+                        "input", "Input tensor for which repetition is computed", "Tensor", "Tensor of shape [1, Z, Y, X]", "Yes"
+                        "shape", "Shape value", "Shape", "The number of times to repeat this tensor along each dimension", "Yes"
+                        "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
+                        "are_required_outputs", "Are Required Outputs", " Bool", "Default value is True", "No"
+                        "input_grad", "Optional Output Tensor", "Tensor", "Default value is None", "No"
                 )doc");
 
     m_tensor.def("unary_sub_bw", &tt::tt_metal::unary_sub_bw,
