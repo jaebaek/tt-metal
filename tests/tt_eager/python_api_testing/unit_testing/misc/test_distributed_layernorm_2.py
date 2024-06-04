@@ -42,11 +42,11 @@ def reference_part2(x, gamma, beta, epsilon, stats_gathered, n_devices, is_rmsno
         return (x - global_mean) / torch.sqrt(var + epsilon) * gamma + beta
 
 
-def run_layernorm_part_2(inp_shape, n_devices, is_rmsnorm, dtype, device):
+def run_layernorm_part_2(inp_shape, n_devices, is_rmsnorm, dtype, device, fp32_enabled=False):
     kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
         math_fidelity=ttnn.experimental.tensor.MathFidelity.HiFi4,  # Highest fidelity
         math_approx_mode=False,
-        fp32_dest_acc_en=True,
+        fp32_dest_acc_en=fp32_enabled,
         packer_l1_acc=False,
     )
 
@@ -89,20 +89,24 @@ def run_layernorm_part_2(inp_shape, n_devices, is_rmsnorm, dtype, device):
         )
         tt_gamma = ttnn.as_tensor(
             gamma_chunked[d].reshape(1, 1, -1, 32),
-            dtype=dtype,
+            dtype=ttnn.bfloat16,
             device=device,
             layout=ttnn.ROW_MAJOR_LAYOUT,
             memory_config=ttnn.DRAM_MEMORY_CONFIG,
         )
         tt_beta = ttnn.as_tensor(
             beta_chunked[d].reshape(1, 1, -1, 32),
-            dtype=dtype,
+            dtype=ttnn.bfloat16,
             device=device,
             layout=ttnn.ROW_MAJOR_LAYOUT,
             memory_config=ttnn.DRAM_MEMORY_CONFIG,
         )
         tt_stats = ttnn.as_tensor(
-            stats_tiles, dtype=dtype, device=device, layout=ttnn.TILE_LAYOUT, memory_config=ttnn.DRAM_MEMORY_CONFIG
+            stats_tiles,
+            dtype=ttnn.bfloat16,
+            device=device,
+            layout=ttnn.TILE_LAYOUT,
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
         )
 
         if is_rmsnorm:
@@ -128,6 +132,37 @@ def run_layernorm_part_2(inp_shape, n_devices, is_rmsnorm, dtype, device):
 
 @pytest.mark.parametrize(
     "dtype",
+    (ttnn.bfloat16, ttnn.bfloat8_b),
+    ids=["BFLOAT16", "BFLOAT8_B"],
+)
+@pytest.mark.parametrize(
+    "inp_shape",
+    [
+        (1, 1, 2048, 8192),
+        (1, 1, 128, 8192),
+        (2, 1, 128, 8192),
+    ],
+)
+@pytest.mark.parametrize(
+    "n_devices",
+    [4, 8],
+)
+@pytest.mark.parametrize(
+    "is_rmsnorm",
+    [True, False],
+    ids=["rmsnorm", "layernorm"],
+)
+@pytest.mark.parametrize(
+    "fp32_enabled",
+    [True, False],
+    ids=["fp32_enabled", "fp32_disabled"],
+)
+def test_layernorm_part_2(inp_shape, n_devices, is_rmsnorm, dtype, device, fp32_enabled):
+    run_layernorm_part_2(inp_shape, n_devices, is_rmsnorm, dtype, device, fp32_enabled)
+
+
+@pytest.mark.parametrize(
+    "dtype",
     (ttnn.bfloat16,),
     ids=["BFLOAT16"],
 )
@@ -148,8 +183,21 @@ def run_layernorm_part_2(inp_shape, n_devices, is_rmsnorm, dtype, device):
     [True, False],
     ids=["rmsnorm", "layernorm"],
 )
-def test_layernorm_part_2(inp_shape, n_devices, is_rmsnorm, dtype, device):
-    run_layernorm_part_2(inp_shape, n_devices, is_rmsnorm, dtype, device)
+def test_layernorm_part_2_with_program_cache(inp_shape, n_devices, is_rmsnorm, dtype, device, use_program_cache):
+    dummy_tensors = []
 
+    for i in range(3):
+        dummy_tensors.append(
+            ttnn.as_tensor(
+                torch.randn(inp_shape),
+                dtype=dtype,
+                device=device,
+                layout=ttnn.TILE_LAYOUT,
+                memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            )
+        )
+        run_layernorm_part_2(inp_shape, n_devices, is_rmsnorm, dtype, device)
 
-# TODO: program caching test
+    assert device.num_program_cache_entries() == 1, "Program cache should have only one entry" + str(
+        device.num_program_cache_entries()
+    )

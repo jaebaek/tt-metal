@@ -102,11 +102,13 @@ operation::ProgramWithCallbacks layernorm_part2_multi_core(
     uint32_t block_size = fp32_dest_acc_en ? find_max_divisor(Wt, 4) : find_max_divisor(Wt, 8);
 
     tt::DataFormat in_data_format = tt_metal::datatype_to_dataformat_converter(a.get_dtype());
+    tt::DataFormat stats_data_format = tt_metal::datatype_to_dataformat_converter(stats.get_dtype());
     tt::DataFormat out_data_format = tt_metal::datatype_to_dataformat_converter(output.get_dtype());
     tt::DataFormat cb_data_format = fp32_dest_acc_en ? tt::DataFormat::Float32 : tt::DataFormat::Float16_b;
     tt::DataFormat gamma_cb_data_format = gamma.has_value() ? tt_metal::datatype_to_dataformat_converter(gamma.value().get_dtype()) : tt::DataFormat::Float16_b;
     tt::DataFormat beta_cb_data_format = beta.has_value() ? tt_metal::datatype_to_dataformat_converter(beta.value().get_dtype()) : tt::DataFormat::Float16_b;
     uint32_t in_single_tile_size = tt_metal::detail::TileSize(in_data_format);
+    uint32_t stats_single_tile_size = tt_metal::detail::TileSize(stats_data_format);
     uint32_t single_tile_size = tt_metal::detail::TileSize(cb_data_format);
     uint32_t out_single_tile_size = tt_metal::detail::TileSize(out_data_format);
     uint32_t bfloat16_tile_size = tt_metal::detail::TileSize(tt::DataFormat::Float16_b);
@@ -287,7 +289,7 @@ operation::ProgramWithCallbacks layernorm_part2_multi_core(
     CircularBufferConfig cb_src0_config = CircularBufferConfig(in0_tiles*in_single_tile_size, {{CB::c_in0, in_data_format}}).set_page_size(CB::c_in0, in_single_tile_size);
     CreateCircularBuffer( program, all_cores, cb_src0_config );
     // c_in1 -> stats
-    CircularBufferConfig cb_stats_config = CircularBufferConfig(in1_tiles*in_single_tile_size, {{CB::c_in1, in_data_format}}).set_page_size(CB::c_in1, in_single_tile_size);
+    CircularBufferConfig cb_stats_config = CircularBufferConfig(in1_tiles*stats_single_tile_size, {{CB::c_in1, stats_data_format}}).set_page_size(CB::c_in1, stats_single_tile_size);
     CreateCircularBuffer( program, all_cores, cb_stats_config );
     // c_in2 -> gamma
     if (gamma.has_value()) {
