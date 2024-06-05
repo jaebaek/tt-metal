@@ -245,6 +245,7 @@ class TtMambaSSM(torch.nn.Module):
                 ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1
             ),
             output_dtype=self.configs["dtype"]["activations"],
+            math_fidelity=self.eltwise_math_fidelity,
         )
         ttnn.deallocate(C1)
 
