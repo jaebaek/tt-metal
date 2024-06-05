@@ -52,7 +52,7 @@ class TtFalconMLPOptimized:
             cache_file_name=tt_cache_path / dense_h_to_4h_str,
             preprocess=lambda x: torch.transpose(x.reshape(1, 1, *x.shape), -2, -1),
         )
-        print(self.dense_h_to_4h_weights.shape)
+
         self.dense_4h_to_h_weights = ttnn.as_tensor(
             w2_weight,
             dtype=self.model_config["DENSE_4H_TO_H_MM_WEIGHTS_DTYPE"],
@@ -63,7 +63,6 @@ class TtFalconMLPOptimized:
             cache_file_name=tt_cache_path / dense_4h_to_h_str,
             preprocess=lambda x: torch.transpose(x.reshape(1, 1, *x.shape), -2, -1),
         )
-        print(self.dense_4h_to_h_weights.shape)
 
     def set_model_config(self, model_config):
         self.model_config = model_config
@@ -131,7 +130,6 @@ class TtFalconMLPOptimized:
             overwrite_subblock_h=1,
         )
 
-        print(hidden_states.shape)
         hidden_states = ttnn.all_gather(
             hidden_states,
             dim=3,
@@ -141,8 +139,7 @@ class TtFalconMLPOptimized:
 
         if should_deallocate_ln_tensors:
             x.deallocate(True)
-        print(hidden_states.shape)
-        print(self.dense_4h_to_h_weights.shape)
+
         hidden_states = falcon_prefill_matmul(
             hidden_states,
             self.dense_4h_to_h_weights,
