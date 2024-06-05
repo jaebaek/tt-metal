@@ -316,7 +316,7 @@ def all_devices(request, device_params):
     ttl.device.CloseDevices(devices)
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="module")
 def device_mesh(request, silicon_arch_name, silicon_arch_wormhole_b0):
     import ttnn
 
