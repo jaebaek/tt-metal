@@ -14,14 +14,30 @@ jobs:
     strategy:
       matrix:
         arch: ${{ fromJson(inputs.arch || '["grayskull", "wormhole_b0", "blackhole"]') }}
-
     env:
       TT_METAL_ENV: ${{ vars.TT_METAL_ENV }}
       ARCH_NAME: ${{ matrix.arch }}
       SILENT: 0
       VERBOSE: 1
+      TT_METAL_DOCKER_IMAGE: ubuntu-20.04-amd64
     environment: dev
     runs-on: build
+    container:
+      image: ghcr.io/${{ github.repository }}/ubuntu-20.04-amd64:${{ github.ref_name == 'main' ? 'latest' : github.actor }}
+      env: 
+        TT_METAL_HOME: ${{ env.TT_METAL_HOME }}
+        CONFIG: ${{ env.CONFIG }}
+        ARCH_NAME: ${{ env.ARCH_NAME }}
+        PYTHONPATH: ${{ env.TT_METAL_HOME }}
+        SILENT: ${{ env.SILENT }}
+        VERBOSE: ${{ env.VERBOSE }}
+      options: >
+        -v /home:/home
+        -v /dev/hugepages-1G:/dev/hugepages-1G
+        -v /etc/group:/etc/group:ro
+        -v /etc/passwd:/etc/passwd:ro
+        -v /etc/shadow:/etc/shadow:ro
+        -v /mnt/MLPerf:/mnt/MLPerf
     steps:
       - uses: tenstorrent-metal/metal-workflows/.github/actions/checkout-with-submodule-lfs@v2.0.0
       - name: Set up dynamic env vars for build
@@ -30,11 +46,11 @@ jobs:
       - name: Update submodules
         run: |
           git submodule update --init --recursive
-      - uses: ./.github/actions/install-python-deps
-      - uses: ./.github/actions/load-docker-image
       - name: Build tt-metal cmake build 
         run: |
-          ./scripts/docker/run_docker_cmd.sh -- cmake -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++-17 \
+          ./scripts/docker/run_docker_cmd.sh -- 
+            
+            cmake -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++-17 \
             && cmake --build build --target tests \
             && cmake --build build --target install
       - name: 'Tar files'
