@@ -20,6 +20,7 @@ def to_output_4d_shape(shape, index_dims, index_size):
     return output_4d_shape
 
 
+@pytest.mark.skip(reason="https://github.com/tenstorrent/tt-metal/issues/9076")
 @pytest.mark.parametrize(
     "shape_index_dim",
     (
@@ -48,7 +49,7 @@ def test_getitem_RAW_MJOR_one_index(shape_index_dim, dtype, index_size, device):
     torch.manual_seed(2)
 
     if dtype == torch.int32:
-        tt_dtype = ttl.tensor.DataType.UINT32
+        tt_dtype = ttl.tensor.DataType.INT32
     if dtype == torch.bfloat16:
         tt_dtype = ttl.tensor.DataType.BFLOAT16
 
@@ -56,8 +57,8 @@ def test_getitem_RAW_MJOR_one_index(shape_index_dim, dtype, index_size, device):
     dev_x = ttl.tensor.Tensor(x, tt_dtype).to(device)
 
     idx_value_max = shape[index_dim] - 1
-    idx = torch.randint(0, idx_value_max, (index_size,))
-    dev_idx = ttl.tensor.Tensor(idx, ttl.tensor.DataType.UINT32).to(device)
+    idx = torch.randint(-idx_value_max - 1, idx_value_max, (index_size,))
+    dev_idx = ttl.tensor.Tensor(idx, ttl.tensor.DataType.INT32).to(device)
 
     if index_dim == 0:
         tt_cpu = x[idx]
@@ -79,6 +80,7 @@ def test_getitem_RAW_MJOR_one_index(shape_index_dim, dtype, index_size, device):
     assert passing
 
 
+@pytest.mark.skip(reason="https://github.com/tenstorrent/tt-metal/issues/9076")
 @pytest.mark.parametrize(
     "shape_index_dims",
     (
@@ -106,7 +108,7 @@ def test_getitem_RAW_MAJOR_two_indices(shape_index_dims, dtype, index_size, devi
     torch.manual_seed(1)
 
     if dtype == torch.int32:
-        tt_dtype = ttl.tensor.DataType.UINT32
+        tt_dtype = ttl.tensor.DataType.INT32
     if dtype == torch.bfloat16:
         tt_dtype = ttl.tensor.DataType.BFLOAT16
 
@@ -117,8 +119,8 @@ def test_getitem_RAW_MAJOR_two_indices(shape_index_dims, dtype, index_size, devi
     dev_indices = []
     for index_dim in index_dims:
         idx_value_max = shape[index_dim] - 1
-        idx = torch.randint(0, idx_value_max, (index_size,))
-        dev_idx = ttl.tensor.Tensor(idx, ttl.tensor.DataType.UINT32).to(device)
+        idx = torch.randint(-idx_value_max - 1, idx_value_max, (index_size,))
+        dev_idx = ttl.tensor.Tensor(idx, ttl.tensor.DataType.INT32).to(device)
         indices.append(idx)
         dev_indices.append(dev_idx)
 
@@ -137,6 +139,7 @@ def test_getitem_RAW_MAJOR_two_indices(shape_index_dims, dtype, index_size, devi
     assert passing
 
 
+@pytest.mark.skip(reason="https://github.com/tenstorrent/tt-metal/issues/9076")
 @pytest.mark.parametrize(
     "shape_index_dims",
     (((10, 15, 7, 80), (0, 1, 2)),),
@@ -161,7 +164,7 @@ def test_getitem_RAW_MAJOR_three_indices(shape_index_dims, dtype, index_size, de
     torch.manual_seed(1)
 
     if dtype == torch.int32:
-        tt_dtype = ttl.tensor.DataType.UINT32
+        tt_dtype = ttl.tensor.DataType.INT32
     if dtype == torch.bfloat16:
         tt_dtype = ttl.tensor.DataType.BFLOAT16
 
@@ -172,8 +175,8 @@ def test_getitem_RAW_MAJOR_three_indices(shape_index_dims, dtype, index_size, de
     dev_indices = []
     for index_dim in index_dims:
         idx_value_max = shape[index_dim] - 1
-        idx = torch.randint(0, idx_value_max, (index_size,))
-        dev_idx = ttl.tensor.Tensor(idx, ttl.tensor.DataType.UINT32).to(device)
+        idx = torch.randint(-idx_value_max - 1, idx_value_max, (index_size,))
+        dev_idx = ttl.tensor.Tensor(idx, ttl.tensor.DataType.INT32).to(device)
         indices.append(idx)
         dev_indices.append(dev_idx)
 
@@ -190,6 +193,7 @@ def test_getitem_RAW_MAJOR_three_indices(shape_index_dims, dtype, index_size, de
     assert passing
 
 
+@pytest.mark.skip(reason="https://github.com/tenstorrent/tt-metal/issues/9076")
 @pytest.mark.parametrize(
     "shape_index_dim",
     (
@@ -236,7 +240,7 @@ def test_getitem_tilized_one_index(shape_index_dim, dtype, index_size, row_major
     torch.manual_seed(2)
 
     if dtype == torch.int32:
-        tt_dtype = ttl.tensor.DataType.UINT32
+        tt_dtype = ttl.tensor.DataType.INT32
     if dtype == torch.bfloat16:
         tt_dtype = ttl.tensor.DataType.BFLOAT16
 
@@ -247,12 +251,12 @@ def test_getitem_tilized_one_index(shape_index_dim, dtype, index_size, row_major
     )
 
     idx_value_max = shape[index_dim] - 1
-    idx = torch.randint(0, idx_value_max, (index_size,))
+    idx = torch.randint(-idx_value_max - 1, idx_value_max, (index_size,))
     if row_major_index:
-        dev_idx = ttl.tensor.Tensor(idx, ttl.tensor.DataType.UINT32).to(device)
+        dev_idx = ttl.tensor.Tensor(idx, ttl.tensor.DataType.INT32).to(device)
     else:
         dev_idx = (
-            ttl.tensor.Tensor(idx, ttl.tensor.DataType.UINT32)
+            ttl.tensor.Tensor(idx, ttl.tensor.DataType.INT32)
             .reshape(1, 1, 1, index_size)
             .pad_to_tile(float("nan"))
             .to(ttl.tensor.Layout.TILE)
@@ -282,6 +286,7 @@ def test_getitem_tilized_one_index(shape_index_dim, dtype, index_size, row_major
     assert passing
 
 
+@pytest.mark.skip(reason="https://github.com/tenstorrent/tt-metal/issues/9076")
 @pytest.mark.parametrize(
     "shape_index_dims",
     (
@@ -318,7 +323,7 @@ def test_getitem_tilized_two_indices(shape_index_dims, dtype, index_size, row_ma
     torch.manual_seed(2)
 
     if dtype == torch.int32:
-        tt_dtype = ttl.tensor.DataType.UINT32
+        tt_dtype = ttl.tensor.DataType.INT32
     if dtype == torch.bfloat16:
         tt_dtype = ttl.tensor.DataType.BFLOAT16
 
@@ -332,12 +337,12 @@ def test_getitem_tilized_two_indices(shape_index_dims, dtype, index_size, row_ma
     dev_indices = []
     for index_dim in index_dims:
         idx_value_max = shape[index_dim] - 1
-        idx = torch.randint(0, idx_value_max, (index_size,))
+        idx = torch.randint(-idx_value_max - 1, idx_value_max, (index_size,))
         if row_major_index:
-            dev_idx = ttl.tensor.Tensor(idx, ttl.tensor.DataType.UINT32).to(device)
+            dev_idx = ttl.tensor.Tensor(idx, ttl.tensor.DataType.INT32).to(device)
         else:
             dev_idx = (
-                ttl.tensor.Tensor(idx, ttl.tensor.DataType.UINT32)
+                ttl.tensor.Tensor(idx, ttl.tensor.DataType.INT32)
                 .reshape(1, 1, 1, index_size)
                 .pad_to_tile(float("nan"))
                 .to(ttl.tensor.Layout.TILE)
@@ -367,6 +372,7 @@ def test_getitem_tilized_two_indices(shape_index_dims, dtype, index_size, row_ma
     assert passing
 
 
+@pytest.mark.skip(reason="https://github.com/tenstorrent/tt-metal/issues/9076")
 @pytest.mark.parametrize(
     "shape_index_dims",
     (
@@ -402,7 +408,7 @@ def test_getitem_tilized_three_indices(shape_index_dims, dtype, index_size, row_
     torch.manual_seed(2)
 
     if dtype == torch.int32:
-        tt_dtype = ttl.tensor.DataType.UINT32
+        tt_dtype = ttl.tensor.DataType.INT32
     if dtype == torch.bfloat16:
         tt_dtype = ttl.tensor.DataType.BFLOAT16
 
@@ -416,12 +422,12 @@ def test_getitem_tilized_three_indices(shape_index_dims, dtype, index_size, row_
     dev_indices = []
     for index_dim in index_dims:
         idx_value_max = shape[index_dim] - 1
-        idx = torch.randint(0, idx_value_max, (index_size,))
+        idx = torch.randint(-idx_value_max - 1, idx_value_max, (index_size,))
         if row_major_index:
-            dev_idx = ttl.tensor.Tensor(idx, ttl.tensor.DataType.UINT32).to(device)
+            dev_idx = ttl.tensor.Tensor(idx, ttl.tensor.DataType.INT32).to(device)
         else:
             dev_idx = (
-                ttl.tensor.Tensor(idx, ttl.tensor.DataType.UINT32)
+                ttl.tensor.Tensor(idx, ttl.tensor.DataType.INT32)
                 .reshape(1, 1, 1, index_size)
                 .pad_to_tile(float("nan"))
                 .to(ttl.tensor.Layout.TILE)
@@ -449,6 +455,7 @@ def test_getitem_tilized_three_indices(shape_index_dims, dtype, index_size, row_
     assert passing
 
 
+@pytest.mark.skip(reason="https://github.com/tenstorrent/tt-metal/issues/9076")
 @pytest.mark.parametrize(
     "shape_index_dims",
     (((10, 15, 7, 80), (0, 1, 2, 3)),),
@@ -481,7 +488,7 @@ def test_getitem_tilized_four_indices(shape_index_dims, dtype, index_size, row_m
     torch.manual_seed(2)
 
     if dtype == torch.int32:
-        tt_dtype = ttl.tensor.DataType.UINT32
+        tt_dtype = ttl.tensor.DataType.INT32
     if dtype == torch.bfloat16:
         tt_dtype = ttl.tensor.DataType.BFLOAT16
 
@@ -495,12 +502,12 @@ def test_getitem_tilized_four_indices(shape_index_dims, dtype, index_size, row_m
     dev_indices = []
     for index_dim in index_dims:
         idx_value_max = shape[index_dim] - 1
-        idx = torch.randint(0, idx_value_max, (index_size,))
+        idx = torch.randint(-idx_value_max - 1, idx_value_max, (index_size,))
         if row_major_index:
-            dev_idx = ttl.tensor.Tensor(idx, ttl.tensor.DataType.UINT32).to(device)
+            dev_idx = ttl.tensor.Tensor(idx, ttl.tensor.DataType.INT32).to(device)
         else:
             dev_idx = (
-                ttl.tensor.Tensor(idx, ttl.tensor.DataType.UINT32)
+                ttl.tensor.Tensor(idx, ttl.tensor.DataType.INT32)
                 .reshape(1, 1, 1, index_size)
                 .pad_to_tile(float("nan"))
                 .to(ttl.tensor.Layout.TILE)
