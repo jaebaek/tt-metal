@@ -494,8 +494,8 @@ namespace tt::tt_metal::detail{
                 "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
         )doc");
 
-    m_tensor.def("embedding_bw", &tt::tt_metal::embedding_bw,
-            py::arg("grad").noconvert(), py::arg("input").noconvert(), py::arg("weight").noconvert(), py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, R"doc(
+    m_tensor.def("embedding_bw", py::overload_cast<const Tensor&, const Tensor&, const Tensor&, const MemoryConfig&, const std::vector<bool>&, std::optional<Tensor>>(&embedding_bw),
+            py::arg("grad").noconvert(), py::arg("input").noconvert(), py::arg("weight").noconvert(), py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, py::arg("are_required_outputs").noconvert() = std::vector<bool>{true}, py::arg("input_grad").noconvert() = std::nullopt, R"doc(
             Performs backward operations for embedding_bw function and it returns specific indices of the embedding table specified by the grad tensor.
             The input tensor should be unique.
 
@@ -510,6 +510,29 @@ namespace tt::tt_metal::detail{
                 "input", "Tensor containing rows we want", "Tensor", "Tensor of shape [W, Z, Y, X]", "Yes"
                 "weight", "Tensor", "Tensor", "Tensor of shape [W, Z, Y, X]", "Yes"
                 "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
+                "are_required_outputs", "Boolean values for the required outputs: input_a_grad, input_b_grad ", "List of bool", "Default value is [True, True]", "No"
+                "input_grad", "Optional Output Tensor for input_grad", "Tensor", "Default value is None", "No"
+        )doc");
+
+    m_tensor.def("embedding_bw", py::overload_cast<uint8_t, const Tensor&, const Tensor&, const Tensor&, const MemoryConfig&, const std::vector<bool>&, std::optional<Tensor>>(&embedding_bw),
+            py::arg("cq_id").noconvert() = 0, py::arg("grad").noconvert(), py::arg("input").noconvert(), py::arg("weight").noconvert(), py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, py::arg("are_required_outputs").noconvert() = std::vector<bool>{true}, py::arg("input_grad").noconvert() = std::nullopt, R"doc(
+            Performs backward operations for embedding_bw function and it returns specific indices of the embedding table specified by the grad tensor.
+            The input tensor should be unique.
+
+            Input tensor must have BFLOAT16 data type.
+
+            Output tensors will have BFLOAT16 data type.
+
+            .. csv-table::
+                :header: "Argument", "Description", "Data type", "Valid range", "Required"
+
+                "cq_id", "cq_id", "uint8_t", "Default is 0", "No"
+                "grad", "Gradient tensor", "Tensor", "Tensor of shape [W, Z, Y, X]", "Yes"
+                "input", "Tensor containing rows we want", "Tensor", "Tensor of shape [W, Z, Y, X]", "Yes"
+                "weight", "Tensor", "Tensor", "Tensor of shape [W, Z, Y, X]", "Yes"
+                "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
+                "are_required_outputs", "Boolean values for the required outputs: input_a_grad, input_b_grad ", "List of bool", "Default value is [True, True]", "No"
+                "input_grad", "Optional Output Tensor for input_grad", "Tensor", "Default value is None", "No"
         )doc");
 
     m_tensor.def("sub_bw", &tt::tt_metal::sub_bw,

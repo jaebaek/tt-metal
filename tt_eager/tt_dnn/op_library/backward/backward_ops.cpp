@@ -593,24 +593,50 @@ std::vector<Tensor> fill_bw(const Tensor& grad, const MemoryConfig& output_mem_c
     return operation::decorate_as_composite(__func__, _fill_bw)(grad, output_mem_config);
 }
 
-std::vector<Tensor> _embedding_bw(
-    const Tensor& grad, const Tensor& input, const Tensor& weight, const MemoryConfig& output_mem_config) {
+std::vector<std::optional<Tensor>> _embedding_bw(const Tensor& grad, const Tensor& input, const Tensor& weight, const MemoryConfig& output_mem_config, const std::vector<bool>& are_required_outputs, std::optional<Tensor> input_grad) {
+    std::vector<std::optional<Tensor>> result;
     TT_FATAL(input.get_dtype() == DataType::UINT32, "Input must be UINT32");
-    TT_FATAL(
-        grad.get_legacy_shape()[0] == 1 && grad.get_legacy_shape()[1] == 1,
-        "First two dimensions for the grad must be 1");
-    TT_FATAL(
-        input.get_legacy_shape()[1] == 1 && input.get_legacy_shape()[2] == 1,
-        "Only dim 0 && 3 for the input can be non 1");
-    std::vector<Tensor> grad_tensor;
-    Tensor grad_a = embeddings(input, grad, false);
-    grad_tensor.emplace_back(grad_a);
+    TT_FATAL(grad.get_legacy_shape()[0] == 1 && grad.get_legacy_shape()[1] == 1, "First two dimensions for the grad must be 1");
+    TT_FATAL(input.get_legacy_shape()[1] == 1 && input.get_legacy_shape()[2] == 1, "Only dim 0 && 3 for the input can be non 1");
+    if (are_required_outputs.at(0)) {
+        if(input_grad.has_value()){
+            embeddings(input, grad, false, EmbeddingsType::GENERIC, std::nullopt, operation::DEFAULT_OUTPUT_MEMORY_CONFIG, std::nullopt, input_grad.value());
+        } else {
+            input_grad = embeddings(input, grad, false);
+        }
+        result.push_back(input_grad.value());
+    } else {
+        result.push_back(std::nullopt);
+    }
 
-    return grad_tensor;
+    return std::move(result);
 }
-std::vector<Tensor> embedding_bw(
-    const Tensor& grad, const Tensor& input, const Tensor& weight, const MemoryConfig& output_mem_config) {
-    return operation::decorate_as_composite(__func__, _embedding_bw)(grad, input, weight, output_mem_config);
+std::vector<std::optional<Tensor>> embedding_bw(const Tensor& grad, const Tensor& input, const Tensor& weight,  const MemoryConfig& output_mem_config, const std::vector<bool>& are_required_outputs, std::optional<Tensor> input_grad)
+{
+    return operation::decorate_as_composite(__func__, _embedding_bw)(grad, input, weight, output_mem_config, are_required_outputs, input_grad);
+}
+
+std::vector<std::optional<Tensor>> _embedding_bw_overload(uint8_t cq_id, const Tensor& grad, const Tensor& input, const Tensor& weight, const MemoryConfig& output_mem_config, const std::vector<bool>& are_required_outputs, std::optional<Tensor> input_grad) {
+    std::vector<std::optional<Tensor>> result;
+    TT_FATAL(input.get_dtype() == DataType::UINT32, "Input must be UINT32");
+    TT_FATAL(grad.get_legacy_shape()[0] == 1 && grad.get_legacy_shape()[1] == 1, "First two dimensions for the grad must be 1");
+    TT_FATAL(input.get_legacy_shape()[1] == 1 && input.get_legacy_shape()[2] == 1, "Only dim 0 && 3 for the input can be non 1");
+    if (are_required_outputs.at(0)) {
+        if(input_grad.has_value()){
+            assign(cq_id, embeddings(cq_id, input, grad, false, EmbeddingsType::GENERIC, std::nullopt, operation::DEFAULT_OUTPUT_MEMORY_CONFIG, std::nullopt, input_grad.value()), input_grad.value());
+        } else {
+            input_grad = embeddings(input, grad, false);
+        }
+        result.push_back(input_grad.value());
+    } else {
+        result.push_back(std::nullopt);
+    }
+
+    return std::move(result);
+}
+std::vector<std::optional<Tensor>> embedding_bw(uint8_t cq_id, const Tensor& grad, const Tensor& input, const Tensor& weight,  const MemoryConfig& output_mem_config, const std::vector<bool>& are_required_outputs, std::optional<Tensor> input_grad)
+{
+    return operation::decorate_as_composite(__func__, _embedding_bw_overload)(cq_id, grad, input, weight, output_mem_config, are_required_outputs, input_grad);
 }
 
 // - name: sub.Tensor(Tensor self, Tensor other, *, Scalar alpha=1) -> Tensor
