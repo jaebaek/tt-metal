@@ -76,6 +76,8 @@ def run_test_FalconCausalLM_end_to_end(
     # Clear global profiler state before starting measurements
     profiler.clear()
 
+    disable_persistent_kernel_cache()
+
     num_devices = len(devices)
     global_batch = batch * num_devices
 
@@ -160,6 +162,7 @@ def run_test_FalconCausalLM_end_to_end(
                 layer_past=tt_layer_past,
                 layer_past_len=kv_cache_len,
                 use_cache=use_cache,
+                device_perf_run=True,
             )
             tt_outs.append(tt_out)
         tt_out = tt_outs
@@ -172,6 +175,7 @@ def run_test_FalconCausalLM_end_to_end(
             layer_past=tt_layer_past,
             layer_past_len=kv_cache_len,
             use_cache=use_cache,
+            device_perf_run=True,
         )
     for device in devices:
         tt_lib.device.Synchronize(device)
@@ -193,7 +197,6 @@ def run_test_FalconCausalLM_end_to_end(
 
     logger.info(f"Enable profiler and enable binary and compile cache")
     profiler.enable()
-    enable_persistent_kernel_cache()
 
     # Regenerate input ids and attention_mask on device
     tt_input_ids, tt_attention_mask = get_inputs_on_device(
