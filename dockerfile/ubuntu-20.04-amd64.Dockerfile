@@ -40,4 +40,9 @@ RUN python3 -m pip config set global.extra-index-url https://download.pytorch.or
 RUN python3 -m pip install -r ${TT_METAL_INFRA_DIR}/tt-metal/tt_metal/python_env/requirements-dev.txt
 RUN python3 -m pip install -r ${TT_METAL_INFRA_DIR}/tt-metal/docs/requirements-docs.txt
 
+# Install Clang-17
+RUN wget https://apt.llvm.org/llvm.sh \
+    && chmod u+x llvm.sh \
+    && ./llvm.sh 17
+
 CMD ["tail", "-f", "/dev/null"]
