@@ -22,4 +22,4 @@ fi
 
 cmake --build build --target install
 cmake --build build --target programming_examples
-./create_venv.sh
+# ./create_venv.sh
