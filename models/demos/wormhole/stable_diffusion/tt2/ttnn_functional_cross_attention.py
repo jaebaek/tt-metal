@@ -737,14 +737,14 @@ class cross_attention:
             )
             # TODO: Output sharded once https://github.com/tenstorrent/tt-metal/issues/6775 is fixed
             interleaved_out = hidden_states.shape[-2] == 8192 or hidden_states.shape[-2] == 2048
-            qkv_out = ttnn.experimental.operations.primary.matmul(
+            qkv_out = ttnn.matmul(
                 hidden_states,
                 self.parameters.qkv.weight,
                 program_config=program_config,
-                output_mem_config=self.l1_interleaved_memory_config
+                memory_config=self.l1_interleaved_memory_config
                 if interleaved_out
                 else self.block_sharded_memory_config,
-                output_dtype=ttnn.experimental.tensor.DataType.BFLOAT8_B,
+                dtype=ttnn.bfloat8_b,
                 compute_kernel_config=self.compute_kernel_config,
             )
             ttnn.deallocate(hidden_states)

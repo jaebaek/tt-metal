@@ -26,7 +26,7 @@ from models.utility_functions import (
 from ttnn.model_preprocessing import preprocess_model_parameters
 from models.demos.wormhole.stable_diffusion.sd_pndm_scheduler import TtPNDMScheduler
 from models.demos.wormhole.stable_diffusion.custom_preprocessing import custom_preprocessor
-from models.demos.wormhole.stable_diffusion.tt2.ttnn_functional_unet_2d_condition_model import (
+from models.demos.wormhole.stable_diffusion.tt2.ttnn_functional_unet_2d_condition_model_new_conv import (
     UNet2DConditionModel as UNet2D,
 )
 
@@ -103,7 +103,7 @@ def preprocess_images(image_paths):
 
 def run_demo_inference(device, reset_seeds, input_path, num_prompts, num_inference_steps, image_size=(256, 256)):
     disable_persistent_kernel_cache()
-    device.enable_program_cache()
+    # device.enable_program_cache()
 
     # Until di/dt issues are resolved
     os.environ["SLOW_MATMULS"] = "1"
@@ -254,7 +254,7 @@ def run_demo_inference(device, reset_seeds, input_path, num_prompts, num_inferen
 
 def run_interactive_demo_inference(device, num_inference_steps, image_size=(256, 256)):
     disable_persistent_kernel_cache()
-    device.enable_program_cache()
+    # device.enable_program_cache()
 
     # Until di/dt issues are resolved
     os.environ["SLOW_MATMULS"] = "1"
@@ -404,7 +404,7 @@ def run_demo_inference_diffusiondb(
     device, reset_seeds, input_path, num_prompts, num_inference_steps, image_size=(256, 256)
 ):
     disable_persistent_kernel_cache()
-    device.enable_program_cache()
+    # device.enable_program_cache()
 
     # Until di/dt issues are resolved
     os.environ["SLOW_MATMULS"] = "1"
