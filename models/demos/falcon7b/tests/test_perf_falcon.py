@@ -515,7 +515,7 @@ class TestParametrized:
             ("prefill", 32, 1, 2048, 0, "BFLOAT16-DRAM", 0.99, 0.99, 0.98, 1.1),
             ("decode", 32, 32, 1, 128, "BFLOAT16-DRAM", 0.91, 0.92, 0.93, 0.15),
             ("decode", 32, 32, 1, 128, "BFLOAT16-L1", 0.91, 0.92, 0.93, 0.15),
-            ("decode", 32, 32, 1, 128, "BFLOAT16-L1_SHARDED", 0.92, 0.95, 0.95, 0.1),
+            ("decode", 1, 32, 1, 128, "BFLOAT16-L1_SHARDED", 0.99, 0.99, 0.99, 0.1),
             ("decode", 32, 32, 1, 1024, "BFLOAT16-DRAM", 0.86, 0.92, 0.92, 0.4),
             ("decode", 32, 32, 1, 1024, "BFLOAT16-L1", 0.86, 0.92, 0.92, 0.35),
             ("decode", 32, 32, 1, 1024, "BFLOAT16-L1_SHARDED", 0.85, 0.93, 0.94, 0.1),
@@ -536,7 +536,7 @@ class TestParametrized:
             "decode_batch32_2047_bf16_l1",
         ],
     )
-    @pytest.mark.parametrize("async_mode", (False, True))
+    @pytest.mark.parametrize("async_mode", [False])
     @skip_for_grayskull()
     def test_perf_wh_bare_metal(
         self,

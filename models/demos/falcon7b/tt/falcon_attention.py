@@ -247,6 +247,8 @@ class TtFalconAttentionPrefill(nn.Module):
         ###########
         query_layer, key_layer, value_layer = [], [], []
         for i in range(self.num_devices):
+            print("Running NLP Create QKV heads")
+            # print("NLP create QKV heads falcon 7b shape is: ", fused_query_key_value[i].get_legacy_shape())
             query_layer_i, key_layer_i, value_layer_i = ttnn.experimental.tensor.nlp_create_qkv_heads_falcon7b(
                 fused_query_key_value[i],
                 output_mem_config=self.model_config["CREATE_QKV_HEADS_OUTPUT_MEMCFG"],
@@ -412,6 +414,7 @@ class TtFalconAttentionPrefill(nn.Module):
         ###########
         query_layer, key_layer, value_layer = [], [], []
         for i in range(self.num_devices):
+            print("NLP create QKV heads falcon 7b shape is: ", fused_query_key_value[i].get_legacy_shape())
             query_layer_i, key_layer_i, value_layer_i = ttnn.experimental.tensor.nlp_create_qkv_heads_falcon7b(
                 fused_query_key_value[i],
                 output_mem_config=self.model_config["CREATE_QKV_HEADS_OUTPUT_MEMCFG"],
@@ -542,6 +545,7 @@ class TtFalconAttentionPrefill(nn.Module):
 
         layer_present = layer_past if use_cache else None
 
+        print("NLP concat heads: ", attention_outputs_concatenated[0].get_legacy_shape())
         attn_outputs = [
             ttnn.experimental.tensor.nlp_concat_heads(
                 attention_outputs_concatenated[device_id],

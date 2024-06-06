@@ -300,6 +300,7 @@ class TtFalconModelShared(torch.nn.Module):
                 self.layernorm_eps,
                 output_mem_config=self.model_config["LN_F_OUTPUT_MEMCFG"],
             )
+        print("Im here")
         for i in range(self.num_devices):
             layer_output[i] = ttnn.experimental.tensor.bcast(
                 layer_output[i],

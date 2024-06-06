@@ -129,6 +129,68 @@ def get_model_config(model_config_str, prefill_seq_len=0):
     model_config.update({f"{key}_MEMCFG": mem_config for key in OP_KEYS if key not in NO_MEMCFG})
     model_config.update({f"{key}_DTYPE": dtype for key in OP_KEYS if key not in NO_DTYPE})
 
+    print("Selected mem config is: ", mem_config_str)
+    print("In mem config: LN output mem config is: ", model_config["INPUT_LAYERNORM_OUTPUT_MEMCFG"])
+
+    ## Override LN output mem config
+    # model_config["INPUT_LAYERNORM_OUTPUT_MEMCFG"] = L1_MEMCFG
+    model_config["EXPERIMENTAL_LAYERNORM_OUTPUT_MEMCFG"] = ttnn.experimental.tensor.MemoryConfig(
+        ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+        ttnn.experimental.tensor.BufferType.L1,
+        ttnn.experimental.tensor.ShardSpec(
+            ttnn.experimental.tensor.CoreRangeSet(
+                {
+                    ttnn.experimental.tensor.CoreRange(
+                        # Volume must match batch size
+                        ttnn.experimental.tensor.CoreCoord(0, 0),
+                        ttnn.experimental.tensor.CoreCoord(3, 0),
+                    ),
+                }
+            ),
+            [
+                128 // 4,
+                4544,
+            ],
+            ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
+            False,
+        ),
+    )
+
+    core_range_block_sharded_layernorm = ttnn.experimental.tensor.CoreRangeSet(
+        {
+            ttnn.experimental.tensor.CoreRange(
+                ttnn.experimental.tensor.CoreCoord(0, 0),
+                ttnn.experimental.tensor.CoreCoord(8 - 1, 4 - 1),
+            ),
+        }
+    )
+
+    model_config["EXPERIMENTAL_LAYERNORM_BLOCK_SHARDED_MEM_CFG"] = ttnn.experimental.tensor.MemoryConfig(
+        ttnn.experimental.tensor.TensorMemoryLayout.BLOCK_SHARDED,
+        ttnn.experimental.tensor.BufferType.L1,
+        ttnn.experimental.tensor.ShardSpec(
+            core_range_block_sharded_layernorm,
+            [
+                128 // 4,
+                4608 // 8,
+            ],
+            ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
+            False,
+        ),
+    )
+
+    layernorm_block_sharded_prg_config_inplace = (
+        ttnn.experimental.operations.primary.LayerNormShardedMultiCoreProgramConfig(
+            compute_with_storage_grid_size=[4, 8],
+            subblock_w=1,
+            block_h=1,
+            block_w=18,
+            inplace=True,
+        )
+    )
+
+    model_config["EXPERIMENTAL_LAYERNORM_BLOCK_SHARDED_PROG_CFG"] = layernorm_block_sharded_prg_config_inplace
+
     # Input ids are UINT32
     model_config["INPUT_DTYPE"] = ttnn.experimental.tensor.DataType.UINT32
 

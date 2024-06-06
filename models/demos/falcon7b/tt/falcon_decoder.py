@@ -129,31 +129,49 @@ class TtFalconDecoderLayer(nn.Module):
 
         assert not output_attentions
 
+        print("Layer layernorm stuff!")
+        print("Runtime: Layernorm output mem config is: ", self.model_config["INPUT_LAYERNORM_OUTPUT_MEMCFG"])
         layernorm_output = []
+        # for i in range(self.num_devices):
+        #     layernorm_output.append(
+        #         ttnn.experimental.tensor.layernorm(
+        #             hidden_states[i],
+        #             self.layernorm_eps,
+        #             self.layernorm_gamma[i],
+        #             #self.layernorm_beta[i],
+        #             output_mem_config=self.model_config["INPUT_LAYERNORM_OUTPUT_MEMCFG"],
+        #         )
+        #     )
+        # for i in range(self.num_devices):
+        #     layernorm_output[i] = ttnn.experimental.tensor.bcast(
+        #         layernorm_output[i],
+        #         self.layernorm_beta[i],
+        #         ttnn.experimental.tensor.BcastOpMath.ADD,
+        #         ttnn.experimental.tensor.BcastOpDim.H,
+        #         output_mem_config=self.model_config["INPUT_LAYERNORM_OUTPUT_MEMCFG"],
+        #         #output_mem_config=self.model_config["EXPERIMENTAL_LAYERNORM_OUTPUT_MEMCFG"],
+        #     )
+
         for i in range(self.num_devices):
             layernorm_output.append(
-                ttnn.experimental.tensor.layernorm(
+                ttnn.experimental.tensor.interleaved_to_sharded(
                     hidden_states[i],
-                    self.layernorm_eps,
-                    output_mem_config=self.model_config["INPUT_LAYERNORM_OUTPUT_MEMCFG"],
+                    sharded_mem_config=self.model_config["EXPERIMENTAL_LAYERNORM_BLOCK_SHARDED_MEM_CFG"],
                 )
             )
+
         for i in range(self.num_devices):
-            layernorm_output[i] = ttnn.experimental.tensor.bcast(
+            layernorm_output[i] = ttnn.experimental.operations.primary.layernorm(
                 layernorm_output[i],
+                self.layernorm_eps,
                 self.layernorm_gamma[i],
-                ttnn.experimental.tensor.BcastOpMath.MUL,
-                ttnn.experimental.tensor.BcastOpDim.H,
-                output_mem_config=self.model_config["INPUT_LAYERNORM_OUTPUT_MEMCFG"],
-            )
-        for i in range(self.num_devices):
-            layernorm_output[i] = ttnn.experimental.tensor.bcast(
-                layernorm_output[i],
                 self.layernorm_beta[i],
-                ttnn.experimental.tensor.BcastOpMath.ADD,
-                ttnn.experimental.tensor.BcastOpDim.H,
-                output_mem_config=self.model_config["INPUT_LAYERNORM_OUTPUT_MEMCFG"],
+                self.model_config["EXPERIMENTAL_LAYERNORM_BLOCK_SHARDED_MEM_CFG"],
+                self.model_config["EXPERIMENTAL_LAYERNORM_BLOCK_SHARDED_PROG_CFG"],
             )
+
+        for i in range(self.num_devices):
+            layernorm_output[i] = ttnn.experimental.tensor.sharded_to_interleaved(layernorm_output[i])
 
         residual = hidden_states
 

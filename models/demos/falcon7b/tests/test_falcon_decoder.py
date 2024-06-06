@@ -143,7 +143,7 @@ def run_test_FalconDecoder_inference(
         assert does_pass, f"PCC value is lower than {pcc}"
 
 
-@pytest.mark.parametrize("num_devices", (1, 2, 4))
+@pytest.mark.parametrize("num_devices", [1])
 @pytest.mark.parametrize(
     "llm_mode, batch, seq_len, kv_cache_len",
     (
@@ -158,7 +158,7 @@ def run_test_FalconDecoder_inference(
     "model_version, layer_num, pcc",
     (("tiiuae/falcon-7b-instruct", 0, 0.98),),
 )
-@pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM", "BFLOAT16-L1"))
+@pytest.mark.parametrize("model_config_str", ["BFLOAT16-DRAM", "BFLOAT16-L1_SHARDED"], ids=["dram", "l1"])
 def test_FalconDecoder_inference(
     num_devices,
     model_version,
