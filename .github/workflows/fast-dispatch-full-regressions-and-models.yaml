@@ -59,8 +59,4 @@ jobs:
       - name: Run frequent reg tests scripts
         timeout-minutes: ${{ matrix.test-group.timeout }}
         run: |
-          ./scripts/docker/run_docker_cmd.sh -- \
-            /bin/bash -c "source python_env/bin/activate \
-              cd $TT_METAL_HOME \
-              export PYTHONPATH=$TT_METAL_HOME \ 
-              ${{ matrix.test-group.cmd }}"
+          ./scripts/docker/run_docker_cmd.sh -- ${{ matrix.test-group.cmd }}
