@@ -72,9 +72,9 @@ jobs:
       - name: Push docs to Docs repo for publishing
         run: |
           pip install -r requirements.txt
-          cp -r ../docs/public/md/* tt-metalium  # Copy the files
-          python update_tags.py tt-metalium $$CI_COMMIT_TAG
+          TAG=latest-tt-metalium
+          python update_tags.py tt-metalium $TAG
           git add .
-          git commit -m "update tt-metalium docs from pipeline $CI_PIPELINE_ID with tag $CI_COMMIT_TAG"
-          git tag -a $CI_COMMIT_TAG -m "tt-metalium documentation version $CI_COMMIT_TAG"
+          git commit -m "update tt-metalium docs from pipeline ${{ github.job }} with tag $TAG"
+          git tag -a $TAG -m "tt-metalium documentation version $TAG"
           git push && git push --tags
