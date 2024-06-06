@@ -14,7 +14,6 @@
 #include "debug/fw_debug.h"
 #include "debug/status.h"
 #include "circular_buffer.h"
-#include "debug/dprint.h"
 // clang-format on
 
 #if defined(PROFILE_KERNEL)
@@ -108,13 +107,10 @@ int main(int argc, char *argv[]) {
 
         DEBUG_STATUS("R");
         kernel_init();
-        DPRINT << "TDK" << ENDL();
         DEBUG_STATUS("D");
 
         // Signal completion
-        DPRINT << "TSTS" << ENDL();
-        tensix_sync(); // commenting this out enables pass
-        DPRINT << "TDTS" << ENDL();
+        tensix_sync();
         *trisc_run = RUN_SYNC_MSG_DONE;
     }
 }
