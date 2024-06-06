@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "packet_queue_ctrl.hpp"
 #include "risc_attribs.h"
 #include "tt_metal/hostdevcommon/common_values.hpp"
 #include "dataflow_api.h"
@@ -790,6 +791,15 @@ public:
             return;
         } else if (this->remote_update_network_type == DispatchRemoteNetworkType::ETH) {
             internal_::eth_send_packet(0, src_addr/PACKET_WORD_SIZE_BYTES, dest_addr/PACKET_WORD_SIZE_BYTES, num_words);
+        } else if (this->remote_update_network_type == DispatchRemoteNetworkType::STREAM) {
+            stream_noc_write(
+                src_addr,
+                dest_addr,
+                num_words*PACKET_WORD_SIZE_BYTES,
+                this->remote_x,
+                this->remote_y,
+                this->dest_noc_port_id,
+                this->stream_state);
         } else {
             uint64_t noc_dest_addr = NOC_XY_ADDR(this->remote_x, this->remote_y, dest_addr);
             noc_async_write(src_addr, noc_dest_addr, num_words*PACKET_WORD_SIZE_BYTES);
@@ -892,7 +902,6 @@ public:
              input_queue_ptr->get_queue_rptr_sent_offset_words())*PACKET_WORD_SIZE_BYTES;
         uint32_t dest_addr =
             (this->queue_start_addr_words + this->get_queue_wptr_offset_words())*PACKET_WORD_SIZE_BYTES;
-
         this->send_data_to_remote(src_addr, dest_addr, num_words_to_forward);
         this->input_queue_status.register_words_in_flight(input_queue_index, num_words_to_forward);
         this->advance_queue_local_wptr(num_words_to_forward);

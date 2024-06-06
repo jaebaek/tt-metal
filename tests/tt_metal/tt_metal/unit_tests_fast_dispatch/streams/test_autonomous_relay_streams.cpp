@@ -28,6 +28,7 @@
 // #include "tt_metal/test_utils/print_helpers.hpp"
 #include "tt_metal/detail/persistent_kernel_cache.hpp"
 #include "tt_metal/test_utils/stimulus.hpp"
+#include "relay_stream_builders.hpp"
 
 using tt::tt_metal::Device;
 
@@ -36,30 +37,9 @@ namespace tt {
 
 namespace tt_metal {
 
-struct hop_eth_sockets {
-    chip_id_t receiver_device_id;
-    CoreCoord receiver_core;
-    chip_id_t sender_device_id;
-    CoreCoord sender_core;
-};
-
-struct stream_config_t {
-    uint32_t buffer_addr;
-    uint32_t buffer_size;  // in bytes
-    uint32_t tile_header_buffer_addr;
-    uint32_t tile_header_num_msgs;
-    uint32_t tile_header_buffer_size;  // in bytes
-};
-
-struct stream_builder_spec_t {
-    uint32_t buffer_size_bytes;
-    uint32_t tile_header_buffer_size_bytes;
-};
 
 constexpr uint32_t relay_stream_id = 32;
-constexpr uint32_t tile_header_size = 32;  // needs to provide noc word alignment
-// constexpr uint32_t tile_header_size = 16;
-constexpr uint32_t noc_word_size = 16;
+
 
 // Reads data from input
 std::vector<uint32_t> get_sender_reader_rt_args(
@@ -219,7 +199,7 @@ void build_and_run_autonomous_stream_test(
     TT_ASSERT(programs.size() == 0);
     // Make configurable
     const uint32_t read_write_cb_num_pages = 8;
-    const uint32_t page_size_plus_header = page_size + tile_header_size;
+    const uint32_t page_size_plus_header = page_size + streams::tile_header_size;
 
     const uint32_t sender_stream_buffer_num_pages = sender_stream_spec.buffer_size_bytes / page_size;
     const uint32_t relay_stream_buffer_num_pages = relay_stream_spec.buffer_size_bytes / page_size;
@@ -228,7 +208,7 @@ void build_and_run_autonomous_stream_test(
     const uint32_t sender_stream_buffer_size_bytes = sender_stream_buffer_num_pages * page_size_plus_header;
     const uint32_t relay_stream_buffer_size_bytes = relay_stream_buffer_num_pages * page_size_plus_header;
     const uint32_t receiver_stream_buffer_size_bytes = receiver_stream_buffer_num_pages * page_size_plus_header;
-    uint32_t stream_tile_header_buffer_size_bytes = tile_header_buffer_num_messages * tile_header_size;
+    uint32_t stream_tile_header_buffer_size_bytes = tile_header_buffer_num_messages * streams::tile_header_size;
     uint32_t relay_stream_overlay_blob_size_bytes = 256;
 
     programs.emplace_back();
@@ -506,7 +486,7 @@ void build_and_run_autonomous_stream_test(
         tt_metal::DataMovementConfig{
             .processor = tt_metal::DataMovementProcessor::RISCV_0,
             .noc = tt_metal::NOC::NOC_0,
-            .compile_args = {tile_header_size, static_cast<uint32_t>(enable_page_size_variations ? 1 : 0)}});
+            .compile_args = {streams::tile_header_size, static_cast<uint32_t>(enable_page_size_variations ? 1 : 0)}});
     auto sender_writer_kernel = tt_metal::CreateKernel(
         program,
         "tests/tt_metal/tt_metal/test_kernels/dataflow/streams/stream_relay_remote_sender.cpp",
@@ -541,7 +521,7 @@ void build_and_run_autonomous_stream_test(
         tt_metal::DataMovementConfig{
             .processor = tt_metal::DataMovementProcessor::RISCV_1,
             .noc = tt_metal::NOC::NOC_1,  // to keep noc coords simple (no calculating noc1 coords)
-            .compile_args = {tile_header_size}});
+            .compile_args = {streams::tile_header_size}});
 
     log_trace(tt::LogTest, "sender_reader_rt_args: ");
     for (auto const& arg : sender_reader_rt_args) {
@@ -602,7 +582,7 @@ void build_and_run_autonomous_stream_test(
         uint32_t sub_size_i = 0;
         uint32_t page_idx = 0;
         for (auto i = 0; i < size; i += page_size_words) {
-            std::size_t n_elems = page_size_words - (sub_sizes.at(sub_size_i) * noc_word_size / sizeof(uint32_t));
+            std::size_t n_elems = page_size_words - (sub_sizes.at(sub_size_i) * streams::noc_word_size / sizeof(uint32_t));
             sub_size_i = (sub_size_i + 1) % num_sizes;
             bool printed_page_info = false;
             for (auto ii = 0; ii < n_elems; ii++) {
@@ -810,8 +790,8 @@ TEST_F(CommandQueueFixture, DISABLED_TestAutonomousRelayStreamsLoopingRandomShor
     for (std::size_t i = 0; i < num_loop_iterations; i++) {
         std::array<uint32_t, num_sizes> sub_sizes = {};
         for (auto i = 0; i < num_sizes; i++) {
-            sub_sizes.at(i) = std::rand() % (page_size / noc_word_size);
-            EXPECT_TRUE(sub_sizes.at(i) < (page_size / noc_word_size));
+            sub_sizes.at(i) = std::rand() % (page_size / streams::noc_word_size);
+            EXPECT_TRUE(sub_sizes.at(i) < (page_size / streams::noc_word_size));
         }
         std::vector<Program> programs;
         log_info(tt::LogTest, "Iteration: {}", i);
@@ -946,8 +926,8 @@ TEST_F(CommandQueueFixture, DISABLED_TestAutonomousRelayStreamsSweep) {
 
                         std::array<uint32_t, num_sizes> sub_sizes = {};
                         for (auto i = 0; i < num_sizes; i++) {
-                            sub_sizes.at(i) = sub_sizes_global.at(i) % (page_size / noc_word_size);
-                            EXPECT_TRUE(sub_sizes.at(i) < (page_size / noc_word_size));
+                            sub_sizes.at(i) = sub_sizes_global.at(i) % (page_size / streams::noc_word_size);
+                            EXPECT_TRUE(sub_sizes.at(i) < (page_size / streams::noc_word_size));
                         }
 
                         std::vector<Program> programs;

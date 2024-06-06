@@ -27,49 +27,7 @@
 //       This value is sticky and the next_phase_src/dest_change will override it for the next phase
 ///////
 
-uint32_t get_sender_stream_config_reg(uint32_t tx_noc_id, uint32_t rx_src_update_noc, bool drain_after_phase_send) {
-    uint32_t stream_cfg_reg = 0;
-    bool next_phase_src_dest_change = drain_after_phase_send ? 1 : 0;
-    stream_cfg_reg |= STREAM_CFG(OUTGOING_DATA_NOC, tx_noc_id) | STREAM_CFG(REMOTE_SRC_UPDATE_NOC, rx_src_update_noc) |
-                      STREAM_CFG(SOURCE_ENDPOINT, 1) | STREAM_CFG(REMOTE_RECEIVER, 1) |
-                      STREAM_CFG(NEXT_PHASE_SRC_CHANGE, next_phase_src_dest_change) |
-                      STREAM_CFG(NEXT_PHASE_DEST_CHANGE, next_phase_src_dest_change) |
-                      STREAM_CFG(PHASE_AUTO_ADVANCE, 0) | STREAM_CFG(DATA_AUTO_SEND, 0) |
-                      STREAM_CFG(REG_UPDATE_VC_REG, 1);
 
-    return stream_cfg_reg;
-}
-
-FORCE_INLINE void write_message_size_to_message_info_buffer(
-    stream_state_t const &stream_state, uint32_t message_size_noc_words) {
-    ASSERT((message_size_noc_words << 4) <= stream_state.local_buffer_size);
-    if (!((message_size_noc_words << 4) <= stream_state.local_buffer_size)) {
-        DPRINT << "YIKES\n";
-    }
-    *reinterpret_cast<volatile uint32_t *>(stream_state.local_msg_info_ptr) = message_size_noc_words;
-}
-
-FORCE_INLINE void reset_stream_message_info_buffer_rdptr(stream_state_t &stream_state, uint32_t stream_id) {
-    stream_state.local_msg_info_ptr = stream_state.local_msg_info_ptr_base_address;
-    NOC_STREAM_WRITE_REG(
-        stream_id, STREAM_MSG_INFO_PTR_REG_INDEX, ((uint32_t)(stream_state.local_msg_info_ptr_base_address >> 4)));
-    NOC_STREAM_WRITE_REG(
-        stream_id, STREAM_MSG_INFO_WR_PTR_REG_INDEX, (((uint32_t)stream_state.local_msg_info_ptr_base_address >> 4)));
-}
-FORCE_INLINE void advance_stream_message_info_buffer_wrptr(
-    stream_state_t &stream_state, uint32_t stream_id, uint32_t message_size) {
-    stream_state.local_msg_info_ptr += (1 << 4);
-    stream_state.local_buffer_read_offset += message_size;
-    if (stream_state.local_buffer_read_offset >= stream_state.local_buffer_size) {
-        stream_state.local_buffer_read_offset -= stream_state.local_buffer_size;
-    }
-}
-
-FORCE_INLINE void wait_for_stream_write_complete(uint32_t sender_stream_id) {
-    while (!stream_phase_advance_wait(sender_stream_id)) {
-        asm volatile("nop");
-    }
-}
 
 FORCE_INLINE void copy_from_cb_to_stream_buffer(
     stream_state_t &stream_state, uint32_t message_base, uint32_t message_size_noc_words) {
@@ -290,6 +248,10 @@ void kernel_main() {
         stream_buffer_addr,
         stream_tile_header_buffer_addr,
 
+        stream_id,
+        remote_dest_noc_stream_id,
+
+        local_starting_phase,
         local_starting_phase,                 // phase_id
         stream_tile_header_max_num_messages,  // messages_per_phase
 
