@@ -9,5 +9,5 @@ jobs:
     secrets: inherit
   build-docs:
     needs: build-artifact
-    uses: ./.github/workflows/docs-latest-public.yaml
+    uses: ./.github/workflows/docs-deployment.yaml
     secrets: inherit
