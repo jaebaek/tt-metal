@@ -64,8 +64,9 @@ router_only:
 worker_l1_size:
   1499136
 
+# Upper 16MB of 4GB DRAM are inaccessible. See https://github.com/tenstorrent/tt-metal/issues/9144
 dram_bank_size:
-  4294967296
+  4278190080
 
 eth_l1_size:
   262144
