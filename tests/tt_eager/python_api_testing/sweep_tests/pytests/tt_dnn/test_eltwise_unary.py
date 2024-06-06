@@ -584,7 +584,7 @@ class TestEltwiseUnary:
             test_args,
         )
 
-    @pytest.mark.parametrize("round_off_method", ["floor", "trunc"])
+    @pytest.mark.parametrize("round_off_method", ["floor", "ceil", "trunc"])
     @skip_for_grayskull("#ToDo: GS implementation needs to be done for Floor")
     def test_run_eltwise_round_off_ops(
         self,
