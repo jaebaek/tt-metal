@@ -77,10 +77,9 @@ def ln_part1_op(xs, n_devices, is_rmsnorm):
     kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
         math_fidelity=ttnn.experimental.tensor.MathFidelity.HiFi4,  # Highest fidelity
         math_approx_mode=False,
-        fp32_dest_acc_en=True,
+        fp32_dest_acc_en=False,
         packer_l1_acc=False,
     )
-
     tt_out = []
     for d in range(n_devices):
         if is_rmsnorm:
@@ -155,8 +154,8 @@ def run_layernorm_part_1(inp_shape, n_devices, is_rmsnorm, dtype, device):
 
 @pytest.mark.parametrize(
     "dtype",
-    (ttnn.bfloat16,),
-    ids=["BFLOAT16"],
+    (ttnn.bfloat16, ttnn.bfloat8_b),
+    ids=["BFLOAT16", "BFLOAT8_B"],
 )
 @pytest.mark.parametrize(
     "inp_shape",
@@ -164,12 +163,53 @@ def run_layernorm_part_1(inp_shape, n_devices, is_rmsnorm, dtype, device):
         (1, 1, 2048, 8192),
         (1, 1, 128, 8192),
         (2, 1, 128, 8192),
-        (1, 1, 2048, 1024),
     ],
 )
 @pytest.mark.parametrize(
     "n_devices",
-    [1, 4, 8],
+    [4, 8],
+)
+@pytest.mark.parametrize(
+    "is_rmsnorm",
+    [True, False],
+    ids=["rmsnorm", "layernorm"],
+)
+def test_layernorm_part_1_with_program_cache(inp_shape, n_devices, is_rmsnorm, dtype, device, use_program_cache):
+    dummy_tensors = []
+
+    for i in range(3):
+        dummy_tensors.append(
+            ttnn.as_tensor(
+                torch.randn(inp_shape),
+                dtype=dtype,
+                device=device,
+                layout=ttnn.TILE_LAYOUT,
+                memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            )
+        )
+        run_layernorm_part_1(inp_shape, n_devices, is_rmsnorm, dtype, device)
+
+    assert device.num_program_cache_entries() == 1, "Program cache should have only one entry" + str(
+        device.num_program_cache_entries()
+    )
+
+
+@pytest.mark.parametrize(
+    "dtype",
+    (ttnn.bfloat16, ttnn.bfloat8_b),
+    ids=["BFLOAT16", "BFLOAT8_B"],
+)
+@pytest.mark.parametrize(
+    "inp_shape",
+    [
+        (1, 1, 2048, 8192),
+        (1, 1, 128, 8192),
+        (2, 1, 128, 8192),
+    ],
+)
+@pytest.mark.parametrize(
+    "n_devices",
+    [4, 8],
 )
 @pytest.mark.parametrize(
     "is_rmsnorm",

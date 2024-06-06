@@ -70,7 +70,8 @@ operation::ProgramWithCallbacks LayerNormPart1::create_program(
 
 tt::stl::reflection::Attributes LayerNormPart1::attributes() const {
     return {
-        {"norm_type", this->norm_type}
+        {"norm_type", this->norm_type},
+        {"compute_kernel_config", this->compute_kernel_config}
     };
 }
 
