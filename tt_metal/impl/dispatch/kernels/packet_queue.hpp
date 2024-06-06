@@ -67,6 +67,7 @@ class packet_queue_state_t {
 
 protected:
 
+    // cb mode true => go from unpacketized to packetized domain. aka add packet header to messages
     bool cb_mode;
     uint32_t cb_mode_page_size_words;
     uint8_t cb_mode_local_sem_id;
@@ -198,7 +199,7 @@ public:
         *this->local_rptr_cleared_update = num_words << REMOTE_DEST_BUF_WORDS_FREE_INC;
     }
 
-    inline uint32_t get_queue_data_num_words_available_to_send() const {
+    virtual inline uint32_t get_queue_data_num_words_available_to_send() const {
         return (this->get_queue_local_wptr() - this->get_queue_local_rptr_sent()) & this->queue_size_mask;
     }
 
@@ -419,6 +420,11 @@ protected:
 
     uint32_t packetizer_page_words_cleared;
 
+    /*
+     * When data is available to send from this queue, this function updates internal the internal `curr_packet_*`
+     * fields hold the information about the payload (e.g. size, src, dest, etc.)
+     * This function doesn't do any sort of sending of the actual payload
+     */
     inline void advance_next_packet() {
         if(this->get_queue_data_num_words_available_to_send() > 0) {
             tt_l1_ptr dispatch_packet_header_t* next_packet_header_ptr =
@@ -426,9 +432,17 @@ protected:
                     (this->queue_start_addr_words + this->get_queue_rptr_sent_offset_words())*PACKET_WORD_SIZE_BYTES
                 );
             this->curr_packet_header_ptr = next_packet_header_ptr;
-            uint32_t packet_size_and_flags = next_packet_header_ptr->packet_size_bytes;
-            uint32_t packet_size_bytes = packet_size_and_flags & 0xFFFFFFFE;
-            this->end_of_cmd = !(packet_size_and_flags & 1);
+            uint32_t packet_size_bytes = curr_packet_header_ptr->get_packet_size_bytes();
+            if (this->remote_update_network_type == DispatchRemoteNetworkType::STREAM) {
+                // Indicates we are a remote receiver receving from a stream.
+                //
+                // Streams expect sizes to be in num 16B words, which isn't bytes, so if we are
+                // reading a packet header that came from a stream it means we need to convert
+                // it back to size in bytes, from size in 16B words.
+                packet_size_bytes << 4;
+            }
+
+            this->end_of_cmd = curr_packet_header_ptr->get_is_end_of_cmd();
             this->curr_packet_size_words = packet_size_bytes/PACKET_WORD_SIZE_BYTES;
             if (packet_size_bytes % PACKET_WORD_SIZE_BYTES) {
                 this->curr_packet_size_words++;
@@ -494,6 +508,15 @@ public:
         this->reset_ready_flag();
     }
 
+    final uint32_t get_queue_data_num_words_available_to_send() override {
+        if (this-> remote_update_network_type== DispatchRemoteNetworkType::STREAM) {
+            uint32_t n = fw_managed_rx_stream_num_bytes_available(this->stream_state.local_stream_id, this->stream_state);
+            return n >> 4;
+        } else {
+            return ::get_queue_data_num_words_available_to_send();
+        }
+    }
+
     inline uint32_t get_end_of_cmd() const {
         return this->end_of_cmd;
     }
@@ -502,11 +525,26 @@ public:
         return this->cb_mode;
     }
 
+    // E.g. send 18k to core
+    // prefetcher is in unpacketized domain.
+    // prefetcher gets raw data
+    // prefetcher prepends a header to the payload with size information when sending
+    // to packetized domain
+
     inline bool get_curr_packet_valid() {
         if (this->cb_mode) {
             this->cb_mode_local_sem_wptr_update();
         }
+        // stream -> auto const &[msg_addr, msg_size_bytes] = get_next_message_info(stream_id, stream_state);
         if (!this->curr_packet_valid && (this->get_queue_data_num_words_available_to_send() > 0)){
+            // stream:
+            //  auto const &[msg_addr, msg_size_bytes] = get_next_message_info(stream_id, stream_state);
+            //  ASSERT(msg_size_bytes > 0);
+            //  ASSERT(msg_size_bytes <= stream_state.local_buffer_size);
+            //  copy_message_to_cb_blocking(cb, msg_addr, msg_size_bytes, stream_state);
+            //
+            // flushes the stream buffer - sends credits to relay stream
+            // stream_relay_tiles(stream_id, 1, msg_size_bytes >> 4);
             this->advance_next_packet();
         }
         return this->curr_packet_valid;
@@ -689,6 +727,7 @@ protected:
             return this->prev_output_total_words_in_flight;
         }
 
+        // Not sure about the purpose of looping over *all* the inputs here
         inline uint32_t prev_words_in_flight_flush() {
 
             uint32_t words_flushed = this->prev_output_total_words_in_flight;
@@ -792,7 +831,8 @@ public:
             return;
         } else if (this->remote_update_network_type == DispatchRemoteNetworkType::ETH) {
             internal_::eth_send_packet(0, src_addr/PACKET_WORD_SIZE_BYTES, dest_addr/PACKET_WORD_SIZE_BYTES, num_words);
-        } else if (this->remote_update_network_type == DispatchRemoteNetworkType::STREAM) {
+        } else if (this->remote_update_network_type== DispatchRemoteNetworkType::STREAM) {
+            // Sending into a stream, from a remote_source_stream on this core, managed by this RISC processor.
             stream_noc_write(
                 src_addr,
                 dest_addr,
@@ -808,12 +848,19 @@ public:
     }
 
     inline void remote_wptr_update(uint32_t num_words) {
-        this->advance_queue_remote_wptr(num_words);
+        if (this->remote_update_network_type != DispatchRemoteNetworkType::STREAM) {
+            // only manually update the remote wrptr if *not* sending to a stream because
+            // if sending to a stream, then the wrptrs will automatically be managed by the
+            // stream hardware
+            this->advance_queue_remote_wptr(num_words);
+        }
     }
 
     inline uint32_t prev_words_in_flight_check_flush() {
         if (this->is_unpacketizer_output()) {
             uint32_t words_written_not_sent = get_num_words_written_not_sent();
+            // We expect to never have streams on an unpacketize endpoint
+            ASSERT (this->remote_update_network_type != DispatchRemoteNetworkType::STREAM);
             noc_async_writes_flushed();
             this->advance_queue_local_rptr_sent(words_written_not_sent);
             uint32_t words_flushed = this->input_queue_status.prev_words_in_flight_flush();
@@ -860,11 +907,21 @@ public:
         return true;
     }
 
+    /*
+     * Given an input queue index, this function will return the size (in 4B? words) that we can send to the output stream
+     */
     inline uint32_t get_num_words_to_send(uint32_t input_queue_index) {
-
         packet_input_queue_state_t* input_queue_ptr = &(this->input_queue_status.input_queue_array[input_queue_index]);
 
-        uint32_t num_words_available_in_input = input_queue_ptr->input_queue_curr_packet_num_words_available_to_send();
+        bool is_remote_sender_to_stream = this->remote_update_network_type == DispatchRemoteNetworkType::STREAM;
+        bool is_remote_receiver_from_stream = input_queue_ptr->remote_update_network_type == DispatchRemoteNetworkType::STREAM;
+
+        uint32_t num_words_available_in_input =
+            is_remote_receiver_from_stream
+                ? fw_managed_rx_stream_num_bytes_available(
+                      input_queue_ptr->stream_state.stream_id, input_queue_ptr->stream_state) >>
+                      4
+                : input_queue_ptr->input_queue_curr_packet_num_words_available_to_send();
         uint32_t num_words_before_input_rptr_wrap = input_queue_ptr->get_queue_words_before_rptr_sent_wrap();
         num_words_available_in_input = std::min(num_words_available_in_input, num_words_before_input_rptr_wrap);
         uint32_t num_words_free_in_output = this->get_queue_data_num_words_free();
@@ -881,9 +938,26 @@ public:
         return num_words_to_forward;
     }
 
+    // Snijjar: grok -
+    /*
+     * Initiates a packet send from the input queue at `input_queue_index` to `this` (the output queue).
+     * This is a *non-blocking* function, so on completion of the call, the transfer can be in any one of 3 states:
+     *  - not started
+     *  - in progress
+     *  - completed
+     *
+     *
+     */
     inline uint32_t forward_data_from_input(uint32_t input_queue_index, bool& full_packet_sent, uint32_t end_of_cmd) {
 
+        // if stream remote sender
+
+        // else if stream remote receiver
+
+        // else
         packet_input_queue_state_t* input_queue_ptr = &(this->input_queue_status.input_queue_array[input_queue_index]);
+        bool input_is_stream = input_queue_ptr->remote_update_network_type == DispatchRemoteNetworkType::STREAM;
+        bool output_is_stream = this->remote_update_network_type == DispatchRemoteNetworkType::STREAM;
         uint32_t num_words_to_forward = this->get_num_words_to_send(input_queue_index);
         full_packet_sent = (num_words_to_forward == input_queue_ptr->get_curr_packet_words_remaining());
         if (num_words_to_forward == 0) {
@@ -903,14 +977,21 @@ public:
              input_queue_ptr->get_queue_rptr_sent_offset_words())*PACKET_WORD_SIZE_BYTES;
         uint32_t dest_addr =
             (this->queue_start_addr_words + this->get_queue_wptr_offset_words())*PACKET_WORD_SIZE_BYTES;
+
+        // Does the actual send
         this->send_data_to_remote(src_addr, dest_addr, num_words_to_forward);
         this->input_queue_status.register_words_in_flight(input_queue_index, num_words_to_forward);
         this->advance_queue_local_wptr(num_words_to_forward);
 
         if (!this->is_unpacketizer_output()) {
+            ASSERT(this->remote_update_network_type != DispatchRemoteNetworkType::STREAM);
             this->remote_wptr_update(num_words_to_forward);
         } else {
             this->unpacketizer_page_words_sent += num_words_to_forward;
+            // packet header size is in bytes and includes the header contribution to send size
+            // for now need to size relay stream buffer to 64k since that's max packet size
+            //  -> max prefetcher command size
+            // only set by dispatcher
             if (full_packet_sent && end_of_cmd) {
                 uint32_t unpacketizer_page_words_sent_past_page_bound =
                     this->unpacketizer_page_words_sent & (this->cb_mode_page_size_words - 1);
@@ -920,7 +1001,7 @@ public:
                     this->advance_queue_local_wptr(pad_words);
                 }
             }
-            uint32_t remote_sem_inc = 0;
+            uint32_t remote_sem_inc = 0; // page size semaphore... page => 4k
             while (this->unpacketizer_page_words_sent >= this->cb_mode_page_size_words) {
                 this->unpacketizer_page_words_sent -= this->cb_mode_page_size_words;
                 remote_sem_inc++;

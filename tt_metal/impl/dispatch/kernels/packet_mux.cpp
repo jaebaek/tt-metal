@@ -204,6 +204,7 @@ void kernel_main() {
                 curr_input = 0;
             }
         }
+        //
         output_queue.prev_words_in_flight_check_flush();
         dest_finished = output_queue.is_remote_finished();
     }

@@ -38,6 +38,18 @@ uint32_t get_receiver_stream_config_reg(uint32_t data_noc_id, uint32_t update_no
     return stream_cfg_reg;
 }
 
+
+FORCE_INLINE bool fw_managed_rx_stream_num_bytes_available(uint32_t stream_id, stream_state_t const& stream_state) {
+    uint32_t wrptr = NOC_STREAM_READ_REG(stream_id, STREAM_MSG_INFO_WR_PTR_REG_INDEX);
+    uint32_t n_16B_words_available = 0;
+    for (uint32_t internal_rdptr = stream_state.local_msg_info_ptr >> 4; internal_rdptr < wrptr; internal_rdptr++) {
+        volatile uint32_t *msg_hdr_ptr = reinterpret_cast<volatile uint32_t*>(internal_rdptr << 4);
+        n_16B_words_available += *msg_hdr_ptr;
+    }
+
+    return n_16B_words_available << 4;
+}
+
 FORCE_INLINE bool messages_are_available(uint32_t stream_id, stream_state_t &stream_state) {
     uint32_t wrptr = NOC_STREAM_READ_REG(stream_id, STREAM_MSG_INFO_WR_PTR_REG_INDEX);
     uint32_t rdptr = NOC_STREAM_READ_REG(stream_id, STREAM_MSG_INFO_PTR_REG_INDEX);

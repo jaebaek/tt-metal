@@ -53,12 +53,28 @@ inline bool is_remote_network_type_noc(DispatchRemoteNetworkType type) {
 
 struct dispatch_packet_header_t {
 
-    uint32_t packet_size_bytes;
+    union {
+        struct {
+            uint8_t end_of_cmd_flag;
+            uint8_t packet_size_bytes_hi;
+            uint8_t packet_size_bytes_mid;
+            uint8_t packet_size_bytes_lo;
+        } bytes;
+        uint32_t packet_size_bytes;
+    } packet_size_and_end_cmd_flag;
     uint16_t packet_src;
     uint16_t packet_dest;
     uint16_t packet_flags;
     uint16_t num_cmds;
     uint32_t tag;
+
+    inline uint32_t get_packet_size_bytes() const {
+        return (packet_size_and_end_cmd_flag.packet_size_bytes & 0x00'FF'FF'FF)
+    }
+
+    inline bool get_is_end_of_cmd() const {
+        return packet_size_and_end_cmd_flag.bytes.end_of_cmd_flag & 0x1;
+    }
 
     inline bool check_packet_flags(uint32_t flags) const {
         return (packet_flags & flags) == flags;

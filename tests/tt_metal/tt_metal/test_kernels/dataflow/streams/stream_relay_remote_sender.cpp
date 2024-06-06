@@ -83,6 +83,9 @@ FORCE_INLINE void stream_noc_write(
 
     bool first_message = num_tiles == 0;
 
+    // Can just move sync here
+    // wait_for_stream_write_complete(sender_stream_id);  // maybe needs to be moved out?
+
     NOC_STREAM_WRITE_REG(sender_stream_id, STREAM_CURR_PHASE_BASE_REG_INDEX, 0);
     NOC_STREAM_WRITE_REG(sender_stream_id, STREAM_CURR_PHASE_REG_INDEX, stream_state.local_phase_id);
 
@@ -95,6 +98,11 @@ FORCE_INLINE void stream_noc_write(
     if (message_id < 10) {
         hang_toggle(hang_toggle_semaphore);
     }
+
+    /// Could set buffer base address here because every 4k chunk is actually a separate packet
+    // which means it is contiguous in L1 - no wrapping to worry about
+    // -> Double check with Paul actually if this was done everywhere (fwd path, bwd path)
+    // *** -> if so we can just update the rdptr*** -> more robust anyways
 
     uint32_t rx_src_update_noc = 1 - dest_noc_id;
     if (send_last_message_and_drain) {
