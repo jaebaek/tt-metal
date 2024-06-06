@@ -447,6 +447,7 @@ void Device::compile_command_queue_programs() {
                 dispatch_constants::PREFETCH_Q_BASE,
                 dispatch_constants::get(dispatch_core_type).prefetch_q_size(),
                 CQ_PREFETCH_Q_RD_PTR,
+                CQ_PREFETCH_Q_PCIE_RD_PTR,
                 dispatch_constants::get(dispatch_core_type).cmddat_q_base(),
                 dispatch_constants::get(dispatch_core_type).cmddat_q_size(),
                 dispatch_constants::get(dispatch_core_type).scratch_db_base(),
@@ -594,6 +595,7 @@ void Device::compile_command_queue_programs() {
             dispatch_constants::PREFETCH_Q_BASE,
             dispatch_constants::get(dispatch_core_type).prefetch_q_size(),
             CQ_PREFETCH_Q_RD_PTR,
+            CQ_PREFETCH_Q_PCIE_RD_PTR,
             dispatch_constants::get(dispatch_core_type).cmddat_q_base(),
             dispatch_constants::get(dispatch_core_type).cmddat_q_size(),
             dispatch_constants::get(dispatch_core_type).scratch_db_base(), // unused for prefetch_h
@@ -998,6 +1000,7 @@ void Device::compile_command_queue_programs() {
             0, //prefetch_q_base,
             dispatch_constants::get(dispatch_core_type).prefetch_q_size(),
             CQ_PREFETCH_Q_RD_PTR,
+            CQ_PREFETCH_Q_PCIE_RD_PTR,
             dispatch_constants::DISPATCH_BUFFER_BASE, // overridden for split below
             dispatch_constants::get(dispatch_core_type).prefetch_d_buffer_size(), // overridden for split below
             scratch_db_base, // scratch_db_base filled in below if used
@@ -1176,7 +1179,9 @@ void Device::configure_command_queue_programs() {
         std::vector<uint32_t> prefetch_q_rd_ptr_addr_data = {
             (uint32_t)(dispatch_constants::PREFETCH_Q_BASE + dispatch_constants::get(dispatch_core_type).prefetch_q_size())
         };
+        std::vector<uint32_t> prefetch_q_pcie_rd_ptr_addr_data = {get_absolute_cq_offset(channel, cq_id, cq_size) + CQ_START};
         detail::WriteToDeviceL1(mmio_device, prefetch_location, CQ_PREFETCH_Q_RD_PTR, prefetch_q_rd_ptr_addr_data, dispatch_core_type);
+        detail::WriteToDeviceL1(mmio_device, prefetch_location, CQ_PREFETCH_Q_PCIE_RD_PTR, prefetch_q_pcie_rd_ptr_addr_data, dispatch_core_type);
         detail::WriteToDeviceL1(mmio_device, prefetch_location, dispatch_constants::PREFETCH_Q_BASE, prefetch_q, dispatch_core_type);
 
         // Initialize completion queue write pointer and read pointer copy

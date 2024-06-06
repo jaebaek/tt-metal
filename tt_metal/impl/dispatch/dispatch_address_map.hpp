@@ -12,6 +12,7 @@
 
 // Command queue pointers
 constexpr static uint32_t CQ_PREFETCH_Q_RD_PTR = L1_UNRESERVED_BASE;
+constexpr static uint32_t CQ_PREFETCH_Q_PCIE_RD_PTR = CQ_PREFETCH_Q_RD_PTR + sizeof(uint32_t); // Used to notify host of how far device has gotten.
 constexpr static uint32_t CQ_COMPLETION_WRITE_PTR = CQ_PREFETCH_Q_RD_PTR + L1_ALIGNMENT;
 constexpr static uint32_t CQ_COMPLETION_READ_PTR = CQ_COMPLETION_WRITE_PTR + L1_ALIGNMENT;
 // Max of 2 CQs. CQ0_COMPLETION_LAST_EVENT and CQ1_COMPLETION_LAST_EVENT track the last completed event in the respective CQs

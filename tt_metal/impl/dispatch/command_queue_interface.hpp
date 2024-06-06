@@ -755,13 +755,39 @@ class SystemMemoryManager {
         if (this->bypass_enable)
             return;
 
-        // Wait for space in the FetchQ
-        uint32_t fence;
-        while (this->prefetch_q_dev_ptrs[cq_id] == this->prefetch_q_dev_fences[cq_id]) {
-            tt::Cluster::instance().read_core(
-                &fence, sizeof(uint32_t), this->prefetcher_cores[cq_id], CQ_PREFETCH_Q_RD_PTR);
-            this->prefetch_q_dev_fences[cq_id] = fence;
-        }
+        // Helper to wait for fetch queue space, if needed
+        auto wait_for_fetch_q_space = [&]() {
+            // The condition for doing a read from device, no space in fetch queue
+            bool read_from_device = (this->prefetch_q_dev_ptrs[cq_id] == this->prefetch_q_dev_fences[cq_id]);
+            std::vector<uint32_t> prefetch_q_rd_ptrs;
+            prefetch_q_rd_ptrs.resize(2); // Fence, pcie addr
+
+            // Loop until space frees up
+            while (this->prefetch_q_dev_ptrs[cq_id] == this->prefetch_q_dev_fences[cq_id]) {
+                tt::Cluster::instance().read_core(
+                    prefetch_q_rd_ptrs,
+                    prefetch_q_rd_ptrs.size() * sizeof(uint32_t),
+                    this->prefetcher_cores[cq_id],
+                    CQ_PREFETCH_Q_RD_PTR);
+                this->prefetch_q_dev_fences[cq_id] = prefetch_q_rd_ptrs[0];
+            }
+
+            // If we did a read, prefetch_q_rd_ptrs[1] holds how far the device has read. Save it in hugepages in case
+            // we have an error and need to dump debug data.
+            if (read_from_device) {
+                chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->device_id);
+                uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(this->device_id);
+                prefetch_q_rd_ptrs[1] >>= 4; // CQ pointers are to 16B chunks
+                tt::Cluster::instance().write_sysmem(
+                    &prefetch_q_rd_ptrs[1],
+                    sizeof(uint32_t),
+                    HOST_CQ_ISSUE_READ_PTR + get_relative_cq_offset(cq_id, this->cq_size),
+                    mmio_device_id,
+                    channel);
+            }
+        };
+
+        wait_for_fetch_q_space();
 
         // Wrap FetchQ if possible
         CoreType core_type = dispatch_core_manager::get(num_hw_cqs).get_dispatch_core_type(device_id);
@@ -770,12 +796,7 @@ class SystemMemoryManager {
                                                           sizeof(dispatch_constants::prefetch_q_entry_type);
         if (this->prefetch_q_dev_ptrs[cq_id] == prefetch_q_limit) {
             this->prefetch_q_dev_ptrs[cq_id] = prefetch_q_base;
-
-            while (this->prefetch_q_dev_ptrs[cq_id] == this->prefetch_q_dev_fences[cq_id]) {
-                tt::Cluster::instance().read_core(
-                    &fence, sizeof(uint32_t), this->prefetcher_cores[cq_id], CQ_PREFETCH_Q_RD_PTR);
-                this->prefetch_q_dev_fences[cq_id] = fence;
-            }
+            wait_for_fetch_q_space();
         }
     }
 
