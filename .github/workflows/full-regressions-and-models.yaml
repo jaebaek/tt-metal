@@ -46,14 +46,8 @@ jobs:
           name: TTMetal_build_${{ matrix.arch }}
       - name: Extract files
         run: tar -xvf ttm_${{ matrix.arch }}.tar
-      - uses: ./.github/actions/install-python-deps
       - uses: ./.github/actions/load-docker-image
       - name: Run frequent reg tests scripts
         timeout-minutes: 210
         run: |
-          ./scripts/docker/run_docker_cmd.sh -- \
-            /bin/bash -c "source python_env/bin/activate \
-              source ${{ github.workspace }}/python_env/bin/activate
-              && cd $TT_METAL_HOME \
-              && export PYTHONPATH=$TT_METAL_HOME \
-              && ./tests/scripts/run_tests.sh --tt-arch ${{ matrix.arch }} --pipeline-type frequent_${{ matrix.frequent-type }} --dispatch-mode slow"
+          ./scripts/docker/run_docker_cmd.sh -- ./tests/scripts/run_tests.sh --tt-arch ${{ matrix.arch }} --pipeline-type frequent_${{ matrix.frequent-type }} --dispatch-mode slow
