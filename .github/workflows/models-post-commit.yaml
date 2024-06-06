@@ -42,7 +42,8 @@ jobs:
       - name: ${{ matrix.test-group.name }} tests
         timeout-minutes: 45
         run: |
-          ./scripts/docker/run_docker_cmd.sh -- ${{ matrix.test-group.cmd }}
+          ./scripts/docker/run_docker_cmd.sh -- /bin/bash ${{ matrix.test-group.cmd }}
+      - uses: ./.github/actions/slack-report
       - uses: ./.github/actions/slack-report
         if: ${{ failure() }}
         with:
