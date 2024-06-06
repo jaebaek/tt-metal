@@ -249,12 +249,13 @@ operation::ProgramWithCallbacks EltwiseBinary::create_program(
     const auto& input_tensor_a = input_tensors.at(0);
     const auto& input_tensor_b = input_tensors.at(1);
     const auto& output_tensor = this->in_place ? input_tensor_a : output_tensors.at(0);
+    const auto& compute_kernel_config = this->compute_kernel_config;
 
     switch (this->get_parallelization_strategy(input_tensors)) {
         case BinaryOpParallelizationStrategy::MULTI_CORE:
         default:
             return eltwise_binary_multi_core(
-                input_tensor_a, input_tensor_b, output_tensor, this->op_type, this->fused_activations);
+                input_tensor_a, input_tensor_b, output_tensor, this->op_type, this->fused_activations, compute_kernel_config);
     }
 }
 

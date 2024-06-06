@@ -245,7 +245,7 @@ inline __attribute__((always_inline)) void set_eltwise_binary_runtime_args(
 
 }
 
-operation::ProgramWithCallbacks eltwise_binary_multi_core(const Tensor &a, const Tensor &b, const Tensor& output, BinaryOpType op_type, const std::optional<std::vector<UnaryWithParam>> fused_activations) {
+operation::ProgramWithCallbacks eltwise_binary_multi_core(const Tensor &a, const Tensor &b, const Tensor& output, BinaryOpType op_type, const std::optional<std::vector<UnaryWithParam>> fused_activations, const std::optional<DeviceComputeKernelConfig> compute_kernel_config) {
 
     Program program{};
 
@@ -372,11 +372,37 @@ operation::ProgramWithCallbacks eltwise_binary_multi_core(const Tensor &a, const
         tt_metal::WriterDataMovementConfig(writer_compile_time_args, writer_defines));
 
     bool fp32_dest_acc_en = dst_cb_data_format == tt::DataFormat::UInt32 || dst_cb_data_format == tt::DataFormat::Int32 || dst_cb_data_format == tt::DataFormat::Float32;
+
+    MathFidelity math_fidelity = MathFidelity::HiFi4;
+    bool math_approx_mode = false;
+    if(compute_kernel_config) {
+    std::visit([&](auto&& compute_kernel_config) {
+        using T = std::decay_t<decltype(compute_kernel_config)>;
+        if constexpr (std::is_same_v<T, GrayskullComputeKernelConfig>) {
+            TT_ASSERT(device->arch() == ARCH::GRAYSKULL, "kernel config is not for graykull");
+            math_fidelity = compute_kernel_config.math_fidelity;
+            math_approx_mode = compute_kernel_config.math_approx_mode;
+        } else if constexpr (std::is_same_v<T, WormholeComputeKernelConfig>) {
+            TT_ASSERT(device->arch() == ARCH::WORMHOLE_B0, "kernel config is not for wormhole_b0");
+            math_fidelity = compute_kernel_config.math_fidelity;
+            math_approx_mode = compute_kernel_config.math_approx_mode;
+        } else {
+            TT_FATAL("Architecture not supported");
+        }
+
+    }, compute_kernel_config.value());
+    }
+
+
     auto eltwise_binary_kernel_id = tt_metal::CreateKernel(
         program,
         "tt_eager/tt_dnn/op_library/eltwise_binary/kernels/compute/eltwise_binary.cpp",
         all_device_cores,
-        tt_metal::ComputeConfig{.fp32_dest_acc_en=fp32_dest_acc_en, .defines = eltwise_defines});
+        tt_metal::ComputeConfig{.math_fidelity = math_fidelity,
+            .fp32_dest_acc_en = fp32_dest_acc_en,
+            .math_approx_mode = math_approx_mode,
+            .defines = eltwise_defines
+        });
 
 
     set_eltwise_binary_runtime_args<true>(

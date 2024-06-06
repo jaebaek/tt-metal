@@ -54,13 +54,15 @@ operation::ProgramWithCallbacks eltwise_binary_multi_core(
     const Tensor &b,
     const Tensor &output_tensor,
     BinaryOpType op_type,
-    const std::optional<std::vector<UnaryWithParam>> fused_activations);
+    const std::optional<std::vector<UnaryWithParam>> fused_activations,
+    const std::optional<DeviceComputeKernelConfig> compute_kernel_config);
 
 struct EltwiseBinary {
     const BinaryOpType op_type;
     const std::optional<std::vector<UnaryWithParam>> fused_activations;
     const MemoryConfig output_mem_config;
     const DataType output_dtype;
+    const std::optional<DeviceComputeKernelConfig> compute_kernel_config;
     const bool in_place;
 
     BinaryOpParallelizationStrategy get_parallelization_strategy(const std::vector<Tensor> &input_tensors) const;
@@ -94,13 +96,14 @@ struct EltwiseBinary {
         return result;
     }
     static constexpr auto attribute_names =
-        std::make_tuple("op_type", "fused_activations", "output_mem_config", "output_dtype", "in_place");
+        std::make_tuple("op_type", "fused_activations", "output_mem_config", "output_dtype", "compute_kernel_config", "in_place");
     const auto attribute_values() const {
         return std::make_tuple(
             std::cref(this->op_type),
             std::cref(this->fused_activations),
             std::cref(this->output_mem_config),
             std::cref(this->output_dtype),
+            std::cref(this->compute_kernel_config),
             std::cref(this->in_place));
     }
 
@@ -115,10 +118,11 @@ inline Tensor run_eltwise_binary(
     const MemoryConfig &output_mem_config,
     std::optional<const DataType> output_dtype,
     std::optional<Tensor> output_tensor,
+    std::optional<DeviceComputeKernelConfig> compute_kernel_config,
     BinaryOpType binary_op_type) {
         std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor_a, input_tensor_b}))};
         operation::launch_op(
-            [fused_activations, output_mem_config, output_dtype, output_tensor, queue_id, binary_op_type] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
+            [fused_activations, output_mem_config, output_dtype, output_tensor, queue_id, compute_kernel_config, binary_op_type] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
                 Tensor in_a = input_tensors.at(0);
                 Tensor in_b = input_tensors.at(1);
                 Shape shape_a = in_a.get_legacy_shape();
@@ -147,6 +151,7 @@ inline Tensor run_eltwise_binary(
                             fused_activations,
                             output_mem_config,
                             output_dtype.value_or(in_a.get_dtype()),
+                            compute_kernel_config,
                             false /*in place*/},
                         {in_a, in_b}, {}, {output_tensor}, queue_id);
                 return output_tensors;
@@ -162,10 +167,11 @@ inline Tensor run_eltwise_binary(
     const MemoryConfig &output_mem_config,
     std::optional<const DataType> output_dtype,
     std::optional<Tensor> output_tensor,
+    std::optional<DeviceComputeKernelConfig> compute_kernel_config,
     BinaryOpType binary_op_type)  {
         std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor_a, input_tensor_b}))};
         operation::launch_op(
-            [fused_activations, output_mem_config, output_dtype, output_tensor, binary_op_type] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
+            [fused_activations, output_mem_config, output_dtype, output_tensor, binary_op_type, compute_kernel_config] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
                 Tensor in_a = input_tensors.at(0);
                 Tensor in_b = input_tensors.at(1);
                 Shape shape_a = in_a.get_legacy_shape();
@@ -194,6 +200,7 @@ inline Tensor run_eltwise_binary(
                             fused_activations,
                             output_mem_config,
                             output_dtype.value_or(in_a.get_dtype()),
+                            compute_kernel_config,
                             false /*in place*/},
                         {in_a, in_b}, {}, {output_tensor});
                 return output_tensors;
@@ -210,9 +217,11 @@ struct make_eltwise_binary {
         std::optional<std::vector<UnaryWithParam>> fused_activations = std::nullopt,
         const MemoryConfig &output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         std::optional<const DataType> output_dtype = std::nullopt,
-        std::optional<Tensor> output_tensor = std::nullopt) const {
+        std::optional<Tensor> output_tensor = std::nullopt,
+        std::optional<DeviceComputeKernelConfig> compute_kernel_config = std::nullopt
+        ) const {
             return run_eltwise_binary(
-                 input_tensor_a, input_tensor_b, fused_activations, output_mem_config, output_dtype, output_tensor, binary_op_type
+                 input_tensor_a, input_tensor_b, fused_activations, output_mem_config, output_dtype, output_tensor, compute_kernel_config, binary_op_type
                 );
     }
 };
@@ -223,9 +232,10 @@ inline Tensor eq(
         std::optional<std::vector<UnaryWithParam>> fused_activations = std::nullopt,
         const MemoryConfig &output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         std::optional<const DataType> output_dtype = std::nullopt,
-        std::optional<Tensor> output_tensor = std::nullopt) {
+        std::optional<Tensor> output_tensor = std::nullopt,
+        std::optional<DeviceComputeKernelConfig> compute_kernel_config = std::nullopt) {
         return run_eltwise_binary(
-            input_tensor_a, input_tensor_b, fused_activations, output_mem_config, output_dtype, output_tensor, BinaryOpType::EQ);
+            input_tensor_a, input_tensor_b, fused_activations, output_mem_config, output_dtype, output_tensor, compute_kernel_config, BinaryOpType::EQ);
 }
 
 inline Tensor eq(
@@ -235,9 +245,10 @@ inline Tensor eq(
         std::optional<std::vector<UnaryWithParam>> fused_activations = std::nullopt,
         const MemoryConfig &output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         std::optional<const DataType> output_dtype = std::nullopt,
-        std::optional<Tensor> output_tensor = std::nullopt) {
+        std::optional<Tensor> output_tensor = std::nullopt,
+        std::optional<DeviceComputeKernelConfig> compute_kernel_config = std::nullopt) {
         return run_eltwise_binary(
-            queue_id, input_tensor_a, input_tensor_b, fused_activations, output_mem_config, output_dtype, output_tensor, BinaryOpType::EQ);
+            queue_id, input_tensor_a, input_tensor_b, fused_activations, output_mem_config, output_dtype, output_tensor, compute_kernel_config, BinaryOpType::EQ);
 }
 
 // arithmetic binary ops
@@ -273,11 +284,12 @@ inline Tensor add(
     std::optional<std::vector<UnaryWithParam>> fused_activations = std::nullopt,
     const MemoryConfig &output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
     std::optional<const DataType> output_dtype = std::nullopt,
+    std::optional<DeviceComputeKernelConfig> compute_kernel_config = std::nullopt,
     bool in_place = false,
     std::optional<Tensor> output_tensor = std::nullopt) {
     std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor_a, input_tensor_b}))};
     operation::launch_op(
-        [fused_activations, output_mem_config, output_dtype, in_place, output_tensor] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
+        [fused_activations, output_mem_config, output_dtype, in_place, output_tensor, compute_kernel_config] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<std::optional<Tensor>>& optional_output_tensors) mutable -> std::vector<Tensor> {
             auto& input_tensor_a = input_tensors.at(0);
             auto& input_tensor_b = input_tensors.at(1);
 
@@ -308,6 +320,7 @@ inline Tensor add(
                     fused_activations,
                     output_mem_config,
                     output_dtype.value_or(in_a.get_dtype()),
+                    compute_kernel_config,
                     in_place},
                 {in_a, in_b}, {}, {output_tensor});
             if (in_place) {
