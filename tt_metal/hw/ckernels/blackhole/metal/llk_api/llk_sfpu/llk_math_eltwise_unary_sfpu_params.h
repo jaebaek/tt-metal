@@ -14,7 +14,6 @@ inline void llk_math_eltwise_unary_sfpu_params(
     ARGS&& ... args) {
 
     math::set_dst_write_addr<DstTileLayout::Default, DstTileShape::Tile32x32>(dst_index);
-    math::set_addr_mod_base();
 
     TTI_STALLWAIT(p_stall::STALL_SFPU, p_stall::MATH);
     if (vector_mode == (int)VectorMode::R) {
