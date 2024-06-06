@@ -11,6 +11,7 @@
 #include "tt_dnn/op_library/bmm/bmm_op.hpp"
 #include "tt_dnn/op_library/groupnorm/groupnorm_op.hpp"
 #include "tt_dnn/op_library/layernorm/layernorm_op.hpp"
+#include "tt_dnn/op_library/layernorm_distributed/layernorm_part1_op.hpp"
 #include "tt_dnn/op_library/layernorm_distributed/layernorm_part2_op.hpp"
 #include "tt_dnn/op_library/moreh_adam/moreh_adam_op.hpp"
 #include "tt_dnn/op_library/moreh_adamw/moreh_adamw_op.hpp"
@@ -505,6 +506,24 @@ void py_module(py::module& m_primary) {
         py::arg("compute_kernel_config").noconvert() = std::nullopt,
         R"doc(
             Performs a rmsnorm(a+b)*gamma + beta operation.
+        )doc");
+
+    m_primary.def(
+        "layernorm_part1",
+        tt::operations::primary::layernorm_part1,
+        py::arg("input").noconvert(),
+        py::arg("compute_kernel_config").noconvert() = std::nullopt,
+        R"doc(
+            TODO
+        )doc");
+
+    m_primary.def(
+        "rmsnorm_part1",
+        tt::operations::primary::rmsnorm_part1,
+        py::arg("input").noconvert(),
+        py::arg("compute_kernel_config").noconvert() = std::nullopt,
+        R"doc(
+            TODO
         )doc");
 
     m_primary.def(
