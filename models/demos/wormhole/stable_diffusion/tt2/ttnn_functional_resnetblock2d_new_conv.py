@@ -17,6 +17,7 @@ from models.demos.wormhole.stable_diffusion.tt2.ttnn_functional_utility_function
     post_process_output,
     permute_conv_parameters,
     weight_to_bfp8,
+    dealloc_input,
 )
 from models.demos.wormhole.stable_diffusion.tt2.ttnn_functional_utility_functions import conv_cache
 from loguru import logger
@@ -393,12 +394,12 @@ class resnetBlock2D:
             # hidden_states = ttnn.experimental.tensor.interleaved_to_sharded(
             #     hidden_states, self.conv1s[0].conv.input_sharded_memory_config, hidden_states.dtype
             # )
+            hidden_states = nonlinearity(hidden_states, memory_config=ttnn.get_memory_config(hidden_states))
             hidden_states = ttnn.experimental.tensor.sharded_to_interleaved(
                 hidden_states, ttnn.L1_MEMORY_CONFIG, hidden_states.dtype
             )
-            hidden_states = ttnn.to_layout(hidden_states, ttnn.TILE_LAYOUT)
-
-            hidden_states = nonlinearity(hidden_states, memory_config=ttnn.get_memory_config(hidden_states))
+            hidden_states = ttnn.reallocate(hidden_states)
+            # hidden_states = ttnn.to_layout(hidden_states, ttnn.TILE_LAYOUT)
 
             # hidden_states = self.conv1s[0](hidden_states)
 
@@ -571,13 +572,13 @@ class resnetBlock2D:
                 )
 
         if temb is not None and time_embedding_norm == "default":
-            # Need block and width sharded broadcast to eliminate interleaved.
-            hidden_states = ttnn.to_memory_config(hidden_states, ttnn.L1_MEMORY_CONFIG)
-            hidden_states = ttnn.reshape(
+            hidden_states = ttnn.experimental.tensor.bcast(
                 hidden_states,
-                (self.batch_size, 1, self.conv2_input_height * self.conv2_input_width, out_channels),
+                temb,
+                ttnn.experimental.tensor.BcastOpMath.ADD,
+                ttnn.experimental.tensor.BcastOpDim.H,
+                output_mem_config=hidden_states.memory_config(),
             )
-            hidden_states = ttnn.add(hidden_states, temb, memory_config=hidden_states.memory_config())
 
         hidden_states = ttnn.to_layout(hidden_states, ttnn.ROW_MAJOR_LAYOUT, memory_config=ttnn.L1_MEMORY_CONFIG)
         hidden_states = ttnn.to_memory_config(hidden_states, self.second_gn_expected_input_sharded_memory_config)
