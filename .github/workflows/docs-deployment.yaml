@@ -2,6 +2,7 @@ name: "Release Docs: package the docs and publish to Docs the repo"
 
 on:
   workflow_dispatch:
+  workflow_call:
 
 concurrency:
   # Note that people may spam the post-commit pipeline on their branch, and
