@@ -571,22 +571,53 @@ namespace tt::tt_metal::detail{
                 "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
         )doc");
 
-        m_tensor.def("tril",
-	    &tril, py::arg("input"), py::arg("diag") = 0
-            , py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, R"doc(
-            Returns a new tensor with lower triangular elements of input with rest being zero.
+        m_tensor.def(
+            "tril",
+            py::overload_cast<const Tensor&, int32_t, const MemoryConfig&, std::optional<Tensor> >(&tril),
+            py::arg("input"),
+            py::arg("diag") = 0,
+            py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+            py::arg("output_tensor").noconvert() = std::nullopt,
+            R"doc(
+                Returns a new tensor with lower triangular elements of input with rest being zero.
 
-            Input tensor will have BFLOAT16 data type.
+                Input tensor will have BFLOAT16 data type.
 
-            Output tensor will have BFLOAT16 data type.
+                Output tensor will have BFLOAT16 data type.
 
-            .. csv-table::
-                :header: "Argument", "Description", "Data type", "Valid range", "Required"
+                .. csv-table::
+                    :header: "Argument", "Description", "Data type", "Valid range", "Required"
 
-                "input", "tensor input to be lower triangular processed", "Tensor", "", "Yes"
-                "diag", "diagonal to be chosen", "int32_t", "-dim to +dim (default to 0)", "No"
-                "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
-        )doc");
+                    "input", "tensor input to be lower triangular processed", "Tensor", "", "Yes"
+                    "diag", "diagonal to be chosen", "int32_t", "-dim to +dim (default to 0)", "No"
+                    "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
+                    "output_tensor", "optional output tensor", "Tensor", "default is None", "No"
+            )doc");
+
+        m_tensor.def(
+            "tril",
+            py::overload_cast<uint8_t, const Tensor&, int32_t, const MemoryConfig&, std::optional<Tensor> >(&tril),
+            py::arg("cq_id") = 0,
+            py::arg("input"),
+            py::arg("diag") = 0,
+            py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+            py::arg("output_tensor").noconvert() = std::nullopt,
+            R"doc(
+                Returns a new tensor with lower triangular elements of input with rest being zero.
+
+                Input tensor will have BFLOAT16 data type.
+
+                Output tensor will have BFLOAT16 data type.
+
+                .. csv-table::
+                    :header: "Argument", "Description", "Data type", "Valid range", "Required"
+
+                    "cq_id", "cq_id to be chosen", "uint8_t", "(default to 0)", "No"
+                    "input", "tensor input to be lower triangular processed", "Tensor", "", "Yes"
+                    "diag", "diagonal to be chosen", "int32_t", "-dim to +dim (default to 0)", "No"
+                    "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
+                    "output_tensor", "optional output tensor", "Tensor", "default is None", "No"
+            )doc");
 
         m_tensor.def("zeros", &zeros,
             py::arg("shape"), py::arg("data_type").noconvert() = DataType::BFLOAT16, py::arg("layout").noconvert() = Layout::ROW_MAJOR, py::arg("device") = nullptr, py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, R"doc(

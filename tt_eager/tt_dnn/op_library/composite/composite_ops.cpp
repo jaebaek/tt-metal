@@ -1634,15 +1634,38 @@ Tensor sfpu_eps(const Shape shape, Layout layout, Device* device, const MemoryCo
 }
 
 // tril : select lower triangular region of input matrix
-Tensor _tril(const Tensor& input_a, int32_t diag, const MemoryConfig& output_mem_config) {
+Tensor _tril(const Tensor& input_a, int32_t diag, const MemoryConfig& output_mem_config, std::optional<Tensor> output_tensor) {
     Tensor index_l = tt::numpy::index_tril<bfloat16>(input_a.get_legacy_shape(), diag, DataType::BFLOAT16, Layout::TILE, input_a.device(), output_mem_config);
+    if (output_tensor.has_value()) {
+        mul(input_a, index_l, std::nullopt, operation::DEFAULT_OUTPUT_MEMORY_CONFIG, std::nullopt, output_tensor.value());
+        return output_tensor.value();
+    }
     return mul(input_a, index_l, std::nullopt, output_mem_config);
 }
 Tensor tril(
     const Tensor& input_a,
     int32_t dim /* = -1 */,
-    const MemoryConfig& output_mem_config /* = operation::DEFAULT_OUTPUT_MEMORY_CONFIG */) {
-    return operation::decorate_as_composite(__func__, _tril)(input_a, dim, output_mem_config);
+    const MemoryConfig& output_mem_config /* = operation::DEFAULT_OUTPUT_MEMORY_CONFIG */,
+    std::optional<Tensor> output_tensor) {
+    return operation::decorate_as_composite(__func__, _tril)(input_a, dim, output_mem_config, output_tensor);
+}
+
+// tril : select lower triangular region of input matrix
+Tensor _tril_overload(uint8_t cq_id, const Tensor& input_a, int32_t diag, const MemoryConfig& output_mem_config, std::optional<Tensor> output_tensor) {
+    Tensor index_l = tt::numpy::index_tril<bfloat16>(input_a.get_legacy_shape(), diag, DataType::BFLOAT16, Layout::TILE, input_a.device(), output_mem_config);
+    if (output_tensor.has_value()) {
+        mul(input_a, index_l, std::nullopt, operation::DEFAULT_OUTPUT_MEMORY_CONFIG, std::nullopt, output_tensor.value());
+        return output_tensor.value();
+    }
+    return mul(input_a, index_l, std::nullopt, output_mem_config);
+}
+Tensor tril(
+    uint8_t cq_id,
+    const Tensor& input_a,
+    int32_t dim /* = -1 */,
+    const MemoryConfig& output_mem_config /* = operation::DEFAULT_OUTPUT_MEMORY_CONFIG */,
+    std::optional<Tensor> output_tensor) {
+    return operation::decorate_as_composite(__func__, _tril_overload)(cq_id, input_a, dim, output_mem_config, output_tensor);
 }
 
 // triu : select upper triangular region of input matrix
