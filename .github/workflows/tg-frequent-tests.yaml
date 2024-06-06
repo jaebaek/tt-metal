@@ -46,12 +46,7 @@ jobs:
           name: TTMetal_build_${{ matrix.test-group.arch }}
       - name: Extract files
         run: tar -xvf ttm_${{ matrix.test-group.arch }}.tar
-      - uses: ./.github/actions/install-python-deps
       - name: Run frequent regression tests
         timeout-minutes: 60
         run: |
-          ./scripts/docker/run_docker_cmd.sh -- \
-          /bin/bash -c "source python_env/bin/activate \
-            && cd $TT_METAL_HOME \
-            && export PYTHONPATH=$TT_METAL_HOME \
-            && ${{ matrix.test-group.cmd }}"
+          ./scripts/docker/run_docker_cmd.sh -- ${{ matrix.test-group.cmd }}

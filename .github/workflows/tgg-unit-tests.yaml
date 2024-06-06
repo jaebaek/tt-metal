@@ -52,7 +52,4 @@ jobs:
       - name: Run unit regression tests
         timeout-minutes: 45
         run: |
-          ./scripts/docker/run_docker_cmd.sh -- \
-          /bin/bash -c "source python_env/bin/activate \
-            && source ${{ github.workspace }}/python_env/bin/activate \
-            && ${{ matrix.test-group.cmd }}"
+          ./scripts/docker/run_docker_cmd.sh -- ${{ matrix.test-group.cmd }}
