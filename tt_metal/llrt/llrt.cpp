@@ -323,6 +323,12 @@ static bool check_if_riscs_on_specified_core_done(chip_id_t chip_id, const CoreC
         std::vector<uint32_t> run_mailbox_read_val = {RUN_MAILBOX_BOGUS};
         // read a single uint32_t even though launch.run is smaller than that
         run_mailbox_read_val = read_hex_vec_from_core(chip_id, core, run_mailbox_address & ~0x3, sizeof(uint32_t));
+
+        // std::vector<uint32_t> l1_unreserved_base_val = {RUN_MAILBOX_BOGUS};
+        // l1_unreserved_base_val = read_hex_vec_from_core(chip_id, core, L1_UNRESERVED_BASE, sizeof(uint64_t));
+
+        // std::cout << "L1 unreserved base: " << std::hex << l1_unreserved_base_val[0]  << std::dec << std::endl;
+
         uint8_t run = run_mailbox_read_val[0] >> (8 * (offsetof(launch_msg_t, run) & 3));
         if (run != run_state && run != RUN_MSG_DONE) {
             fprintf(
@@ -344,9 +350,16 @@ void wait_until_cores_done(chip_id_t device_id,
                            int run_state,
                            std::unordered_set<CoreCoord>& not_done_phys_cores) {
 
+    auto start = std::chrono::high_resolution_clock::now();
     // poll the cores until the set of not done cores is empty
     int loop_count = 1;
     while (!not_done_phys_cores.empty()) {
+        auto now = std::chrono::high_resolution_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start).count();
+        if (elapsed > 3000) {
+            std::string cores = fmt::format("{}", fmt::join(not_done_phys_cores, ", "));
+            TT_THROW("Timeout waiting for cores to finish: {}", cores);
+        }
         // Print not-done cores
         if (loop_count % 1000 == 0) {
             string not_done_cores_str = "Not done phys cores: ";
