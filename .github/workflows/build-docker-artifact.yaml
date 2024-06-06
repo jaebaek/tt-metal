@@ -56,3 +56,28 @@ jobs:
       #   with:
       #     name: docker_image.tar.gz
       #     path: /tmp/docker_image.tar.gz 
+          ./scripts/docker/build_docker_image.sh ${{ env.TT_METAL_DOCKER_IMAGE }}:current
+          
+      - name: Get Docker image digests
+        id: compare-ids
+        run: |
+          DOCKERID1=$(docker inspect --format='{{.Id}}' ubuntu-20.04-amd64:latest | cut -d'@' -f2)
+          DOCKERID2=$(docker inspect --format='{{.Id}}' ubuntu-20.04-amd64:current | cut -d'@' -f2)
+          if [ "${DOCKERID1}" != "${DOCKERID2}" ]; then
+            echo "same=false" >> $GITHUB_OUTPUT
+          else
+            echo "same=true" >> $GITHUB_OUTPUT
+          fi
+      - name: Get Docker image tag
+        if: ${{ env.same }} == 'false'
+        run: |
+          docker tag ${{ env.TT_METAL_DOCKER_IMAGE }}:current ${{ env.TT_METAL_DOCKER_IMAGE }}:latest
+      - name: Save Docker image
+        if: ${{ env.same }} == 'false'
+        run: |
+          docker save ${{ env.TT_METAL_DOCKER_IMAGE }}:latest | gzip > /tmp/docker_image.tar.gz   
+      - name: Upload Docker image as artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: docker_image.tar.gz
+          path: /tmp/docker_image.tar.gz 
