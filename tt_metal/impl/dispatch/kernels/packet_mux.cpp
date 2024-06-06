@@ -135,10 +135,16 @@ constexpr uint32_t input_packetize_dest_endpoint[MAX_SWITCH_FAN_IN] =
         (get_compile_time_arg_val(24) >> 24) & 0xFF
     };
 
+constexpr bool use_stream_for_writer = get_compile_time_arg_val(25) == 1;
 
 void kernel_main() {
 
     noc_init();
+
+    uint32_t arg_idx = 0;
+    if constexpr (use_stream_for_writer) {
+        arg_idx = output_queue.stream_state.init_from_runtime_args(arg_idx);
+    }
 
     test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_STARTED;
     test_results[PQ_TEST_MISC_INDEX] = 0xff000000;

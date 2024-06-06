@@ -406,6 +406,7 @@ class packet_input_queue_state_t : public packet_queue_state_t {
 
 protected:
 
+    fabric_receiver_stream_state_t stream_state;
     bool curr_packet_valid;
     tt_l1_ptr dispatch_packet_header_t* curr_packet_header_ptr;
     uint16_t curr_packet_src;
@@ -648,7 +649,7 @@ public:
 class packet_output_queue_state_t : public packet_queue_state_t {
 
 protected:
-
+    fabric_sender_stream_state_t stream_state;
     uint32_t max_noc_send_words;
     uint32_t max_eth_send_words;
 

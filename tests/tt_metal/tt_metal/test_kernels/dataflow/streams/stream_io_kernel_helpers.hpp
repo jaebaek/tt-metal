@@ -45,13 +45,12 @@ struct stream_state_t {
 struct fabric_sender_stream_state_t {
     // All possible helpers should be hidden behind this struct because it will
     // simplify the enablement of optimization
-    const uint32_t local_data_buffer_base_address;
-    const uint32_t local_msg_info_ptr_base_address;
+    uint32_t local_msg_info_ptr_base_address;
 
     uint32_t local_stream_id;
     uint32_t remote_stream_id;
 
-    const uint32_t local_start_phase_id;
+    uint32_t local_start_phase_id;
     uint32_t local_phase_id;
     uint32_t messages_per_phase;
     uint32_t msg_info_wrptr_addr;
@@ -70,7 +69,25 @@ struct fabric_sender_stream_state_t {
     uint32_t remote_buffer_write_offset;
 
     uint32_t remote_phase_id;
-    uint32_t
+
+    uint32_t init_from_runtime_args(uint32_t arg_idx) {
+        this->local_msg_info_ptr_base_address = get_arg_val<uint32_t>(arg_idx++);
+        this->local_stream_id = get_arg_val<uint32_t>(arg_idx++);
+        this->remote_stream_id = get_arg_val<uint32_t>(arg_idx++);
+        this->local_start_phase_id = get_arg_val<uint32_t>(arg_idx++);
+        this->local_phase_id = get_arg_val<uint32_t>(arg_idx++);
+        this->messages_per_phase = get_arg_val<uint32_t>(arg_idx++);
+        this->msg_info_wrptr_addr = get_arg_val<uint32_t>(arg_idx++);
+        this->num_tiles_sent = get_arg_val<uint32_t>(arg_idx++);
+        this->tile_header_num_msgs = get_arg_val<uint32_t>(arg_idx++);
+        this->local_msg_info_ptr = get_arg_val<uint32_t>(arg_idx++);
+        this->remote_buffer_base_addr = get_arg_val<uint32_t>(arg_idx++);
+        this->remote_buffer_size = get_arg_val<uint32_t>(arg_idx++);
+        this->remote_msg_info_ptr = get_arg_val<uint32_t>(arg_idx++);
+        this->remote_buffer_write_offset = get_arg_val<uint32_t>(arg_idx++);
+        this->remote_phase_id = get_arg_val<uint32_t>(arg_idx++);
+        return arg_idx;
+    }
 
     uint32_t get_current_local_buffer_address() const {
         return local_data_buffer_base_address + local_buffer_read_offset;
