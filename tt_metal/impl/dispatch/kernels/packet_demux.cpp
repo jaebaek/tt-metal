@@ -181,6 +181,7 @@ constexpr uint32_t output_depacketize_remove_header[MAX_SWITCH_FAN_OUT] =
     };
 
 
+constexpr bool use_stream_for_reader = get_compile_time_arg_val(30) == 1;
 
 inline uint8_t dest_output_queue_id(uint32_t dest_endpoint_id) {
     uint32_t dest_endpoint_index = dest_endpoint_id - endpoint_id_start_index;
@@ -190,6 +191,9 @@ inline uint8_t dest_output_queue_id(uint32_t dest_endpoint_id) {
 void kernel_main() {
 
     noc_init();
+    if constexpr (use_stream_for_writer) {
+        arg_idx = input_queue.stream_state.init_from_runtime_args(arg_idx);
+    }
 
     test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_STARTED;
     test_results[PQ_TEST_MISC_INDEX] = 0xff000000;
