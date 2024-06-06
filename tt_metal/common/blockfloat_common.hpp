@@ -7,7 +7,6 @@
 #include <iostream>
 #include <random>
 #include <vector>
-#include <immintrin.h>
 
 #include "tt_metal/common/assert.hpp"
 #include "tt_metal/common/logger.hpp"
