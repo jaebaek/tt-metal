@@ -1,0 +1,80 @@
+name: "Docs package the docs and publish to Docs the repo"
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  # Note that people may spam the post-commit pipeline on their branch, and
+  # we have this docs pipeline in the post-commit pipeline, then people
+  # would have to wait until the previous one fully completes. That may be
+  # ok because each post-commit pipeline definitely takes more than 30 min
+  group: "pages-${{ github.ref }}"
+  cancel-in-progress: false
+
+jobs:
+  package-push-docs:
+    strategy:
+      # Do not fail-fast because we need to ensure all tests go to completion
+      # so we try not to get hanging machines
+      fail-fast: false
+      matrix:
+        arch: [grayskull]
+    env:
+      TT_METAL_ENV: ${{ vars.TT_METAL_ENV }}
+      DOCS_VERSION: latest
+      ARCH_NAME: ${{ matrix.arch }}
+      LOGURU_LEVEL: INFO
+      LD_LIBRARY_PATH: ${{ github.workspace }}/build/lib
+    environment: dev
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          lfs: false
+      - name: Set up dynamic env vars for build
+        run: |
+          echo "TT_METAL_HOME=$(pwd)" >> $GITHUB_ENV
+      - uses: ./.github/actions/install-metal-deps
+        with:
+          os: ubuntu-20.04
+      - uses: ./.github/actions/install-metal-dev-deps
+        with:
+          os: ubuntu-20.04
+      - uses: actions/download-artifact@v4
+        with:
+          name: TTMetal_build_${{ matrix.arch }}
+      - name: Extract files
+        run: tar -xvf ttm_${{ matrix.arch }}.tar
+      - uses: ./.github/actions/install-python-deps
+      - name: Build Docs
+        timeout-minutes: 15
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          source ${{ github.workspace }}/python_env/bin/activate
+          cd $TT_METAL_HOME
+          export PYTHONPATH=$TT_METAL_HOME
+          doxygen
+      - name: Package Docs
+        run: |
+          mkdir tt-metalium
+          cp docs/doxygen_build tt-metalium
+          cp -r docs/source/tt-metalium/* tt-metalium
+          rm tt-metalium/conf.py  # Do not change conf.py
+          git config --global user.email "tenstorrent-github-bot@tenstorrent.com"
+          git config --global user.name "tenstorrent-github-bot"
+          git clone https://tenstorrent-github-bot:${GITHUB_BOT_TOKEN}@github.com/tenstorrent/docs-test.git
+          git remote set-url origin https://tenstorrent-github-bot:${GITHUB_BOT_TOKEN}@github.com/tenstorrent/docs-test.git
+          git checkout main
+          cd docs-test
+          cp -r tt-metalium/* docs/test/tt-metalium
+      - name: Push docs to Docs repo for publishing
+        run: |
+          pip install -r requirements.txt
+          cp -r ../docs/public/md/* tt-metalium  # Copy the files
+          python update_tags.py tt-metalium $$CI_COMMIT_TAG
+          git add .
+          git commit -m "update tt-metalium docs from pipeline $CI_PIPELINE_ID with tag $CI_COMMIT_TAG"
+          git tag -a $CI_COMMIT_TAG -m "tt-metalium documentation version $CI_COMMIT_TAG"
+          git push && git push --tags
