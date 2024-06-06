@@ -28,8 +28,8 @@ COPY build_metal.sh /scripts/build_metal.sh
 # Setup Env variables to setup Python Virtualenv - Install TT-Metal Python deps
 ENV TT_METAL_INFRA_DIR=/opt/tt_metal_infra
 ENV PYTHON_ENV_DIR=${TT_METAL_INFRA_DIR}/tt-metal/python_env
-RUN python3 -m venv $PYTHON_ENV_DIR
-ENV PATH="$PYTHON_ENV_DIR/bin:$PATH"
+# RUN python3 -m venv $PYTHON_ENV_DIR
+# ENV PATH="$PYTHON_ENV_DIR/bin:$PATH"
 
 # Copy requirements from tt-metal folders with requirements.txt docs
 COPY /docs/requirements-docs.txt ${TT_METAL_INFRA_DIR}/tt-metal/docs/.
@@ -39,7 +39,6 @@ RUN python3 -m pip config set global.extra-index-url https://download.pytorch.or
 
 RUN python3 -m pip install -r ${TT_METAL_INFRA_DIR}/tt-metal/tt_metal/python_env/requirements-dev.txt
 RUN python3 -m pip install -r ${TT_METAL_INFRA_DIR}/tt-metal/docs/requirements-docs.txt
-RUN python3 -m pip install loguru==0.6.0
 
 # Install Clang-17
 RUN wget https://apt.llvm.org/llvm.sh \
