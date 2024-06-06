@@ -129,8 +129,6 @@ class TtFalconDecoderLayer(nn.Module):
 
         assert not output_attentions
 
-        print("Layer layernorm stuff!")
-        print("Runtime: Layernorm output mem config is: ", self.model_config["INPUT_LAYERNORM_OUTPUT_MEMCFG"])
         layernorm_output = []
         # for i in range(self.num_devices):
         #     layernorm_output.append(

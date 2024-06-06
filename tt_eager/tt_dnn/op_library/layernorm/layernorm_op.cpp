@@ -116,11 +116,11 @@ void LayerNorm::validate(const std::vector<Tensor> &input_tensors, const std::ve
                     TT_FATAL(a.memory_config().memory_layout != TensorMemoryLayout::HEIGHT_SHARDED);
                 } else {
                     if (row_wise) {
-                        TT_FATAL(Kt / (bbox.end.x + 1) == program_config.block_w, "block_w must equal to K / num_cores_c.");
-                        TT_FATAL(Mt / (bbox.end.y + 1) == program_config.block_h, "block_h must equal to M / num_cores_r.");
+                        TT_FATAL(div_up(Kt, (bbox.end.x + 1)) == program_config.block_w, "block_w must equal to K / num_cores_c.");
+                        TT_FATAL(div_up(Mt, (bbox.end.y + 1)) == program_config.block_h, "block_h must equal to M / num_cores_r.");
                     } else {
-                        TT_FATAL(Kt / (bbox.end.y + 1) == program_config.block_w, "block_w must equal to K / num_cores_r.");
-                        TT_FATAL(Mt / (bbox.end.x + 1) == program_config.block_h, "block_h must equal to M / num_cores_c.");
+                        TT_FATAL(div_up(Kt, (bbox.end.y + 1)) == program_config.block_w, "block_w must equal to K / num_cores_r.");
+                        TT_FATAL(div_up(Mt, (bbox.end.x + 1)) == program_config.block_h, "block_h must equal to M / num_cores_c.");
                     }
                 }
                 if (b.has_value()) {
