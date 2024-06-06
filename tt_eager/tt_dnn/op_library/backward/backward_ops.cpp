@@ -185,6 +185,53 @@ std::vector<std::optional<Tensor>> mul_bw(
         grad, input_a, input_b, output_mem_config, are_required_outputs, input_a_grad, input_b_grad);
 }
 
+std::vector<std::optional<Tensor>> _mul_bw_overload(
+    uint8_t cq_id,
+    const Tensor& grad,
+    const Tensor& input_a,
+    const Tensor& input_b,
+    const MemoryConfig& output_mem_config,
+    const std::vector<bool>& are_required_outputs,
+    std::optional<Tensor> input_a_grad,
+    std::optional<Tensor> input_b_grad) {
+    std::vector<std::optional<Tensor>> result;
+
+    if (are_required_outputs.at(0)) {
+        if(input_a_grad.has_value()) {
+            mul(cq_id, grad, input_b, std::nullopt, operation::DEFAULT_OUTPUT_MEMORY_CONFIG, std::nullopt, input_a_grad.value());
+        } else {
+            input_a_grad = mul(cq_id, grad, input_b, std::nullopt, output_mem_config);
+        }
+        result.push_back(input_a_grad.value());
+    } else {
+        result.push_back(std::nullopt);
+    }
+    if (are_required_outputs.at(1)) {
+        if(input_b_grad.has_value()) {
+            mul(cq_id, grad, input_a, std::nullopt, operation::DEFAULT_OUTPUT_MEMORY_CONFIG, std::nullopt, input_b_grad.value());
+        } else {
+            input_b_grad = mul(cq_id, grad, input_a, std::nullopt, output_mem_config);
+        }
+        result.push_back(input_b_grad.value());
+    } else {
+        result.push_back(std::nullopt);
+    }
+
+    return std::move(result);
+}
+std::vector<std::optional<Tensor>> mul_bw(
+    uint8_t cq_id,
+    const Tensor& grad,
+    const Tensor& input_a,
+    const Tensor& input_b,
+    const MemoryConfig& output_mem_config,
+    const std::vector<bool>& are_required_outputs,
+    std::optional<Tensor> input_a_grad,
+    std::optional<Tensor> input_b_grad) {
+    return operation::decorate_as_composite(__func__, _mul_bw_overload)(
+        cq_id, grad, input_a, input_b, output_mem_config, are_required_outputs, input_a_grad, input_b_grad);
+}
+
 std::vector<Tensor> _exp_bw(const Tensor& grad, const Tensor& input, const MemoryConfig& output_mem_config) {
     std::vector<Tensor> grad_tensor;
     float t_inf = std::numeric_limits<float>::infinity();
@@ -2022,7 +2069,7 @@ std::vector<std::optional<Tensor>> binary_eq_bw(
 }
 
 std::vector<std::optional<Tensor>> _binary_eq_bw_overload(
-    uint8_t queue_id,
+    uint8_t cq_id,
     const Tensor& grad,
     const Tensor& input,
     const Tensor& other,
@@ -2034,7 +2081,7 @@ std::vector<std::optional<Tensor>> _binary_eq_bw_overload(
 
     if (are_required_outputs.at(0)) {
         if(input_grad.has_value()){
-            assign(queue_id, zeros_like(input, output_mem_config), input_grad.value());
+            assign(cq_id, zeros_like(input, output_mem_config), input_grad.value());
         } else {
             input_grad = zeros_like(input, output_mem_config);
         }
@@ -2044,7 +2091,7 @@ std::vector<std::optional<Tensor>> _binary_eq_bw_overload(
     }
     if (are_required_outputs.at(1)) {
         if(other_grad.has_value()){
-            assign(queue_id, zeros_like(other, output_mem_config), other_grad.value());
+            assign(cq_id, zeros_like(other, output_mem_config), other_grad.value());
         } else {
             other_grad = zeros_like(other, output_mem_config);
         }
@@ -2055,7 +2102,7 @@ std::vector<std::optional<Tensor>> _binary_eq_bw_overload(
     return std::move(result);
 }
 std::vector<std::optional<Tensor>> binary_eq_bw(
-    uint8_t queue_id,
+    uint8_t cq_id,
     const Tensor& grad,
     const Tensor& input,
     const Tensor& other,
@@ -2064,7 +2111,7 @@ std::vector<std::optional<Tensor>> binary_eq_bw(
     std::optional<Tensor> input_grad,
     std::optional<Tensor> other_grad) {
     return operation::decorate_as_composite(__func__, _binary_eq_bw_overload)(
-        queue_id, grad, input, other, output_mem_config, are_required_outputs, input_grad, other_grad);
+        cq_id, grad, input, other, output_mem_config, are_required_outputs, input_grad, other_grad);
 }
 
 std::vector<Tensor> _binary_gt_bw(const Tensor& grad, const Tensor& input, const MemoryConfig& output_mem_config) {

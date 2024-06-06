@@ -240,10 +240,56 @@ inline Tensor eq(
             queue_id, input_tensor_a, input_tensor_b, fused_activations, output_mem_config, output_dtype, output_tensor, BinaryOpType::EQ);
 }
 
+inline Tensor add(
+        const Tensor &input_tensor_a,
+        const Tensor &input_tensor_b,
+        std::optional<std::vector<UnaryWithParam>> fused_activations = std::nullopt,
+        const MemoryConfig &output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        std::optional<const DataType> output_dtype = std::nullopt,
+        std::optional<Tensor> output_tensor = std::nullopt) {
+        return run_eltwise_binary(
+            input_tensor_a, input_tensor_b, fused_activations, output_mem_config, output_dtype, output_tensor, BinaryOpType::ADD);
+}
+
+inline Tensor add(
+        uint8_t queue_id,
+        const Tensor &input_tensor_a,
+        const Tensor &input_tensor_b,
+        std::optional<std::vector<UnaryWithParam>> fused_activations = std::nullopt,
+        const MemoryConfig &output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        std::optional<const DataType> output_dtype = std::nullopt,
+        std::optional<Tensor> output_tensor = std::nullopt) {
+        return run_eltwise_binary(
+            queue_id, input_tensor_a, input_tensor_b, fused_activations, output_mem_config, output_dtype, output_tensor, BinaryOpType::ADD);
+}
+
+inline Tensor mul(
+        const Tensor &input_tensor_a,
+        const Tensor &input_tensor_b,
+        std::optional<std::vector<UnaryWithParam>> fused_activations = std::nullopt,
+        const MemoryConfig &output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        std::optional<const DataType> output_dtype = std::nullopt,
+        std::optional<Tensor> output_tensor = std::nullopt) {
+        return run_eltwise_binary(
+            input_tensor_a, input_tensor_b, fused_activations, output_mem_config, output_dtype, output_tensor, BinaryOpType::MUL);
+}
+
+inline Tensor mul(
+        uint8_t queue_id,
+        const Tensor &input_tensor_a,
+        const Tensor &input_tensor_b,
+        std::optional<std::vector<UnaryWithParam>> fused_activations = std::nullopt,
+        const MemoryConfig &output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        std::optional<const DataType> output_dtype = std::nullopt,
+        std::optional<Tensor> output_tensor = std::nullopt) {
+        return run_eltwise_binary(
+            queue_id, input_tensor_a, input_tensor_b, fused_activations, output_mem_config, output_dtype, output_tensor, BinaryOpType::MUL);
+}
+
 // arithmetic binary ops
-constexpr auto add = make_eltwise_binary<BinaryOpType::ADD>{};
+// constexpr auto add = make_eltwise_binary<BinaryOpType::ADD>{};
 constexpr auto sub = make_eltwise_binary<BinaryOpType::SUB>{};
-constexpr auto mul = make_eltwise_binary<BinaryOpType::MUL>{};
+// constexpr auto mul = make_eltwise_binary<BinaryOpType::MUL>{};
 constexpr auto squared_difference = make_eltwise_binary<BinaryOpType::SQUARED_DIFFERENCE>{};
 constexpr auto bias_gelu = make_eltwise_binary<BinaryOpType::BIAS_GELU>{};
 constexpr auto logaddexp = make_eltwise_binary<BinaryOpType::LOGADDEXP>{};
