@@ -1,4 +1,4 @@
-name: "Docs package the docs and publish to Docs the repo"
+name: "Release Docs: package the docs and publish to Docs the repo"
 
 on:
   workflow_dispatch:

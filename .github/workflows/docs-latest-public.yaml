@@ -1,7 +1,7 @@
-name: "[internal] Docs build and deploy to GitHub pages on main impl"
+name: "Testing Release Docs: package the docs and publish to Docs the repo"
 
 on:
-  workflow_call:
+  workflow_dispatch:
 
 concurrency:
   # Note that people may spam the post-commit pipeline on their branch, and
@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build-deploy-docs:
+  package-push-docs:
     strategy:
       # Do not fail-fast because we need to ensure all tests go to completion
       # so we try not to get hanging machines
@@ -55,22 +55,26 @@ jobs:
           source ${{ github.workspace }}/python_env/bin/activate
           cd $TT_METAL_HOME
           export PYTHONPATH=$TT_METAL_HOME
-          ./tests/scripts/run_build_docs.sh
-      - name: Prepare artifact - move output
+          doxygen
+      - name: Package Docs
         run: |
-          mkdir gh_pages
-          mv docs/build/html gh_pages/$DOCS_VERSION
-      - name: Prepare artifact - create .nojekyll
+          mkdir tt-metalium
+          cp docs/doxygen_build tt-metalium
+          cp -r docs/source/tt-metalium/* tt-metalium
+          rm tt-metalium/conf.py  # Do not change conf.py
+          git config --global user.email "tenstorrent-github-bot@tenstorrent.com"
+          git config --global user.name "tenstorrent-github-bot"
+          git clone https://tenstorrent-github-bot:${GITHUB_BOT_TOKEN}@github.com/tenstorrent/docs-test.git
+          git remote set-url origin https://tenstorrent-github-bot:${GITHUB_BOT_TOKEN}@github.com/tenstorrent/docs-test.git
+          git checkout main
+          cd docs-test
+          cp -r tt-metalium/* docs/test/tt-metalium
+      - name: Push docs to Docs repo for publishing
         run: |
-          touch gh_pages/.nojekyll
-      - name: Prepare artifact - create root index
-        run: |
-          touch gh_pages/index.html
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3.0.1
-        with:
-          path: "gh_pages"
-      - name: Deploy to GitHub Pages
-        if: ${{ github.ref == 'refs/heads/main' }}
-        id: deployment
-        uses: actions/deploy-pages@v4.0.4
+          pip install -r requirements.txt
+          TAG=latest-tt-metalium
+          python update_tags.py tt-metalium $TAG
+          git add .
+          git commit -m "update tt-metalium docs from pipeline ${{ github.job }} with tag $TAG"
+          git tag -a $TAG -m "tt-metalium documentation version $TAG"
+          git push && git push --tags
