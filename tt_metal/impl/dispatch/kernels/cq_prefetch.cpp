@@ -919,23 +919,26 @@ static uint32_t process_relay_inline_all(uint32_t data_ptr, uint32_t fence) {
     cb_acquire_pages<my_noc_xy, my_downstream_cb_sem_id>(npages);
     uint32_t downstream_pages_left = (downstream_cb_end - downstream_data_ptr) >> downstream_cb_log_page_size;
     if (downstream_pages_left >= npages) {
+        // DPRINT << "NOC WRITE0: " << length << ENDL();
         noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr), length);
         downstream_data_ptr += npages * downstream_cb_page_size;
     } else {
         uint32_t tail_pages = npages - downstream_pages_left;
         uint32_t available = downstream_pages_left * downstream_cb_page_size;
         if (available > 0) {
+            // DPRINT << "NOC WRITE1: " << length << ENDL();
             noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_data_ptr), available);
             data_ptr += available;
             length -= available;
         }
-
+        // DPRINT << "NOC WRITE2: " << length << ENDL();
         noc_async_write(data_ptr, get_noc_addr_helper(downstream_noc_xy, downstream_cb_base), length);
         downstream_data_ptr = downstream_cb_base + tail_pages * downstream_cb_page_size;
     }
 
     // XXXXX - painful syncing right now?  move this into get_cmds
     noc_async_writes_flushed();
+    DPRINT << "WRITES FLUSHED" <<ENDL();
     cb_release_pages<downstream_noc_xy, downstream_cb_sem_id>(npages);
 
     return fence;

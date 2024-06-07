@@ -29,6 +29,7 @@ enum class BufferType {
     L1,
     SYSTEM_MEMORY,
     L1_SMALL,
+    TRACE,
 };
 
 enum class TensorMemoryLayout {

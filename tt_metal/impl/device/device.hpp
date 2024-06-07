@@ -311,7 +311,7 @@ class Device {
         return (std::hash<std::thread::id>{}(std::this_thread::get_id()) == this->work_executor.get_parent_thread_id())
                 or get_worker_mode() == WorkExecutorMode::SYNCHRONOUS;
     }
-
+   uint32_t trace_buffers_size = 0;
    private:
     std::unordered_map<uint32_t, std::shared_ptr<TraceBuffer>> trace_buffer_pool_;
 };

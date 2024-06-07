@@ -474,7 +474,7 @@ void Device::compile_command_queue_programs() {
                 std::map<string, string> {},
                 noc_index
             );
-
+            std::cout << "prefetch core local: " << prefetch_physical_core.str() << std::endl;
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, 0, dispatch_core_type); // prefetch_sync_sem
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, dispatch_constants::get(dispatch_core_type).dispatch_buffer_pages(), dispatch_core_type); // prefetch_sem
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, prefetch_core, 0, dispatch_core_type); // prefetch_h_exec_buf_sem
@@ -511,7 +511,7 @@ void Device::compile_command_queue_programs() {
                 std::map<string, string> {},
                 noc_index
             );
-
+            std::cout << "Dispatch core local: " << dispatch_core.str() << std::endl;
             tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_core, 0, dispatch_core_type); // dispatch_sem
         }
         detail::CompileProgram(this, *command_queue_program_ptr);
@@ -621,7 +621,7 @@ void Device::compile_command_queue_programs() {
             std::map<string, string> {},
             noc_index
         );
-
+        std::cout << "PrefetchH core: " << prefetch_core.str() << " " << prefetch_physical_core.str() << std::endl;
         log_debug(LogDevice, "run prefetch_h {}", prefetch_core.str());
 
         std::vector<uint32_t> mux_compile_args =
@@ -668,7 +668,7 @@ void Device::compile_command_queue_programs() {
             packet_switch_4B_pack(src_endpoint_start_id, 0, 0, 0), // 23: packetized input src id
             packet_switch_4B_pack(dest_endpoint_start_id, 0, 0, 0), // 24: packetized input dest id
         };
-
+        std::cout << "Mux core: " << mux_physical_core.str() << std::endl;
         log_debug(LogDevice, "run mux at {}", mux_core.str());
 
         configure_kernel_variant(
@@ -831,7 +831,7 @@ void Device::compile_command_queue_programs() {
             std::map<string, string> {},
             noc_index
         );
-
+        std::cout << "Remote dispatch handler core: " << dispatch_core.str() << std::endl;
         log_debug(LogDevice, "run dispatch_h at {}", dispatch_core.str());
 
         /////////////////Following section is for Remote Device
@@ -1025,8 +1025,8 @@ void Device::compile_command_queue_programs() {
             std::map<string, string> {},
             noc_index
         );
-
-        log_debug(LogDevice, "run prefertch_d at {}", prefetch_d_core.str());
+        std::cout << "prefetchD " << prefetch_d_core.str() << std::endl;
+        log_info(LogDevice, "run prefetch_d at {}", prefetch_d_core.str());
 
         std::vector<uint32_t> dispatch_d_compile_args = {
             dispatch_constants::DISPATCH_BUFFER_BASE,
@@ -1060,7 +1060,7 @@ void Device::compile_command_queue_programs() {
             std::map<string, string> {},
             noc_index
         );
-
+        td:;cout << "Dispatch core remote chip: " << dispatch_core.str() << std::endl;
         log_debug(LogDevice, "run dispatch at {}", dispatch_core.str());
 
         std::vector<uint32_t> mux_d_compile_args =
@@ -1750,30 +1750,30 @@ bool Device::using_slow_dispatch() const {
 void Device::begin_trace(const uint8_t cq_id, const uint32_t tid, const uint32_t trace_buff_size) {
     TT_FATAL(this->trace_buffer_pool_.count(tid) == 0, "Trace already exists for tid {} on device", tid);
     TT_FATAL(!this->hw_command_queues_[cq_id]->tid.has_value(), "CQ {} is already being used for tracing tid {}", (uint32_t)cq_id, tid);
-    auto desc = std::make_shared<detail::TraceDescriptor>();
     detail::EnableAllocs(this);
-    this->trace_buffer_pool_.insert({tid, Trace::create_trace_buffer(this->command_queue(cq_id), desc, trace_buff_size)});
-    this->hw_command_queues_[cq_id]->record_begin(tid, desc);
+    // Create an empty trace buffer here. This will get initialized in end_trace
+    this->trace_buffer_pool_.insert({tid, Trace::create_empty_trace_buffer()});
+    this->hw_command_queues_[cq_id]->record_begin(tid, this->trace_buffer_pool_[tid]->desc);
 }
 
 void Device::end_trace(const uint8_t cq_id, const uint32_t tid) {
     TT_FATAL(this->hw_command_queues_[cq_id]->tid == tid, "CQ {} is not being used for tracing tid {}", (uint32_t)cq_id, tid);
     TT_FATAL(this->trace_buffer_pool_.count(tid) > 0, "Trace instance " + std::to_string(tid) + " must exist on device");
     this->hw_command_queues_[cq_id]->record_end();
-    auto &data = this->trace_buffer_pool_[tid]->desc->data;
-    data = std::move(this->sysmem_manager().get_bypass_data());
+    auto &trace_data = this->trace_buffer_pool_[tid]->desc->data;
+    trace_data = std::move(this->sysmem_manager().get_bypass_data());
     // Add command to terminate the trace buffer
     DeviceCommand command_sequence(CQ_PREFETCH_CMD_BARE_MIN_SIZE);
     command_sequence.add_prefetch_exec_buf_end();
     for (int i = 0; i < command_sequence.size_bytes() / sizeof(uint32_t); i++) {
-        data.push_back(((uint32_t*)command_sequence.data())[i]);
+        trace_data.push_back(((uint32_t*)command_sequence.data())[i]);
     }
     Trace::initialize_buffer(this->command_queue(cq_id), this->trace_buffer_pool_[tid]);
     detail::DisableAllocs(this);
 }
 
 void Device::replay_trace(const uint8_t cq_id, const uint32_t tid, const bool blocking) {
-    constexpr bool check = false;
+    constexpr bool check = true;
     TT_FATAL(this->trace_buffer_pool_.count(tid) > 0, "Trace instance " + std::to_string(tid) + " must exist on device");
     if constexpr (check) {
         Trace::validate_instance(*this->trace_buffer_pool_[tid]);
@@ -1786,6 +1786,7 @@ void Device::replay_trace(const uint8_t cq_id, const uint32_t tid, const bool bl
 }
 
 void Device::release_trace(const uint32_t tid) {
+    this->trace_buffers_size -= this->trace_buffer_pool_.at(tid)->buffer->size();
     uint32_t erased = this->trace_buffer_pool_.erase(tid);
     // Only enable allocations once all captured traces are released
     if (this->trace_buffer_pool_.empty()) {

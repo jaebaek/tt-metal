@@ -454,12 +454,13 @@ void ReadFromDeviceInterleavedContiguous(const Buffer &buffer, std::vector<uint3
         std::vector<uint32_t> page;
         switch (buffer.buffer_type()) {
             case BufferType::DRAM:
+            case BufferType::TRACE:
             case BufferType::L1:
             case BufferType::L1_SMALL: {
                 auto noc_coordinates = buffer.noc_coordinates(bank_index);
                 page = llrt::read_hex_vec_from_core(device->id(), noc_coordinates, absolute_address, page_size);
             } break;
-            default: TT_FATAL(false && "Unsupported buffer type to write to device!");
+            default: TT_FATAL(false && "Unsupported buffer type to read from device!");
         }
 
         // Copy page into host buffer
@@ -539,9 +540,10 @@ void ReadFromBuffer(const Buffer &buffer, std::vector<uint32_t> &host_buffer, bo
     Device *device = buffer.device();
     switch (buffer.buffer_type()) {
         case BufferType::DRAM:
+        case BufferType::TRACE:
         case BufferType::L1:  // fallthrough
         case BufferType::L1_SMALL: {
-            if (buffer.buffer_type() == BufferType::DRAM) {
+            if (buffer.buffer_type() == BufferType::DRAM or buffer.buffer_type() == BufferType::TRACE) {
                 tt::Cluster::instance().dram_barrier(device->id());
             } else {
                 tt::Cluster::instance().l1_barrier(device->id());

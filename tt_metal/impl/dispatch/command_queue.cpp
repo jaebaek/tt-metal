@@ -151,7 +151,7 @@ EnqueueWriteBufferCommand::EnqueueWriteBufferCommand(
 }
 
 void EnqueueWriteInterleavedBufferCommand::add_dispatch_write(HugepageDeviceCommand& command_sequence) {
-    uint8_t is_dram = uint8_t(this->buffer.buffer_type() == BufferType::DRAM);
+    uint8_t is_dram = uint8_t(this->buffer.buffer_type() == BufferType::DRAM or this->buffer.buffer_type() == BufferType::TRACE);
     TT_ASSERT(
         this->dst_page_index <= 0xFFFF,
         "Page offset needs to fit within range of uint16_t, bank_base_address was computed incorrectly!");
@@ -1347,7 +1347,7 @@ void HWCommandQueue::enqueue_read_buffer(Buffer& buffer, void* dst, bool blockin
                 num_total_pages -= num_pages_to_read;
             }
             uint32_t bank_base_address = buffer.address();
-            if (buffer.buffer_type() == BufferType::DRAM) {
+            if (buffer.buffer_type() == BufferType::DRAM or buffer.buffer_type() == BufferType::TRACE) {
                 bank_base_address += buffer.device()->bank_offset(
                     BufferType::DRAM, buffer.device()->dram_channel_from_logical_core(cores[core_id]));
             }
@@ -1513,7 +1513,7 @@ void HWCommandQueue::enqueue_write_buffer(const Buffer& buffer, const void* src,
             }
             uint32_t curr_page_idx_in_shard = 0;
             uint32_t bank_base_address = buffer.address();
-            if (buffer.buffer_type() == BufferType::DRAM) {
+            if (buffer.buffer_type() == BufferType::DRAM or buffer.buffer_type() == BufferType::TRACE) {
                 bank_base_address += buffer.device()->bank_offset(
                     BufferType::DRAM, buffer.device()->dram_channel_from_logical_core(cores[core_id]));
             }
