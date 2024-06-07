@@ -375,6 +375,10 @@ class FalconAttention(nn.Module):
         past_kv_length = 0 if layer_past is None else layer_past[0].shape[1]
         query_layer, key_layer = self.maybe_rotary(query_layer, key_layer, past_kv_length)
 
+        self.out_hidden_states = torch.clone(hidden_states)
+        self.out_key_layer = torch.clone(key_layer)
+        self.out_value_layer = torch.clone(value_layer)
+
         if layer_past is not None:
             past_key, past_value = layer_past
             # concatenate along seq_length dimension:

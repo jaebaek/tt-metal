@@ -175,6 +175,35 @@ def run_test_FalconModel_inference(
 
         does_pass = does_pass and does_pass2
 
+    for layer in range(num_layers):
+        print("layer:", layer)
+        print(
+            comp_pcc(
+                pytorch_FalconModel.model.h[layer].self_attention.out_hidden_states[:batch],
+                tt2torch_tensor(tt_FalconModel.layers[layer].self_attn_decode.out_hidden_states[0])
+                .squeeze(1)
+                .transpose(0, 1),
+            )
+        )
+        print(
+            comp_pcc(
+                pytorch_FalconModel.model.h[layer].self_attention.out_key_layer[:batch],
+                tt2torch_tensor(tt_FalconModel.layers[layer].self_attn_decode.out_key_layer[0])
+                .squeeze(1)
+                .transpose(0, 1),
+            )
+        )
+        print(
+            comp_pcc(
+                pytorch_FalconModel.model.h[layer].self_attention.out_value_layer[:batch],
+                tt2torch_tensor(tt_FalconModel.layers[layer].self_attn_decode.out_value_layer[0])
+                .squeeze(1)
+                .transpose(0, 1),
+            )
+        )
+
+    breakpoint()
+
     if does_pass:
         logger.info("Falcon Model Passed!")
     else:
@@ -188,20 +217,21 @@ def run_test_FalconModel_inference(
     (
         ("prefill", 1, 128, 0),
         ("decode", 32, 1, 128),
+        ("decode", 32, 1, 2047),
     ),
-    ids=["prefill_seq128_batch1", "decode_batch32"],
+    ids=["prefill_seq128_batch1", "decode_batch32", "decode_batch32_2047"],
 )
 @pytest.mark.parametrize(
     "num_layers, pcc",
-    ((1, 0.98), (2, 0.98), (32, 0.98)),
-    ids=["layers_1", "layers_2", "layers_32"],
+    ((1, 0.98), (2, 0.98), (6, 0.98), (32, 0.98)),
+    ids=["layers_1", "layers_2", "layers_6", "layers_32"],
 )
 @pytest.mark.parametrize(
     "model_version",
     ("tiiuae/falcon-7b-instruct",),
     ids=["falcon_7b"],
 )
-@pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM", "BFLOAT16-L1"))
+@pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM", "BFLOAT16-L1", "BFLOAT16-L1_SHARDED"))
 def test_FalconModel_inference(
     num_devices,
     model_version,
