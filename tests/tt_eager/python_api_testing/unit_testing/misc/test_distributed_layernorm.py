@@ -21,8 +21,50 @@ def reference_layernorm(x, gamma, beta, epsilon, is_rmsnorm):
         return torch.nn.functional.layer_norm(x, x.shape[-1:], gamma, beta, epsilon)
 
 
-def run_distributed_layernorm(inp_shape, n_devices, is_rmsnorm, dtype, device, fp32_enabled=False):
-    kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+def tt_distributed_layernorm(inp, gamma, beta, epsilon, is_rmsnorm, compute_kernel_config):
+    n_devices = len(inp)
+
+    # Run layernorm part 1
+    tt_stats = []
+    for d in range(n_devices):
+        if is_rmsnorm:
+            tt_stats.append(
+                ttnn.experimental.operations.primary.rmsnorm_part1(inp[d], compute_kernel_config=compute_kernel_config)
+            )
+        else:
+            tt_stats.append(
+                ttnn.experimental.operations.primary.layernorm_part1(
+                    inp[d], compute_kernel_config=compute_kernel_config
+                )
+            )
+
+    # AllGather stats
+    tt_stats = ttnn.experimental.tensor.all_gather(
+        tt_stats, dim=3, num_links=1, output_mem_config=ttnn.DRAM_MEMORY_CONFIG
+    )
+
+    # Run layernorm part 2
+    tt_out = []
+    for d in range(n_devices):
+        if is_rmsnorm:
+            tt_out.append(
+                ttnn.experimental.operations.primary.rmsnorm_part2(
+                    inp[d], tt_stats[d], epsilon, gamma[d], compute_kernel_config=compute_kernel_config
+                )
+            )
+        else:
+            tt_out.append(
+                ttnn.experimental.operations.primary.layernorm_part2(
+                    inp[d], tt_stats[d], epsilon, gamma[d], beta[d], compute_kernel_config=compute_kernel_config
+                )
+            )
+        tt_stats[d].deallocate(True)
+        inp[d].deallocate(True)
+    return tt_out
+
+
+def run_distributed_layernorm(inp_shape, n_devices, is_rmsnorm, dtype, devices, fp32_enabled=False):
+    compute_kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
         math_fidelity=ttnn.experimental.tensor.MathFidelity.HiFi4,  # Highest fidelity
         math_approx_mode=False,
         fp32_dest_acc_en=fp32_enabled,
@@ -30,7 +72,6 @@ def run_distributed_layernorm(inp_shape, n_devices, is_rmsnorm, dtype, device, f
     )
 
     torch.manual_seed(1234)
-    tile_cols_per_device = 1 if is_rmsnorm else 2  # layernorm has 2 stats to distribute
 
     canon_inp = torch.randn(inp_shape) * 4 - 1
     gamma = torch.rand(inp_shape[-1]) * 2 - 1
@@ -38,8 +79,8 @@ def run_distributed_layernorm(inp_shape, n_devices, is_rmsnorm, dtype, device, f
     gamma_chunked = gamma.chunk(n_devices, dim=-1)
     beta_chunked = beta.chunk(n_devices, dim=-1)
     inp_chunked = canon_inp.chunk(n_devices, dim=-1)
-
     epsilon = 1e-5
+
     # reference impl
     out_torch = reference_layernorm(canon_inp, gamma, beta, epsilon, is_rmsnorm)
 
@@ -49,7 +90,7 @@ def run_distributed_layernorm(inp_shape, n_devices, is_rmsnorm, dtype, device, f
             ttnn.as_tensor(
                 inp_chunked[d],
                 dtype=dtype,
-                device=device,
+                device=devices[d],
                 layout=ttnn.TILE_LAYOUT,
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
             )
@@ -61,7 +102,7 @@ def run_distributed_layernorm(inp_shape, n_devices, is_rmsnorm, dtype, device, f
             ttnn.as_tensor(
                 gamma_chunked[d].reshape(1, 1, -1, 32),
                 dtype=ttnn.bfloat16,
-                device=device,
+                device=devices[d],
                 layout=ttnn.ROW_MAJOR_LAYOUT,
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
             )
@@ -73,56 +114,19 @@ def run_distributed_layernorm(inp_shape, n_devices, is_rmsnorm, dtype, device, f
             ttnn.as_tensor(
                 beta_chunked[d].reshape(1, 1, -1, 32),
                 dtype=ttnn.bfloat16,
-                device=device,
+                device=devices[d],
                 layout=ttnn.ROW_MAJOR_LAYOUT,
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
             )
         )
 
-    # Run layernorm part 1
-    tt_stats = []
-    for d in range(n_devices):
-        if is_rmsnorm:
-            tt_stats.append(
-                ttnn.experimental.operations.primary.rmsnorm_part1(tt_inp[d], compute_kernel_config=kernel_config)
-            )
-        else:
-            tt_stats.append(
-                ttnn.experimental.operations.primary.layernorm_part1(tt_inp[d], compute_kernel_config=kernel_config)
-            )
-
-    # AllGather stats
-    # tt_stats = ttnn.experimental.tensor.all_gather(
-    #     tt_stats,
-    #     dim=3,
-    #     num_links=1,
-    #     output_mem_config=ttnn.DRAM_MEMORY_CONFIG
-    # )
-    tt_stats = ttnn.all_gather(tt_stats, num_links=1, dim=3)
-
-    # Run layernorm part 2
-    tt_out = []
-    for d in range(n_devices):
-        if is_rmsnorm:
-            tt_out.append(
-                ttnn.experimental.operations.primary.rmsnorm_part2(
-                    tt_inp[d], tt_stats[d], epsilon, tt_gamma[d], compute_kernel_config=kernel_config
-                )
-            )
-        else:
-            tt_out.append(
-                ttnn.experimental.operations.primary.layernorm_part2(
-                    tt_inp[d], tt_stats[d], epsilon, tt_gamma[d], tt_beta[d], compute_kernel_config=kernel_config
-                )
-            )
-
+    tt_out = tt_distributed_layernorm(tt_inp, tt_gamma, tt_beta, epsilon, is_rmsnorm, compute_kernel_config)
     tt_output_host = torch.concat([tt2torch_tensor(tt_o) for tt_o in tt_out], -1)
 
     passing, output_str = comp_allclose(tt_output_host, out_torch, rtol=1e-1, atol=1e-01)
-    logger.debug(f"torch vs tt poc = {output_str}")
-    all_pass = all_pass and passing
+    logger.debug(f"torch vs tt distributed layernorm = {output_str}")
 
-    assert all_pass
+    assert passing
 
 
 @pytest.mark.parametrize(
@@ -152,10 +156,9 @@ def run_distributed_layernorm(inp_shape, n_devices, is_rmsnorm, dtype, device, f
     [True, False],
     ids=["fp32_enabled", "fp32_disabled"],
 )
-def test_distributed_layernorm(inp_shape, n_devices, is_rmsnorm, dtype, device, fp32_enabled):
-    print(device)
-    # device = get_devices_for_t3000(all_devices, n_devices)
-    run_distributed_layernorm(inp_shape, n_devices, is_rmsnorm, dtype, device, fp32_enabled)
+def test_distributed_layernorm(inp_shape, n_devices, is_rmsnorm, dtype, all_devices, fp32_enabled):
+    devices = get_devices_for_t3000(all_devices, n_devices)
+    run_distributed_layernorm(inp_shape, n_devices, is_rmsnorm, dtype, devices, fp32_enabled)
 
 
 @pytest.mark.parametrize(
@@ -180,21 +183,27 @@ def test_distributed_layernorm(inp_shape, n_devices, is_rmsnorm, dtype, device, 
     [True, False],
     ids=["rmsnorm", "layernorm"],
 )
-def test_distributed_layernorm_with_program_cache(inp_shape, n_devices, is_rmsnorm, dtype, device, use_program_cache):
+def test_distributed_layernorm_with_program_cache(
+    inp_shape, n_devices, is_rmsnorm, dtype, all_devices, use_program_cache
+):
+    devices = get_devices_for_t3000(all_devices, n_devices)
+
     dummy_tensors = []
 
     for i in range(3):
-        dummy_tensors.append(
-            ttnn.as_tensor(
-                torch.randn(inp_shape),
-                dtype=dtype,
-                device=device,
-                layout=ttnn.TILE_LAYOUT,
-                memory_config=ttnn.DRAM_MEMORY_CONFIG,
+        for d in range(len(devices)):
+            dummy_tensors.append(
+                ttnn.as_tensor(
+                    torch.randn(inp_shape),
+                    dtype=dtype,
+                    device=devices[d],
+                    layout=ttnn.TILE_LAYOUT,
+                    memory_config=ttnn.DRAM_MEMORY_CONFIG,
+                )
             )
-        )
-        run_distributed_layernorm(inp_shape, n_devices, is_rmsnorm, dtype, device)
+        run_distributed_layernorm(inp_shape, n_devices, is_rmsnorm, dtype, devices)
 
-    assert device.num_program_cache_entries() == 1, "Program cache should have only one entry" + str(
-        device.num_program_cache_entries()
-    )
+    for d in range(len(devices)):
+        assert devices[d].num_program_cache_entries() == 3, "Program cache should have only 3 entries, but has " + str(
+            devices[d].num_program_cache_entries()
+        )
