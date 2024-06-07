@@ -40,6 +40,15 @@ if (NOT NUMA_LIBRARY)
     message(FATAL_ERROR "NUMA library not found")
 endif()
 
+CPMAddPackage(
+  NAME reflect
+  GITHUB_REPOSITORY boost-ext/reflect
+  GIT_TAG v1.1.1
+)
+add_library(reflect INTERFACE)
+target_include_directories(reflect SYSTEM INTERFACE ${reflect_SOURCE_DIR})
+add_library(reflect::reflect ALIAS reflect)
+
 ############################################################################################################################
 # Setting build type flags
 #   Will default to assert build, unless CONFIG env variable is set or manually set -DCMAKE_BUILD_TYPE
@@ -61,6 +70,11 @@ set(CMAKE_CXX_FLAGS_CI "-O3 -DDEBUG=DEBUG")
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+
+# Set global compiler and linker flags
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
 
 # Set default values for variables/options
 set(UMD_HOME "${CMAKE_SOURCE_DIR}/tt_metal/third_party/umd")
