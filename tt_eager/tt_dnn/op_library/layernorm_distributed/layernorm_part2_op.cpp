@@ -33,7 +33,7 @@ void LayerNormPart2::validate(const std::vector<Tensor> &input_tensors, const st
 
     for (const auto& tensor: input_tensors) {
         TT_FATAL(tensor.get_layout() == Layout::TILE);
-        TT_FATAL(tensor.get_dtype() == DataType::BFLOAT16);
+        TT_FATAL(tensor.get_dtype() == DataType::BFLOAT16 || tensor.get_dtype() == DataType::BFLOAT8_B);
         TT_FATAL(tensor.storage_type() == StorageType::DEVICE, "Operands to layernorm need to be on device!");
         TT_FATAL(tensor.buffer() != nullptr, "Operands to layernorm need to be allocated in buffers on device!");
     }
