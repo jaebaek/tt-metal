@@ -53,7 +53,12 @@ class Config:
         self.validate(name)
 
     def validate(self, name):
-        if name in {"enable_fast_runtime_mode", "enable_logging"}:
+        if name == "enable_fast_runtime_mode":
+            raise ValueError(
+                """enable_fast_runtime_mode cannot change during runtime. Please run "export TTNN_CONFIG_OVERRIDES='{"enable_fast_runtime_mode": false}'" to disable fast runtime mode."""
+            )
+
+        if name == "enable_logging":
             if self.enable_fast_runtime_mode:
                 if self.enable_logging:
                     logger.warning(
