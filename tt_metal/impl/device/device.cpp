@@ -301,6 +301,17 @@ void Device::clear_l1_state() {
             detail::WriteToDeviceL1(this, logical_core, start_address, zero_vec);
         }
     }
+    constexpr static std::uint32_t DRAM_BARRIER_BASE = 0;
+    constexpr static std::uint32_t DRAM_ALIGNMENT = 32;
+    constexpr static std::uint32_t DRAM_BARRIER_SIZE = ((sizeof(uint32_t) + DRAM_ALIGNMENT - 1) / DRAM_ALIGNMENT) * DRAM_ALIGNMENT;
+    constexpr static std::uint32_t DRAM_UNRESERVED_BASE = DRAM_BARRIER_BASE + DRAM_BARRIER_SIZE; // Start of unreserved space
+    std::vector<uint32_t> dram_vec((this->dram_size_per_channel() - DRAM_UNRESERVED_BASE)/sizeof(uint32_t), 0xffffffff);
+    std::cout<<"DRAM size per channel: "<<(this->dram_size_per_channel())<<std::endl;
+    std::cout <<"DRAM BASE " << DRAM_UNRESERVED_BASE << std::endl;
+    for (uint32_t x = 0; x < num_dram_channels() ; ++x) {
+        detail::WriteToDeviceDRAMChannel(this, x, DRAM_UNRESERVED_BASE, dram_vec);
+        std::cout<<"DRAM channel "<<x<<" cleared"<<std::endl;
+    }
 
     for (const auto &eth_core : this->get_inactive_ethernet_cores()) {
         CoreCoord physical_core = this->ethernet_core_from_logical_core(eth_core);

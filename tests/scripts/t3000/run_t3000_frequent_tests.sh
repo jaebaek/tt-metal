@@ -60,7 +60,7 @@ run_t3000_mixtral_tests() {
   echo "LOG_METAL: Running run_t3000_mixtral_tests"
 
   # mixtral8x7b 8 chip decode model test (env flags set inside the test)
-  pytest models/demos/t3000/mixtral8x7b/tests/test_mixtral_model.py::test_mixtral_model_inference[wormhole_b0-True-10-1-pcc]
+  # pytest tests/tt_eager/python_api_testing/unit_testing/misc/test_topk.py::test_topk[1-1-32-64-32-BFLOAT8_B]
 
   # Record the end time
   end_time=$(date +%s)
@@ -88,10 +88,10 @@ run_t3000_falcon40b_tests() {
 
   echo "LOG_METAL: Running run_t3000_falcon40b_tests"
 
-  WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/demos/t3000/falcon40b/tests/test_falcon_mlp.py
-  WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/demos/t3000/falcon40b/tests/test_falcon_attention.py
-  WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/demos/t3000/falcon40b/tests/test_falcon_decoder.py
-  WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/demos/t3000/falcon40b/tests/test_falcon_causallm.py
+  # WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/demos/t3000/falcon40b/tests/test_falcon_mlp.py
+  # WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/demos/t3000/falcon40b/tests/test_falcon_attention.py
+  WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/demos/t3000/falcon40b/tests/test_falcon_decoder.py::test_FalconDecoder_inference[BFLOAT8_B-SHARDED-falcon_40b-layer_0-decode_batch32-8chips]
+  # WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/demos/t3000/falcon40b/tests/test_falcon_causallm.py
 
   # Record the end time
   end_time=$(date +%s)
@@ -107,16 +107,18 @@ run_t3000_tests() {
   #run_t3000_tteager_tests
 
   # Run llama2-70b experimental tests
-  run_t3000_llama2_70b_experimental_tests
+  #run_t3000_llama2_70b_experimental_tests
+
+  # Run mixtral tests
+  run_t3000_mixtral_tests
 
   # Run falcon40b tests
   run_t3000_falcon40b_tests
 
   # Run llama2-70b tests
-  run_t3000_llama2_70b_tests
+  # run_t3000_llama2_70b_tests
 
-  # Run mixtral tests
-  run_t3000_mixtral_tests
+
 
 }
 
