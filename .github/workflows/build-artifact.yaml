@@ -23,7 +23,7 @@ jobs:
     environment: dev
     runs-on: build
     container:
-      image: ghcr.io/${{ github.repository }}/ubuntu-20.04-amd64:${{ github.ref_name == 'main' ? 'latest' : github.actor }}
+      image: ghcr.io/${{ github.repository }}/${{ matrix.arch }}:${{ github.ref_name == 'main' ? 'latest' : github.actor }}
       env: 
         TT_METAL_HOME: ${{ env.TT_METAL_HOME }}
         CONFIG: ${{ env.CONFIG }}
