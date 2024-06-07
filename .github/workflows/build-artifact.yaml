@@ -10,7 +10,19 @@ on:
   workflow_dispatch:
 
 jobs:
+  set-docker-image-tag:
+    runs-on: build
+    steps:
+      - name: Determine Docker Image Tag
+        id: set-image
+        run: |
+          if [[ "${GITHUB_REF_NAME}" == "main" ]]; then
+            echo "::set-output name=IMAGE_TAG::latest" >> $GITHUB_ENV
+          else
+            echo "::set-output name=IMAGE_TAG::${GITHUB_ACTOR}" >> $GITHUB_ENV
+          fi
   build-artifact:
+    needs: set-docker-image-tag
     strategy:
       matrix:
         arch: ${{ fromJson(inputs.arch || '["grayskull", "wormhole_b0", "blackhole"]') }}
@@ -23,7 +35,7 @@ jobs:
     environment: dev
     runs-on: build
     container:
-      image: ghcr.io/${{ github.repository }}/${{ matrix.arch }}:${{ github.ref_name == 'main' ? 'latest' : github.actor }}
+      image: ghcr.io/${{ github.repository }}/${{ matrix.arch }}:$IMAGE_TAG
       env: 
         TT_METAL_HOME: ${{ env.TT_METAL_HOME }}
         CONFIG: ${{ env.CONFIG }}
@@ -37,7 +49,6 @@ jobs:
         -v /etc/group:/etc/group:ro
         -v /etc/passwd:/etc/passwd:ro
         -v /etc/shadow:/etc/shadow:ro
-        -v /mnt/MLPerf:/mnt/MLPerf
     steps:
       - uses: tenstorrent-metal/metal-workflows/.github/actions/checkout-with-submodule-lfs@v2.0.0
       - name: Set up dynamic env vars for build
