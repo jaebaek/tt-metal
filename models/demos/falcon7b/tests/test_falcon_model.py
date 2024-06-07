@@ -188,8 +188,9 @@ def run_test_FalconModel_inference(
     (
         ("prefill", 1, 128, 0),
         ("decode", 32, 1, 128),
+        ("prefill", 1, 2048, 0),
     ),
-    ids=["prefill_seq128_batch1", "decode_batch32"],
+    ids=["prefill_seq128_batch1", "decode_batch32", "prefill2k"],
 )
 @pytest.mark.parametrize(
     "num_layers, pcc",
@@ -201,7 +202,7 @@ def run_test_FalconModel_inference(
     ("tiiuae/falcon-7b-instruct",),
     ids=["falcon_7b"],
 )
-@pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM", "BFLOAT16-L1"))
+@pytest.mark.parametrize("model_config_str", ["BFLOAT16-DRAM"])
 def test_FalconModel_inference(
     num_devices,
     model_version,

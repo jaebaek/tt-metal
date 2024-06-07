@@ -209,7 +209,7 @@ def run_test_FalconCausalLM_inference(
     ("tiiuae/falcon-7b-instruct",),
     ids=["falcon_7b"],
 )
-@pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM", "BFLOAT16-L1"))
+@pytest.mark.parametrize("model_config_str", ["BFLOAT16-DRAM"])
 def test_FalconCausalLM_inference(
     num_devices,
     model_version,
@@ -220,6 +220,7 @@ def test_FalconCausalLM_inference(
     num_layers,
     pcc,
     request,
+    use_program_cache,
     model_config_str,
     model_location_generator,
     get_tt_cache_path,

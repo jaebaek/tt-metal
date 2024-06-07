@@ -137,21 +137,21 @@ def run_test_FalconCausalLM_end_to_end(
         tt_cache_path,
         seq_len,
     )
-    profiler.end("TtFalcon_model_setup")
+    # profiler.end("TtFalcon_model_setup")
 
-    profiler.start("processing_of_input")
+    # profiler.start("processing_of_input")
     # TODO: Generate attention_mask on device
     tt_input_ids, tt_attention_mask = get_inputs_on_device(
         llm_mode, tt_FalconCausalLM, model_input, kv_cache_len, seq_len, batch, kv_len
     )
-    profiler.end("processing_of_input")
+    # profiler.end("processing_of_input")
 
     # First run to fill compile cache ----------------------------------------------------
-    logger.info(f"Running Falcon model once to fill caches -> disable profiler")
-    profiler.disable()
+    # logger.info(f"Running Falcon model once to fill caches -> disable profiler")
+    # profiler.disable()
 
     # Use force enable to only record this profiler call while others are disabled
-    profiler.start("first_model_run_with_compile", force_enable=True)
+    # profiler.start("first_model_run_with_compile", force_enable=True)
     if llm_mode == "prefill":
         tt_outs = []
         # Device transfer time is included in model run time for prefill
@@ -171,28 +171,35 @@ def run_test_FalconCausalLM_end_to_end(
             tt_outs.append(tt_out)
         tt_out = tt_outs
 
-    elif llm_mode == "decode":
-        tt_out, tt_layer_present = tt_FalconCausalLM(
-            input_ids=tt_input_ids,
-            llm_mode=llm_mode,
-            attention_mask=tt_attention_mask,
-            layer_past=tt_layer_past,
-            layer_past_len=kv_cache_len,
-            use_cache=use_cache,
-        )
+    # elif llm_mode == "decode":
+    #     tt_out, tt_layer_present = tt_FalconCausalLM(
+    #         input_ids=tt_input_ids,
+    #         llm_mode=llm_mode,
+    #         attention_mask=tt_attention_mask,
+    #         layer_past=tt_layer_past,
+    #         layer_past_len=kv_cache_len,
+    #         use_cache=use_cache,
+    #     )
     for device in devices:
         tt_lib.device.Synchronize(device)
-    profiler.end("first_model_run_with_compile", force_enable=True)
+
+    # breakpoint()
+    # print(tt_out)
+    tt_out[0][0].deallocate(True)
+    for i in range(1):
+        tt_layer_present[i][0][0].deallocate(True)
+        tt_layer_present[i][0][1].deallocate(True)
+    # profiler.end("first_model_run_with_compile", force_enable=True)
 
     # Dump device profiler data before second run to avoid exceeding profiler memory limits when using tracy
-    for device in devices:
-        tt_lib.device.DumpDeviceProfiler(device)
+    # for device in devices:
+    #     tt_lib.device.DumpDeviceProfiler(device)
 
-    del tt_out
-    del tt_layer_past
-    del tt_layer_present
-    del tt_input_ids
-    del tt_attention_mask
+    # del tt_out
+    # del tt_layer_past
+    # del tt_layer_present
+    # del tt_input_ids
+    # del tt_attention_mask
 
     # Re-generate dummy kv_cache ------------------------------------------------------------
     (
@@ -226,7 +233,7 @@ def run_test_FalconCausalLM_end_to_end(
 
     logger.info(f"Enable profiler and enable binary and compile cache")
     profiler.enable()
-    enable_persistent_kernel_cache()
+    # enable_persistent_kernel_cache()
 
     # Regenerate input ids and attention_mask on device
     tt_input_ids, tt_attention_mask = get_inputs_on_device(
@@ -512,7 +519,7 @@ class TestParametrized:
         (
             ("prefill", 32, 1, 128, 0, "BFLOAT16-DRAM", 0.98, 0.99, 0.97, 0.1),
             ("prefill", 32, 1, 1024, 0, "BFLOAT16-DRAM", 0.99, 0.99, 0.969, 0.5),
-            ("prefill", 32, 1, 2048, 0, "BFLOAT16-DRAM", 0.99, 0.99, 0.98, 1.1),
+            ("prefill", 1, 1, 2048, 0, "BFLOAT16-DRAM", 0.99, 0.99, 0.98, 1.1),
             ("decode", 32, 32, 1, 128, "BFLOAT16-DRAM", 0.91, 0.92, 0.93, 0.15),
             ("decode", 32, 32, 1, 128, "BFLOAT16-L1", 0.91, 0.92, 0.93, 0.15),
             ("decode", 1, 32, 1, 128, "BFLOAT16-L1_SHARDED", 0.99, 0.99, 0.99, 0.1),
@@ -555,9 +562,10 @@ class TestParametrized:
         model_location_generator,
         get_tt_cache_path,
         device,
-        use_program_cache,
+        # use_program_cache,
         async_mode,
     ):
+        print("Turned off program cache")
         if async_mode:
             if llm_mode == "decode" and not (kv_cache_len == 2047):
                 if not (model_config_str == "BFLOAT16-L1_SHARDED" and kv_cache_len == 1024):

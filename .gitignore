@@ -12,6 +12,8 @@ tt_debug
 build
 /python_env/
 
+python_env/
+gdb*
 /llk_out/
 /out/
 

@@ -1,0 +1,56 @@
+pytest models/demos/falcon7b/tests/test_perf_falcon.py -k "test_perf_wh_bare_metal and prefill_seq2048_bf16_dram"
+
+
+==== 1 device ====
+2k:
+pytest models/demos/falcon7b/tests/test_perf_falcon.py -k "test_perf_wh_bare_metal and prefill_seq2048_bf16_dram"
+python tt_eager/tracy.py -r -m "pytest models/demos/falcon7b/tests/test_perf_falcon.py -k \"test_perf_wh_bare_metal and prefill_seq2048_bf16_dram\""
+1k:
+pytest models/demos/falcon7b/tests/test_perf_falcon.py -k "test_perf_wh_bare_metal and prefill_seq1024_bf16_dram"
+python tt_eager/tracy.py -r -m "pytest models/demos/falcon7b/tests/test_perf_falcon.py -k \"test_perf_wh_bare_metal and prefill_seq1024_bf16_dram\""
+128:
+pytest  models/demos/falcon7b/tests/test_perf_falcon.py -k "test_perf_wh_bare_metal and prefill_seq128_bf16_dram"
+python tt_eager/tracy.py -r -m "pytest  models/demos/falcon7b/tests/test_perf_falcon.py -k \"test_perf_wh_bare_metal and prefill_seq128_bf16_dram\""
+
+
+==== 8 devices ====
+pytest models/demos/falcon7b/tests/test_perf_falcon.py -k "test_perf_t3000_bare_metal and prefill_seq128_sync"
+pytest models/demos/falcon7b/tests/test_perf_falcon.py -k "test_perf_t3000_bare_metal and prefill_seq1024_sync"
+pytest models/demos/falcon7b/tests/test_perf_falcon.py -k "test_perf_t3000_bare_metal and prefill_seq2048_sync"
+
+
+t3k demo:
+pytest --disable-warnings -q -s --input-method=json --input-path='models/demos/t3000/falcon7b/input_data_t3000.json' models/demos/t3000/falcon7b/demo_t3000.py::test_demo_multichip[user_input0-8-True-perf_mode_stochastic_verify]
+
+
+
+==== Reference ====
+python tt_eager/tracy.py -r -m "pytest  models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k \"test_falcon7b_attention_softmax_sequence and seq_len_2048 and async_off\""
+
+
+
+
+==== test falcon perf ====
+pytest  models/demos/falcon7b/tests/test_perf_falcon.py -k "test_perf_wh_bare_metal and prefill_seq1024_bf16_dram"
+
+pytest models/demos/wormhole/falcon7b/demo_wormhole.py  --disable-warnings -q -s --input-method=json --input-path='models/demos/falcon7b/demo/input_data.json' -k "perf_mode_stochastic_verify"
+python tt_eager/tracy.py -r -m "pytest  models/demos/wormhole/falcon7b/demo_wormhole.py --disable-warnings -q -s --input-method=json --input-path='models/demos/falcon7b/demo/input_data.json' -k \"perf_mode_stochastic_verify\""
+
+
+
+pytest  models/demos/falcon7b/tests/test_falcon_decoder.py -k "test_FalconDecoder_inference and prefill_seq2048"
+pytest  models/demos/falcon7b/tests/test_falcon_decoder.py -k "test_FalconDecoder_inference and prefill_seq2048 and dram"
+
+python tt_eager/tracy.py -r -m "pytest  models/demos/falcon7b/tests/test_falcon_decoder.py -k \"test_FalconDecoder_inference and prefill_seq2048 and dram\""
+python tt_eager/tracy.py -r -m "pytest  models/demos/falcon7b/tests/test_falcon_decoder.py -k \"test_FalconDecoder_inference and prefill_seq1024 and dram\""
+python tt_eager/tracy.py -r -m "pytest  models/demos/falcon7b/tests/test_falcon_decoder.py -k \"test_FalconDecoder_inference and prefill_seq128 and dram\""
+python tt_eager/tracy.py -r -m "pytest  models/demos/falcon7b/tests/test_falcon_decoder.py -k \"test_FalconDecoder_inference and decode_batch32 and l1\""
+
+
+pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "test_falcon7b_attention_softmax_sequence and seq_len_2048 and async_off"
+python tt_eager/tracy.py -r -m "pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k \"test_falcon7b_attention_softmax_sequence and seq_len_2048 and async_off\""
+
+
+decode 128:
+pytest  models/demos/falcon7b/tests/test_perf_falcon.py -k "test_perf_wh_bare_metal and decode_batch32_128_bf16_l1_sharded"
+python tt_eager/tracy.py -r -m "pytest  models/demos/falcon7b/tests/test_perf_falcon.py -k \"test_perf_wh_bare_metal and decode_batch32_128_bf16_l1_sharded\""
