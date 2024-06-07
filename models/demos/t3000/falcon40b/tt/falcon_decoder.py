@@ -80,7 +80,7 @@ class TtFalconDecoderLayer:
             ln_mlp_gamma_host = torch2tt_tensor(
                 self.state_dict[ln_mlp_weights_str],
                 None,
-                tt_layout=tt_lib.tensor.Layout.ROW_MAJOR,
+                tt_layout=ttnn.experimantal.tensor.Layout.ROW_MAJOR,
                 tt_memory_config=self.model_config["LN_MLP_WEIGHTS_MEMCFG"],
                 tt_dtype=self.model_config["LN_MLP_WEIGHTS_DTYPE"],
             )
@@ -104,7 +104,7 @@ class TtFalconDecoderLayer:
             ln_mlp_beta_host = torch2tt_tensor(
                 self.state_dict[ln_mlp_bias_str],
                 None,
-                tt_layout=tt_lib.tensor.Layout.ROW_MAJOR,
+                tt_layout=ttnn.experimantal.tensor.Layout.ROW_MAJOR,
                 tt_memory_config=self.model_config["LN_MLP_BIAS_MEMCFG"],
                 tt_dtype=self.model_config["LN_MLP_BIAS_DTYPE"],
             )
@@ -131,7 +131,7 @@ class TtFalconDecoderLayer:
             ln_attn_gamma_host = torch2tt_tensor(
                 self.state_dict[ln_attn_weights_str],
                 None,
-                tt_layout=tt_lib.tensor.Layout.ROW_MAJOR,
+                tt_layout=ttnn.experimantal.tensor.Layout.ROW_MAJOR,
                 tt_memory_config=self.model_config["LN_ATTN_WEIGHTS_MEMCFG"],
                 tt_dtype=self.model_config["LN_ATTN_WEIGHTS_DTYPE"],
             )
@@ -155,7 +155,7 @@ class TtFalconDecoderLayer:
             ln_attn_beta_host = torch2tt_tensor(
                 self.state_dict[ln_attn_bias_str],
                 None,
-                tt_layout=tt_lib.tensor.Layout.ROW_MAJOR,
+                tt_layout=ttnn.experimantal.tensor.Layout.ROW_MAJOR,
                 tt_memory_config=self.model_config["LN_ATTN_BIAS_MEMCFG"],
                 tt_dtype=self.model_config["LN_ATTN_BIAS_DTYPE"],
             )
@@ -280,11 +280,9 @@ class TtFalconDecoderLayer:
             self.model_config["layernorm_params"],
             self.model_config["PARTIAL_LN_MEMCFG"],
             self.model_config["PARTIAL_LN_INPLACE_PROGCFG"],
-            self.model_config["LN_MLP_OUTPUT_DTYPE"],
-            self.hidden_size,
             self.devices,
-            self.ln_output_tensors_dict["mlp_layernorm"],
-            self.ln_output_tensors_dict["attn_layernorm"],
+            self.ln_output_tensors_dict["attn_layernorm"][self.model_config["SEQ_LEN"]],
+            self.ln_output_tensors_dict["mlp_layernorm"][self.model_config["SEQ_LEN"]],
         )
 
         residual = hidden_states
