@@ -34,6 +34,7 @@ class TtFalconDecoderLayer(nn.Module):
         self.max_position_embeddings = max_position_embeddings
         self.model_config = model_config
         self.weights_dict = {}
+        self.flag = True
 
         assert config.parallel_attn, "Path for config.parallel_attn=False is not implemented in TtFalconDecoderLayer!"
 
@@ -150,26 +151,79 @@ class TtFalconDecoderLayer(nn.Module):
         #         #output_mem_config=self.model_config["EXPERIMENTAL_LAYERNORM_OUTPUT_MEMCFG"],
         #     )
 
-        for i in range(self.num_devices):
-            layernorm_output.append(
-                ttnn.experimental.tensor.interleaved_to_sharded(
-                    hidden_states[i],
-                    sharded_mem_config=self.model_config["EXPERIMENTAL_LAYERNORM_BLOCK_SHARDED_MEM_CFG"],
+        if self.flag == False:
+            # First run
+            print("Running first run - no padding")
+            # self.flag = True
+            for i in range(self.num_devices):
+                layernorm_output.append(
+                    ttnn.experimental.tensor.interleaved_to_sharded(
+                        hidden_states[i],
+                        sharded_mem_config=self.model_config["EXPERIMENTAL_LAYERNORM_BLOCK_SHARDED_MEM_CFG"],
+                    )
                 )
-            )
+            ln_out_2 = []
+            for i in range(self.num_devices):
+                ln_out_2.append(
+                    ttnn.experimental.operations.primary.layernorm(
+                        layernorm_output[i],
+                        self.layernorm_eps,
+                        self.layernorm_gamma[i],
+                        self.layernorm_beta[i],
+                        self.model_config["EXPERIMENTAL_LAYERNORM_BLOCK_SHARDED_MEM_CFG"],
+                        self.model_config["EXPERIMENTAL_LAYERNORM_BLOCK_SHARDED_PROG_CFG"],
+                    )
+                )
 
-        for i in range(self.num_devices):
-            layernorm_output[i] = ttnn.experimental.operations.primary.layernorm(
-                layernorm_output[i],
-                self.layernorm_eps,
-                self.layernorm_gamma[i],
-                self.layernorm_beta[i],
-                self.model_config["EXPERIMENTAL_LAYERNORM_BLOCK_SHARDED_MEM_CFG"],
-                self.model_config["EXPERIMENTAL_LAYERNORM_BLOCK_SHARDED_PROG_CFG"],
-            )
+            for i in range(self.num_devices):
+                layernorm_output[i] = ttnn.experimental.tensor.sharded_to_interleaved(ln_out_2[i])
+                ln_out_2[i].deallocate(True)
 
-        for i in range(self.num_devices):
-            layernorm_output[i] = ttnn.experimental.tensor.sharded_to_interleaved(layernorm_output[i])
+        else:
+            # Second run
+            print("Running second run applying padding")
+            gamma = []
+            beta = []
+            hidden_states_padded = []
+            seq_len = hidden_states[0].get_legacy_shape()[2]
+            for i in range(self.num_devices):
+                hidden_states_padded.append(
+                    ttnn.experimental.tensor.pad(hidden_states[i], [1, 1, seq_len, 4608], [0, 0, 0, 0], 0.0)
+                )
+                gamma.append(ttnn.experimental.tensor.pad(self.layernorm_gamma[i], [1, 1, 32, 4608], [0, 0, 0, 0], 0.0))
+                beta.append(ttnn.experimental.tensor.pad(self.layernorm_beta[i], [1, 1, 32, 4608], [0, 0, 0, 0], 0.0))
+
+            for i in range(self.num_devices):
+                layernorm_output.append(
+                    ttnn.experimental.tensor.interleaved_to_sharded(
+                        hidden_states_padded[i],
+                        sharded_mem_config=self.model_config["EXPERIMENTAL_LAYERNORM_BLOCK_SHARDED_MEM_CFG"],
+                    )
+                )
+
+            ln_out_2 = []
+            for i in range(self.num_devices):
+                ln_out_2.append(
+                    ttnn.experimental.operations.primary.layernorm(
+                        layernorm_output[i],
+                        self.layernorm_eps,
+                        gamma[i],
+                        beta[i],
+                        self.model_config["EXPERIMENTAL_LAYERNORM_BLOCK_SHARDED_MEM_CFG"],
+                        self.model_config["EXPERIMENTAL_LAYERNORM_BLOCK_SHARDED_PROG_CFG"],
+                    )
+                )
+
+            for i in range(self.num_devices):
+                layernorm_output[i] = ttnn.experimental.tensor.sharded_to_interleaved(ln_out_2[i])
+                ln_out_2[i].deallocate(True)
+                gamma[i].deallocate(True)
+                beta[i].deallocate(True)
+
+            for i in range(self.num_devices):
+                layernorm_output[i] = ttnn.experimental.tensor.unpad(
+                    layernorm_output[i], [0, 0, 0, 0], [0, 0, seq_len - 1, 4543]
+                )
 
         residual = hidden_states
 

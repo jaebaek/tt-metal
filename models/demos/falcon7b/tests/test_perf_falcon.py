@@ -9,6 +9,7 @@ import numpy as np
 from sklearn.metrics import top_k_accuracy_score
 
 import tt_lib
+
 from models.demos.falcon7b.reference.hf_modeling_falcon import (
     FalconForCausalLM,
 )
@@ -125,7 +126,7 @@ def run_test_FalconCausalLM_end_to_end(
         generate_attention_inputs=False,
     )
 
-    profiler.start("TtFalcon_model_setup")
+    # profiler.start("TtFalcon_model_setup")
     tt_FalconCausalLM = TtFalconCausalLM(
         devices,
         state_dict,
@@ -141,9 +142,9 @@ def run_test_FalconCausalLM_end_to_end(
 
     # profiler.start("processing_of_input")
     # TODO: Generate attention_mask on device
-    tt_input_ids, tt_attention_mask = get_inputs_on_device(
-        llm_mode, tt_FalconCausalLM, model_input, kv_cache_len, seq_len, batch, kv_len
-    )
+    # tt_input_ids, tt_attention_mask = get_inputs_on_device(
+    #     llm_mode, tt_FalconCausalLM, model_input, kv_cache_len, seq_len, batch, kv_len
+    # )
     # profiler.end("processing_of_input")
 
     # First run to fill compile cache ----------------------------------------------------
@@ -185,10 +186,28 @@ def run_test_FalconCausalLM_end_to_end(
 
     # breakpoint()
     # print(tt_out)
+    # breakpoint()
     tt_out[0][0].deallocate(True)
-    for i in range(1):
-        tt_layer_present[i][0][0].deallocate(True)
-        tt_layer_present[i][0][1].deallocate(True)
+    for i in range(len(tt_out)):
+        for j in range(len(tt_out[i])):
+            tt_out[i][j].deallocate(True)
+    for i in range(len(tt_layer_present)):
+        for j in range(len(tt_layer_present[i])):
+            for k in range(len(tt_layer_present[i][j])):
+                tt_layer_present[i][j][k].deallocate(True)
+    for i in range(len(tt_input_ids)):
+        for j in range(len(tt_input_ids[i])):
+            tt_input_ids[i][j].deallocate(True)
+    for i in range(len(tt_attention_mask)):
+        for j in range(len(tt_attention_mask[i])):
+            for k in range(len(tt_attention_mask[i][j])):
+                tt_attention_mask[i][j][k].deallocate(True)
+    for i in range(len(tt_layer_past)):
+        for j in range(len(tt_layer_past[i])):
+            for k in range(len(tt_layer_past[i][j])):
+                tt_layer_past[i][j][k].deallocate(True)
+
+    print(dir())
     # profiler.end("first_model_run_with_compile", force_enable=True)
 
     # Dump device profiler data before second run to avoid exceeding profiler memory limits when using tracy
@@ -517,9 +536,9 @@ class TestParametrized:
     @pytest.mark.parametrize(
         "llm_mode, num_layers, batch, seq_len, kv_cache_len, model_config_str, expected_output_pcc, expected_k_cache_pcc, expected_v_cache_pcc, expected_inference_time",
         (
-            ("prefill", 32, 1, 128, 0, "BFLOAT16-DRAM", 0.98, 0.99, 0.97, 0.1),
-            ("prefill", 32, 1, 1024, 0, "BFLOAT16-DRAM", 0.99, 0.99, 0.969, 0.5),
-            ("prefill", 1, 1, 2048, 0, "BFLOAT16-DRAM", 0.99, 0.99, 0.98, 1.1),
+            ("prefill", 32, 1, 128, 0, "BFLOAT16-DRAM", 0.99, 0.99, 0.99, 0.1),
+            ("prefill", 32, 1, 1024, 0, "BFLOAT16-DRAM", 0.99, 0.99, 0.99, 0.5),
+            ("prefill", 1, 1, 2048, 0, "BFLOAT16-DRAM", 0.99, 0.99, 0.99, 1.1),
             ("decode", 32, 32, 1, 128, "BFLOAT16-DRAM", 0.91, 0.92, 0.93, 0.15),
             ("decode", 32, 32, 1, 128, "BFLOAT16-L1", 0.91, 0.92, 0.93, 0.15),
             ("decode", 1, 32, 1, 128, "BFLOAT16-L1_SHARDED", 0.99, 0.99, 0.99, 0.1),
