@@ -125,11 +125,11 @@ operation::ProgramWithCallbacks layernorm_part1_multi_core(
     out0_cb: [sum(xˆ2)]  # RMSNorm
 
     */
-
-    const uint32_t in0_tiles = Wt;
+    const uint32_t double_buffer_constant = 2;
+    const uint32_t in0_tiles = Wt * double_buffer_constant;
     const uint32_t in1_tiles = 1; // reduce scalar
 
-    const uint32_t intermed0_tiles = Wt; // xˆ2
+    const uint32_t intermed0_tiles = Wt * double_buffer_constant; // xˆ2
     uint32_t out0_tiles = 1;
     if (!is_rmsnorm) {
         out0_tiles = 2;
