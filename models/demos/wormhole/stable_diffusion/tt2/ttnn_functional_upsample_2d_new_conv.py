@@ -93,16 +93,17 @@ class upsample2d:
             dtype=ttnn.bfloat8_b,
             weights_dtype=ttnn.bfloat8_b,
             math_fidelity=ttnn.MathFidelity.LoFi,
-            activation=None,
+            activation="",
             height_sharding=False,
-            math_approx_mode=True,
-            fp32_dest_acc_en=True,
-            packer_l1_acc=False,
+            math_approx_mode_enabled=True,
+            fp32_dest_acc_enabled=True,
+            packer_l1_accum_enabled=False,
             input_channels_alignment=32,
             transpose_shards=False,
+            reshard_if_not_optimal=False,  # Reshard has error : 1616 Bytes unique+common runtime args targeting kernel reshard_reader on (x=0,y=0) are too large. Cannot be written as they will run into memory region reserved for result. Max allowable size is 1024 Bytes
         )
         if self.conv_config_override and "act_block_h" in self.conv_config_override:
-            conv_config.act_block_h = self.conv_config_override["act_block_h"]
+            conv_config.act_block_h_override = self.conv_config_override["act_block_h"]
         [tt_out, _out_height, _out_width, self.conv_weight_tensor, self.conv_bias_tensor] = ttnn.conv2d(
             input_tensor=tt_out,
             in_channels=self.conv_in_channels,
@@ -117,7 +118,6 @@ class upsample2d:
             weight_tensor=self.conv_weight_tensor,
             bias_tensor=self.conv_bias_tensor,
             conv_config=conv_config,
-            reshard_if_not_optimal=False,  # Reshard has error : 1616 Bytes unique+common runtime args targeting kernel reshard_reader on (x=0,y=0) are too large. Cannot be written as they will run into memory region reserved for result. Max allowable size is 1024 Bytes
             conv_op_cache=conv_cache,
         )
         return tt_out

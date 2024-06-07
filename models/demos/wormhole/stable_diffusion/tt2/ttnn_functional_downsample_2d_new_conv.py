@@ -100,16 +100,17 @@ class downsample_2d:
             dtype=ttnn.bfloat8_b,
             weights_dtype=ttnn.bfloat8_b,
             math_fidelity=ttnn.MathFidelity.LoFi,
-            activation=None,
-            math_approx_mode=True,
-            fp32_dest_acc_en=True,
-            packer_l1_acc=False,
+            activation="",
+            math_approx_mode_enabled=True,
+            fp32_dest_acc_enabled=True,
+            packer_l1_accum_enabled=False,
             height_sharding=True if self.in_channels < 320 else False,
             input_channels_alignment=32,
             transpose_shards=False,
+            reshard_if_not_optimal=True,
         )
         if self.conv_config_override and "act_block_h" in self.conv_config_override:
-            conv_config.act_block_h = self.conv_config_override["act_block_h"]
+            conv_config.act_block_h_override = self.conv_config_override["act_block_h"]
 
         [hidden_states, _out_height, _out_width, self.conv_weights, self.conv_bias] = ttnn.conv2d(
             input_tensor=hidden_states,
@@ -126,7 +127,6 @@ class downsample_2d:
             bias_tensor=self.conv_bias,
             conv_config=conv_config,
             conv_op_cache=conv_cache,
-            reshard_if_not_optimal=True,
         )
         # hidden_states = run_ttnn_conv_with_pre_and_post_tensor_formatting(
         #     self.device,

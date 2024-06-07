@@ -390,13 +390,14 @@ class UNet2DConditionModel:
             dtype=ttnn.bfloat8_b,
             weights_dtype=ttnn.bfloat8_b,
             math_fidelity=ttnn.MathFidelity.LoFi,
-            activation=None,
-            math_approx_mode=True,
-            fp32_dest_acc_en=True,
-            packer_l1_acc=False,
+            activation="",
+            math_approx_mode_enabled=True,
+            fp32_dest_acc_enabled=True,
+            packer_l1_accum_enabled=False,
             height_sharding=True if in_channels < 320 else False,
             input_channels_alignment=32,
             transpose_shards=False,
+            reshard_if_not_optimal=True,
         )
 
         [sample, _out_height, _out_width, self.conv_in_weights, self.conv_in_bias] = ttnn.conv2d(
@@ -414,7 +415,6 @@ class UNet2DConditionModel:
             input_width=self.input_width,
             conv_config=conv_config,
             conv_op_cache=conv_cache,
-            reshard_if_not_optimal=True,
         )
         sample = ttnn.reallocate(sample)  # TODO: Test remove
 
@@ -653,14 +653,15 @@ class UNet2DConditionModel:
             dtype=ttnn.bfloat8_b,
             weights_dtype=ttnn.bfloat8_b,
             math_fidelity=ttnn.MathFidelity.LoFi,
-            activation=None,
+            activation="",
             height_sharding=True,
-            math_approx_mode=True,
-            fp32_dest_acc_en=True,
-            packer_l1_acc=False,
+            math_approx_mode_enabled=True,
+            fp32_dest_acc_enabled=True,
+            packer_l1_accum_enabled=False,
             input_channels_alignment=32,
-            act_block_h=64,
+            act_block_h_override=64,
             transpose_shards=False,
+            reshard_if_not_optimal=True,
         )
         [sample, _out_height, _out_width, self.conv_out_weights, self.conv_out_bias] = ttnn.conv2d(
             input_tensor=sample,
@@ -675,7 +676,6 @@ class UNet2DConditionModel:
             input_width=self.conv_out_input_width,
             weight_tensor=self.conv_out_weights,
             bias_tensor=self.conv_out_bias,
-            reshard_if_not_optimal=True,
             conv_config=conv_config,
             conv_op_cache=conv_cache,
         )
