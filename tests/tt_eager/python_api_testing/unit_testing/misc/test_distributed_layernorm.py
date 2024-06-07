@@ -59,11 +59,10 @@ def tt_distributed_layernorm(inp, gamma, beta, epsilon, is_rmsnorm, compute_kern
                 )
             )
         tt_stats[d].deallocate(True)
-        inp[d].deallocate(True)
     return tt_out
 
 
-def run_distributed_layernorm(inp_shape, n_devices, is_rmsnorm, dtype, devices, fp32_enabled=False):
+def run_distributed_layernorm(inp_shape, n_devices, is_rmsnorm, dtype, devices, fp32_enabled=False, iterations=1):
     compute_kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
         math_fidelity=ttnn.experimental.tensor.MathFidelity.HiFi4,  # Highest fidelity
         math_approx_mode=False,
@@ -119,9 +118,9 @@ def run_distributed_layernorm(inp_shape, n_devices, is_rmsnorm, dtype, devices, 
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
             )
         )
-
-    tt_out = tt_distributed_layernorm(tt_inp, tt_gamma, tt_beta, epsilon, is_rmsnorm, compute_kernel_config)
-    tt_output_host = torch.concat([tt2torch_tensor(tt_o) for tt_o in tt_out], -1)
+    for i in range(iterations):
+        tt_out = tt_distributed_layernorm(tt_inp, tt_gamma, tt_beta, epsilon, is_rmsnorm, compute_kernel_config)
+        tt_output_host = torch.concat([tt2torch_tensor(tt_o) for tt_o in tt_out], -1)
 
     passing, output_str = comp_allclose(tt_output_host, out_torch, rtol=1e-1, atol=1e-01)
     logger.debug(f"torch vs tt distributed layernorm = {output_str}")
@@ -129,6 +128,16 @@ def run_distributed_layernorm(inp_shape, n_devices, is_rmsnorm, dtype, devices, 
     assert passing
 
 
+@pytest.mark.parametrize(
+    "iterations",
+    [1, 11],
+    ids=["loops1", "loops11"],
+)
+@pytest.mark.parametrize(
+    "fp32_enabled",
+    [True, False],
+    ids=["fp32_enabled", "fp32_disabled"],
+)
 @pytest.mark.parametrize(
     "dtype",
     (ttnn.bfloat16, ttnn.bfloat8_b),
@@ -151,20 +160,20 @@ def run_distributed_layernorm(inp_shape, n_devices, is_rmsnorm, dtype, devices, 
     [True, False],
     ids=["rmsnorm", "layernorm"],
 )
-@pytest.mark.parametrize(
-    "fp32_enabled",
-    [True, False],
-    ids=["fp32_enabled", "fp32_disabled"],
-)
-def test_distributed_layernorm(inp_shape, n_devices, is_rmsnorm, dtype, all_devices, fp32_enabled):
+def test_distributed_layernorm(inp_shape, n_devices, is_rmsnorm, dtype, all_devices, fp32_enabled, iterations):
     devices = get_devices_for_t3000(all_devices, n_devices)
-    run_distributed_layernorm(inp_shape, n_devices, is_rmsnorm, dtype, devices, fp32_enabled)
+    run_distributed_layernorm(inp_shape, n_devices, is_rmsnorm, dtype, devices, fp32_enabled, iterations)
 
 
+@pytest.mark.parametrize(
+    "iterations",
+    [1, 11],
+    ids=["loops1", "loops11"],
+)
 @pytest.mark.parametrize(
     "dtype",
-    (ttnn.bfloat16,),
-    ids=["BFLOAT16"],
+    (ttnn.bfloat16, ttnn.bfloat8_b),
+    ids=["BFLOAT16", "BFLOAT8_B"],
 )
 @pytest.mark.parametrize(
     "inp_shape",
@@ -184,24 +193,11 @@ def test_distributed_layernorm(inp_shape, n_devices, is_rmsnorm, dtype, all_devi
     ids=["rmsnorm", "layernorm"],
 )
 def test_distributed_layernorm_with_program_cache(
-    inp_shape, n_devices, is_rmsnorm, dtype, all_devices, use_program_cache
+    inp_shape, n_devices, is_rmsnorm, dtype, iterations, all_devices, use_program_cache
 ):
     devices = get_devices_for_t3000(all_devices, n_devices)
 
-    dummy_tensors = []
-
-    for i in range(3):
-        for d in range(len(devices)):
-            dummy_tensors.append(
-                ttnn.as_tensor(
-                    torch.randn(inp_shape),
-                    dtype=dtype,
-                    device=devices[d],
-                    layout=ttnn.TILE_LAYOUT,
-                    memory_config=ttnn.DRAM_MEMORY_CONFIG,
-                )
-            )
-        run_distributed_layernorm(inp_shape, n_devices, is_rmsnorm, dtype, devices)
+    run_distributed_layernorm(inp_shape, n_devices, is_rmsnorm, dtype, devices, iterations=iterations)
 
     for d in range(len(devices)):
         assert devices[d].num_program_cache_entries() == 3, "Program cache should have only 3 entries, but has " + str(
