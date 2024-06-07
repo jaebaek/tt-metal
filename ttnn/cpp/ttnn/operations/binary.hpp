@@ -84,14 +84,9 @@ struct ExecuteBinary {
             dtype = optional_output_tensor.value().get_dtype();
         }
 
-        auto output_tensors = operation::run(
-            Binary{binary_op_type, in_place, activations, output_memory_config, dtype, std::nullopt},
-            {input_tensor_a, input_tensor_b},
-            {},
-            {optional_output_tensor},
-            queue_id);
-
-        return output_tensors.at(0);
+        return ttnn::device_operation::run<Binary>(
+            {binary_op_type, in_place, activations, output_memory_config, dtype, std::nullopt},
+            {input_tensor_a, input_tensor_b, optional_output_tensor});
     }
 
     template <typename... Args>
