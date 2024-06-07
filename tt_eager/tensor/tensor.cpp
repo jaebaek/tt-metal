@@ -107,7 +107,7 @@ void Tensor::deallocate(bool force) {
                         std::visit([](auto&& buffer) { buffer.reset(); }, storage.buffer);
                     }
                 } else if constexpr (std::is_same_v<T, DeviceStorage>) {
-                    if (this->workers.at(0) == nullptr) {
+                    if (this->workers.at(0) == nullptr ||  !this->workers.at(0)->is_initialized()) {
                         return;
                     }
                     if (this->workers.at(0)->in_main_thread() or not this->tensor_attributes->main_thread_tensor) {
@@ -175,7 +175,7 @@ void Tensor::deallocate(bool force) {
                         TT_THROW("Cannot deallocate tensor with borrowed storage!");
                     }
                 } else if constexpr (std::is_same_v<T, MultiDeviceStorage>) {
-                    if (this->workers.at(0) == nullptr) {
+                    if (this->workers.at(0) == nullptr ||  !this->workers.at(0)->is_initialized()) {
                         return;
                     }
                     if (this->workers.at(0)->in_main_thread() or not this->tensor_attributes->main_thread_tensor) {
