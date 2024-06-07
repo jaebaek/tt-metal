@@ -56,13 +56,19 @@ jobs:
       - uses: ./.github/actions/load-docker-image
       - name: Build tt-metal and libs
         run: |
-          ./scripts/docker/run_docker_cmd.sh -- \
-          ./scripts/build_scripts/build_with_profiler_opt.sh
+          ./scripts/docker/run_docker_cmd.sh -e ENABLE_TRACY=1 -e ENABLE_PROFILER=1 -- \
+          cmake -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++-17 \
+          && cmake --build build --target install \
+          && cmake --build build --target programming_examples
       - name: Run profiler regression tests
         timeout-minutes: 30
         run: |
           ./scripts/docker/run_docker_cmd.sh -- ./tests/scripts/run_profiler_regressions.sh
-
+      - uses: ./.github/actions/slack-report
+        if: ${{ failure() }}
+        with:
+          slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          owner: U0593J2RQRZ # Bill Teng
   profiler-regression:
     if: ${{ !inputs.build_docker }}
     strategy:
@@ -92,8 +98,10 @@ jobs:
       - uses: ./.github/actions/load-docker-image
       - name: Build tt-metal and libs
         run: |
-          ./scripts/docker/run_docker_cmd.sh -- \
-          ./scripts/build_scripts/build_with_profiler_opt.sh
+          ./scripts/docker/run_docker_cmd.sh -e ENABLE_TRACY=1 -e ENABLE_PROFILER=1 -- \
+          cmake -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++-17 \
+          && cmake --build build --target install \
+          && cmake --build build --target programming_examples
       - name: Run profiler regression tests
         timeout-minutes: 30
         run: |
