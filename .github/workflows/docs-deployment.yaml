@@ -71,10 +71,11 @@ jobs:
           #git clone https://${GITHUB_USER}:${GITHUB_BOT_TOKEN}@github.com/tenstorrent/docs-test.git
           #git remote set-url origin https://${GITHUB_USER}:${GITHUB_BOT_TOKEN}@github.com/tenstorrent/docs-test.git
           #git checkout main
-          cd docs-test
-          cp -r tt-metalium/* docs/test/tt-metalium
+          #cd docs-test
+          #cp -r tt-metalium/* docs/test/tt-metalium
+      - name: Upload tt-metalium docs
+        uses: actions/upload-artifact@v4
         with:
-          name: tt-metalium-docs
           path: |
             tt-metalium
       - name: Push docs to Docs repo for publishing
