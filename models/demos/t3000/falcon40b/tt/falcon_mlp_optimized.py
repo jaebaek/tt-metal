@@ -9,7 +9,7 @@ from typing import List
 from models.utility_functions import torch2tt_tensor
 from models.demos.t3000.falcon40b.tt.model_utils import falcon_prefill_matmul, determine_tensor_deallocation
 
-from ttnn import ShardTensorToMesh, ReplicateTensorToMesh, ConcatMeshToTensor, ListMeshToTensor
+from ttnn import ShardTensorToMesh
 
 
 class TtFalconMLPOptimized:
