@@ -73,12 +73,10 @@ jobs:
           #git checkout main
           cd docs-test
           cp -r tt-metalium/* docs/test/tt-metalium
+        with:
+          name: tt-metalium-docs
+          path: |
+            tt-metalium
       - name: Push docs to Docs repo for publishing
         run: |
-          pip install -r requirements.txt
-          TAG=latest-tt-metalium
-          python update_tags.py tt-metalium $TAG
-          git add .
-          git commit -m "update tt-metalium docs from pipeline ${{ github.job }} with tag $TAG"
-          git tag -a $TAG -m "tt-metalium documentation version $TAG"
-          git push && git push --tags
+          pip install -r docs/requirements.txt
