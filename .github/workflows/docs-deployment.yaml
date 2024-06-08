@@ -63,11 +63,14 @@ jobs:
           cp -r docs/doxygen_build tt-metalium
           cp -r docs/source/tt-metalium/* tt-metalium
           rm tt-metalium/conf.py  # Do not change conf.py
-          git config --global user.email "tenstorrent-github-bot@tenstorrent.com"
-          git config --global user.name "tenstorrent-github-bot"
-          git clone https://tenstorrent-github-bot:${GITHUB_BOT_TOKEN}@github.com/tenstorrent/docs-test.git
-          git remote set-url origin https://tenstorrent-github-bot:${GITHUB_BOT_TOKEN}@github.com/tenstorrent/docs-test.git
-          git checkout main
+          GITHUB_USER=dimitri-tenstorrent
+          # git config --global user.email "tenstorrent-github-bot@tenstorrent.com"
+          # git config --global user.name "tenstorrent-github-bot"
+          #git config --global user.email "dimitri@tenstorrent.com"
+          #git config --global user.name "dimitri-tenstorrent"
+          #git clone https://${GITHUB_USER}:${GITHUB_BOT_TOKEN}@github.com/tenstorrent/docs-test.git
+          #git remote set-url origin https://${GITHUB_USER}:${GITHUB_BOT_TOKEN}@github.com/tenstorrent/docs-test.git
+          #git checkout main
           cd docs-test
           cp -r tt-metalium/* docs/test/tt-metalium
       - name: Push docs to Docs repo for publishing
