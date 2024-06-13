@@ -6,6 +6,11 @@
 
 #include "bfloat16.hpp"
 
+/**
+ * @param[in] input A row-major matrix in a vector. The first `n` elements of `input` is the first row of matrix.
+ * @param[in] m The number of matrix rows.
+ * @param[in] n The number of matrix columns.
+ */
 template <typename T>
 void tilize(std::vector<T>& input, uint32_t m, uint32_t n) {
     TT_FATAL(input.size() > 0 and m > 0 and n > 0, "None of the input size, m, nor n can be 0");
@@ -17,6 +22,9 @@ void tilize(std::vector<T>& input, uint32_t m, uint32_t n) {
     uint32_t block_num_elements = m * n;
     uint32_t num_blocks = input.size() / block_num_elements;
 
+    // From the matrix `input`, this function copies `|face_height x face_width|` size of sub-matrix.
+    // face_idx: The index of the element in `input` that is the top-left corner of the copied sub-matrix.
+    // n: The number of columns of `input`.
     const auto write_face =
         [](vector<T>& tilized_input, const vector<T>& input, uint32_t face_height, uint32_t face_width, uint32_t face_idx, uint32_t n)
         -> void {
@@ -43,7 +51,9 @@ void tilize(std::vector<T>& input, uint32_t m, uint32_t n) {
             for (uint32_t row_tile = 0; row_tile < row_tiles; row_tile++) {
                 uint32_t row_tile_start = tile_start;
                 for (uint32_t col_tile = 0; col_tile < col_tiles; col_tile++) {
-                    uint32_t face0_id = row_tile_start;
+                    // For a 32x32 matrix tile, copy 4 sub-matrices of the tile.
+                    // Question: Why do we put each 16x16 sub-matrix, not a 32x32 sub-matrix?
+                    uint32_t face0_id = row_tile_start; /* index of top-left corner of the first tile */
                     uint32_t face1_id = face0_id + FACE_WIDTH;
                     uint32_t face2_id = face0_id + n * FACE_HEIGHT;
                     uint32_t face3_id = face2_id + FACE_WIDTH;
