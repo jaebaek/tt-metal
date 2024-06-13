@@ -15,6 +15,16 @@
 #include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
 using namespace std;
 
+/**
+ * @brief A class representing floating point with 16-bits.
+ *
+ * Based on IEEE Standard for Floating-Point Arithmetic (IEEE 754), the floating
+ * point with 32-bits consists of 1-bit for sign, 8-bits for exponent, 23-bits
+ * for fraction. We keep the upper 16-bits of a float in this class. When
+ * converting it back to a 32-bits float, the lower 16-bits of fraction will be
+ * 0, which results in a slightly less precise float. For example, converting
+ * float 12.3456 to bfloat16 and converting it back to float will be 12.3125.
+ */
 class bfloat16 {
  private:
     uint16_t uint16_data;
