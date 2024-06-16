@@ -91,7 +91,7 @@ void matmul_multi_core(vector<bfloat16>& a, vector<bfloat16>& b, vector<bfloat16
     tt::DataFormat cb_data_format = tt::DataFormat::Float16_b;
     MathFidelity math_fidelity = MathFidelity::HiFi4;
     //uint32_t single_tile_size = detail::TileSize(cb_data_format);
-    uint32_t single_tile_size = 2 * 32 * 32;
+    uint32_t single_tile_size = sizeof(bfloat16) * 32 * 32;
 
     uint32_t dram_buffer_A_size = single_tile_size * Mt * Kt; // num_tiles of FP16_B, hard-coded in the reader/writer kernels
     uint32_t dram_buffer_B_size = single_tile_size * Nt * Kt; // num_tiles of FP16_B, hard-coded in the reader/writer kernels
@@ -112,7 +112,7 @@ void matmul_multi_core(vector<bfloat16>& a, vector<bfloat16>& b, vector<bfloat16
 
     tt_metal::InterleavedBufferConfig dram_config_C{
                     .device= device,
-                    .size = dram_buffer_B_size,
+                    .size = dram_buffer_C_size,
                     .page_size = single_tile_size,
                     .buffer_type = tt_metal::BufferType::DRAM
         };
@@ -276,7 +276,7 @@ int main(int argc, char **argv) {
         uint32_t Kt = K / TILE_WIDTH;
         uint32_t Nt = N / TILE_WIDTH;
 
-        constexpr uint32_t single_tile_size = 2 * 32 * 32;
+        constexpr uint32_t single_tile_size = sizeof(bfloat16) * 32 * 32;
         uint32_t dram_buffer_A_size = single_tile_size * Mt * Kt; // num_tiles of FP16_B
         uint32_t dram_buffer_B_size = single_tile_size * Nt * Kt; // num_tiles of FP16_B
         uint32_t dram_buffer_C_size = single_tile_size * Mt * Nt; // num_tiles of FP16_B
